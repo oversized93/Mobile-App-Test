@@ -1732,9 +1732,9 @@ function drawPlaying() {
     if (meterActive) {
         // Fan arc at bottom of screen
         const arcCx = W() / 2;
-        const arcCy = H() - 40;
-        const arcR = Math.min(W() * 0.42, 180);
-        const arcSpread = Math.PI * 0.55; // total arc angle (~100°)
+        const arcCy = H() - 20;
+        const arcR = Math.min(W() * 0.28, 120);
+        const arcSpread = Math.PI * 0.5;
         const arcStart = -Math.PI / 2 - arcSpread / 2;
         const arcEnd = -Math.PI / 2 + arcSpread / 2;
 
@@ -1805,10 +1805,10 @@ function drawPlaying() {
         ctx.fill();
 
         // Ball representation at arc center
-        drawBall(arcCx, arcCy, 14, player.ballColor);
+        drawBall(arcCx, arcCy, 10, player.ballColor);
 
         // Target bullseye at top (above arc)
-        const bullX = arcCx, bullY = arcCy - arcR - 30;
+        const bullX = arcCx, bullY = arcCy - arcR - 20;
         ctx.strokeStyle = 'rgba(255,255,255,0.5)';
         ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(bullX, bullY, 12, 0, Math.PI * 2); ctx.stroke();
@@ -2241,12 +2241,12 @@ function gameLoop(time) {
         if (meterActive) {
             const tdx = lockedDirX, tdy = lockedDirY;
             const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
-            setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 50, ball.y + tdy / tlen * 50, 35);
+            setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 80, ball.y + tdy / tlen * 80, 60);
         } else if (onGreenNow && !ball.moving) {
             if (!scouting && !manualZoom) {
                 const hx = (currentHole.hole.x + 0.5) * CELL;
                 const hy = (currentHole.hole.y + 0.5) * CELL;
-                setCameraBehindBall(ball.x, ball.y, hx, hy, 25);
+                setCameraBehindBall(ball.x, ball.y, hx, hy, 45);
             }
         } else if (ball.moving) {
             manualZoom = false; // reset when ball moves

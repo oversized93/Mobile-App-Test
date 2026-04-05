@@ -107,6 +107,15 @@ function init3D() {
         scene3d.add(cloud);
     }
 
+    // Ground plane extending beyond the course
+    const groundGeo = new THREE.PlaneGeometry(5000, 5000);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e5230, roughness: 1 });
+    const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+    groundMesh.rotation.x = -Math.PI / 2;
+    groundMesh.position.y = -0.5;
+    groundMesh.receiveShadow = true;
+    scene3d.add(groundMesh);
+
     // Groups
     terrainGroup = new THREE.Group();
     scene3d.add(terrainGroup);
@@ -195,7 +204,7 @@ function buildTerrain3D(hole) {
             const color = TERRAIN_COLORS[t] || '#1a3d1a';
             const height = getTerrainHeight(t);
 
-            const geo = new THREE.PlaneGeometry(cellSize, cellSize);
+            const geo = new THREE.PlaneGeometry(cellSize + 0.5, cellSize + 0.5); // slight overlap to hide seams
             const mat = new THREE.MeshStandardMaterial({
                 color: new THREE.Color(color),
                 roughness: 0.9,
@@ -320,19 +329,18 @@ function setCameraOverhead(cx, cz, zoom) {
 }
 
 function setCameraBehindBall(bx, bz, targetX, targetZ, distance) {
-    // Behind ball looking toward target
     const dx = targetX - bx, dz = targetZ - bz;
     const len = Math.sqrt(dx * dx + dz * dz) || 1;
     const nx = dx / len, nz = dz / len;
-    const dist = distance || 40;
-    const height = dist * 0.5;
+    const dist = distance || 60;
+    const height = dist * 0.45;
 
     cam3dTarget.x = bx - nx * dist;
     cam3dTarget.y = height;
     cam3dTarget.z = bz - nz * dist;
-    cam3dLookAt.x = bx + nx * 30;
+    cam3dLookAt.x = bx + nx * 60;
     cam3dLookAt.y = 0;
-    cam3dLookAt.z = bz + nz * 30;
+    cam3dLookAt.z = bz + nz * 60;
 }
 
 let cam3dSkipLerp = false; // set true during panning to prevent fights
