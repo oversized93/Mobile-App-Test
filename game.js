@@ -150,6 +150,9 @@ function startHole(hole) {
     shotLocked = false;
     meterActive = false;
 
+    // Build 3D scene for this hole
+    if (typeof buildTerrain3D === 'function') buildTerrain3D(hole);
+
     // Start flyover: zoom out to show whole hole, pan from hole to ball
     centerCamOnHole();
     cam.zoom = calcZoom();
@@ -1005,11 +1008,20 @@ function drawPlaying() {
     const d = window.devicePixelRatio || 1;
     ctx.setTransform(d, 0, 0, d, 0, 0);
 
-    ctx.fillStyle = '#1a472a';
-    ctx.fillRect(0, 0, W(), H());
+    const is3D = scene3dReady && typeof render3D === 'function';
+
+    if (!is3D) {
+        ctx.fillStyle = '#1a472a';
+        ctx.fillRect(0, 0, W(), H());
+    } else {
+        // Clear 2D canvas transparent for HUD overlay on top of 3D
+        ctx.clearRect(0, 0, W(), H());
+    }
 
     if (!currentHole) return;
 
+    // Skip 2D world rendering when 3D is active
+    if (!is3D) {
     camTransform();
 
     // Draw terrain
@@ -1297,6 +1309,8 @@ function drawPlaying() {
     }
 
     camRestore();
+    } // end if (!is3D) — skip 2D world rendering
+
     // Reset transform for HUD (screen space)
     const dp = window.devicePixelRatio || 1;
     ctx.setTransform(dp, 0, 0, dp, 0, 0);
@@ -1952,7 +1966,44 @@ function gameLoop(time) {
         }
     }
 
-    // Draw based on state
+    // 3D rendering for gameplay states
+    const use3D = scene3dReady && (state === 'playing' || state === 'holeDone');
+    if (use3D) {
+        show3D();
+        // Update 3D ball position
+        updateBall3D(ball.x, ball.y, ball.z, player.ballColor);
+        // Update 3D target
+        const onGreenNow = terrainAt(ball.x, ball.y) === T.GREEN;
+        updateTarget3D(targetX, targetY, !onGreenNow && !ball.moving && !holeComplete);
+        // Update 3D camera
+        if (meterActive) {
+            // Behind ball for accuracy meter
+            const tdx = lockedDirX, tdy = lockedDirY;
+            const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+            setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 50, ball.y + tdy / tlen * 50, 35);
+        } else if (onGreenNow && !ball.moving) {
+            // Behind ball for putting
+            const hx = (currentHole.hole.x + 0.5) * CELL;
+            const hy = (currentHole.hole.y + 0.5) * CELL;
+            setCameraBehindBall(ball.x, ball.y, hx, hy, 25);
+        } else if (ball.moving) {
+            // Follow ball during flight
+            setCameraOverhead(ball.x, ball.y, 1.5);
+        } else {
+            // Overhead for aiming
+            const zoomFactor = cam.targetZoom || 1;
+            setCameraOverhead(ball.x, ball.y, zoomFactor * 0.5);
+        }
+        updateCamera3D(dt);
+        render3D();
+        // Make 2D canvas transparent for HUD overlay
+        canvas.style.background = 'transparent';
+    } else {
+        hide3D();
+        canvas.style.background = '';
+    }
+
+    // Draw 2D based on state (HUD overlay when 3D, full render when not)
     switch (state) {
         case 'menu': drawMenu(); break;
         case 'character': drawCharacter(); break;
@@ -1974,4 +2025,5 @@ onTouchStart = function(sx, sy) {
 };
 
 // ---- Start! ----
+if (typeof init3D === 'function') init3D();
 requestAnimationFrame(gameLoop);

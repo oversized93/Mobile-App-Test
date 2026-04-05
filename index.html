@@ -10,14 +10,21 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#1a472a;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;font-family:-apple-system,sans-serif}
-canvas{display:block;width:100%;height:100%}
+#container{position:relative;width:100%;height:100%}
+#three-canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none}
+#c{position:absolute;top:0;left:0;width:100%;height:100%}
 </style>
 </head>
 <body>
+<div id="container">
+<canvas id="three-canvas"></canvas>
 <canvas id="c"></canvas>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="engine.js"></script>
 <script src="courses.js"></script>
 <script src="builder.js"></script>
+<script src="renderer3d.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
