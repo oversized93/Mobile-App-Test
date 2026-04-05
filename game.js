@@ -2123,20 +2123,18 @@ function gameLoop(time) {
         updateTarget3D(targetX, targetY, !onGreenNow && !ball.moving && !holeComplete);
         // Update 3D camera
         if (meterActive) {
-            // Behind ball for accuracy meter
             const tdx = lockedDirX, tdy = lockedDirY;
             const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
             setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 50, ball.y + tdy / tlen * 50, 35);
         } else if (onGreenNow && !ball.moving) {
-            // Behind ball for putting
-            const hx = (currentHole.hole.x + 0.5) * CELL;
-            const hy = (currentHole.hole.y + 0.5) * CELL;
-            setCameraBehindBall(ball.x, ball.y, hx, hy, 25);
+            if (!scouting) {
+                const hx = (currentHole.hole.x + 0.5) * CELL;
+                const hy = (currentHole.hole.y + 0.5) * CELL;
+                setCameraBehindBall(ball.x, ball.y, hx, hy, 25);
+            }
         } else if (ball.moving) {
-            // Follow ball during flight
             setCameraOverhead(ball.x, ball.y, 1.5);
-        } else {
-            // Overhead for aiming
+        } else if (!scouting) {
             const zoomFactor = cam.targetZoom || 1;
             setCameraOverhead(ball.x, ball.y, zoomFactor * 0.5);
         }
