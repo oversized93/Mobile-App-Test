@@ -899,54 +899,63 @@ function playCustomCourses() {
 
 // ---- Character Creator ----
 function drawCharacter() {
-    ctx.fillStyle = '#1a472a';
+    const bg = ctx.createLinearGradient(0, 0, 0, H());
+    bg.addColorStop(0, '#0d2818');
+    bg.addColorStop(1, '#1a472a');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W(), H());
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px -apple-system,sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Your Golfer', W() / 2, H() * 0.12);
+    ctx.fillStyle = '#fff';
+    ctx.font = '600 24px -apple-system,sans-serif';
+    ctx.fillText('Your Golfer', W() / 2, H() * 0.10);
 
-    // Ball preview
-    drawBall(W() / 2, H() * 0.28, 30, charColors[charColorIdx]);
+    // Ball preview — large with glow
+    const ballY = H() * 0.24;
+    ctx.fillStyle = `rgba(${charColors[charColorIdx] === '#000' ? '50,50,50' : '255,255,255'},0.08)`;
+    ctx.beginPath();
+    ctx.arc(W() / 2, ballY, 50, 0, Math.PI * 2);
+    ctx.fill();
+    drawBall(W() / 2, ballY, 28, charColors[charColorIdx]);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '15px -apple-system,sans-serif';
+    ctx.fillText(player.name, W() / 2, ballY + 48);
 
-    ctx.fillStyle = '#cde6cd';
-    ctx.font = '16px -apple-system,sans-serif';
-    ctx.fillText(player.name, W() / 2, H() * 0.28 + 50);
+    // Section: Ball Color
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '600 12px -apple-system,sans-serif';
+    ctx.fillText('BALL COLOR', W() / 2, H() * 0.40);
 
-    // Color picker
-    ctx.fillStyle = '#8fbc8f';
-    ctx.font = '14px -apple-system,sans-serif';
-    ctx.fillText('Ball Color', W() / 2, H() * 0.44);
-
-    const swatchSize = 36, gap = 8;
+    const swatchSize = 32, gap = 6;
     const totalW = charColors.length * (swatchSize + gap) - gap;
     const startX = (W() - totalW) / 2;
-    const swatchY = H() * 0.48;
+    const swatchY = H() * 0.43;
 
     for (let i = 0; i < charColors.length; i++) {
         const sx = startX + i * (swatchSize + gap);
         ctx.fillStyle = charColors[i];
-        roundRect(sx, swatchY, swatchSize, swatchSize, 8);
+        ctx.beginPath();
+        ctx.arc(sx + swatchSize / 2, swatchY + swatchSize / 2, swatchSize / 2 - 1, 0, Math.PI * 2);
         ctx.fill();
         if (i === charColorIdx) {
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 3;
-            roundRect(sx, swatchY, swatchSize, swatchSize, 8);
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(sx + swatchSize / 2, swatchY + swatchSize / 2, swatchSize / 2 + 2, 0, Math.PI * 2);
             ctx.stroke();
         }
     }
 
-    // Name options
-    const names = ['Golfer', 'Tiger', 'Ace', 'Birdie', 'Eagle', 'Chip', 'Putter', 'Pro'];
-    ctx.fillStyle = '#8fbc8f';
-    ctx.font = '14px -apple-system,sans-serif';
-    ctx.fillText('Name', W() / 2, H() * 0.60);
+    // Section: Name
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '600 12px -apple-system,sans-serif';
+    ctx.fillText('NAME', W() / 2, H() * 0.57);
 
-    const nameW = 80, nameH = 36, nameGap = 8;
-    const namesPerRow = Math.floor((W() - 40) / (nameW + nameGap));
+    const names = ['Golfer', 'Tiger', 'Ace', 'Birdie', 'Eagle', 'Chip', 'Putter', 'Pro'];
+    const nameW = 82, nameH = 40, nameGap = 8;
+    const namesPerRow = Math.floor((W() - 32) / (nameW + nameGap));
     const nameStartX = (W() - namesPerRow * (nameW + nameGap) + nameGap) / 2;
-    const nameY = H() * 0.64;
+    const nameY = H() * 0.60;
 
     for (let i = 0; i < names.length; i++) {
         const row = Math.floor(i / namesPerRow);
@@ -954,13 +963,48 @@ function drawCharacter() {
         const nx = nameStartX + col * (nameW + nameGap);
         const ny = nameY + row * (nameH + nameGap);
         const selected = player.name === names[i];
-        drawBtn(nx, ny, nameW, nameH, names[i], selected ? '#2e7d32' : '#555');
+        if (selected) {
+            const sg = ctx.createLinearGradient(nx, ny, nx + nameW, ny);
+            sg.addColorStop(0, '#2e7d32');
+            sg.addColorStop(1, '#1b5e20');
+            ctx.fillStyle = sg;
+        } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        }
+        roundRect(nx, ny, nameW, nameH, nameH / 2);
+        ctx.fill();
+        if (selected) {
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        } else {
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        }
+        ctx.lineWidth = 1;
+        roundRect(nx, ny, nameW, nameH, nameH / 2);
+        ctx.stroke();
+        ctx.fillStyle = selected ? '#fff' : 'rgba(255,255,255,0.6)';
+        ctx.font = (selected ? '600 ' : '') + '14px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(names[i], nx + nameW / 2, ny + nameH / 2 + 5);
     }
 
-    // Save + Back
-    const bw = Math.min(W() - 60, 280);
+    // Save button — gradient
+    const bw = Math.min(W() - 48, 280);
     const bx = (W() - bw) / 2;
-    drawBtn(bx, H() * 0.84, bw, 48, 'Save & Back', '#2e7d32');
+    const saveY = H() * 0.84;
+    const saveGrad = ctx.createLinearGradient(bx, saveY, bx + bw, saveY);
+    saveGrad.addColorStop(0, '#2e7d32');
+    saveGrad.addColorStop(1, '#1b5e20');
+    ctx.fillStyle = saveGrad;
+    roundRect(bx, saveY, bw, 50, 25);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    roundRect(bx, saveY, bw, 50, 25);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 17px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Save & Back', W() / 2, saveY + 31);
 }
 
 function charTouchStart(sx, sy) {
@@ -1004,86 +1048,115 @@ function charTouchStart(sx, sy) {
 
 // ---- Career Select ----
 function drawCareer() {
-    ctx.fillStyle = '#1a472a';
+    const bg = ctx.createLinearGradient(0, 0, 0, H());
+    bg.addColorStop(0, '#0d2818');
+    bg.addColorStop(1, '#1a472a');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W(), H());
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 26px -apple-system,sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Career Mode', W() / 2, 50);
+    ctx.fillStyle = '#fff';
+    ctx.font = '600 24px -apple-system,sans-serif';
+    ctx.fillText('Career Mode', W() / 2, 44);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '13px -apple-system,sans-serif';
+    ctx.fillText('Choose a course', W() / 2, 66);
 
-    const cardW = Math.min(W() - 40, 300);
-    const cardH = 100;
-    const gap = 16;
+    const cardW = Math.min(W() - 28, 340);
+    const cardH = 110;
+    const gap = 12;
     const startX = (W() - cardW) / 2;
-    let cy = 80;
+    let cy = 84;
 
     for (let i = 0; i < CAREER_COURSES.length; i++) {
         const course = CAREER_COURSES[i];
         const unlocked = player.unlocked.includes(i);
 
-        ctx.fillStyle = unlocked ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.3)';
-        roundRect(startX, cy, cardW, cardH, 14);
+        // Card background — glass with colored left accent
+        ctx.fillStyle = unlocked ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.2)';
+        roundRect(startX, cy, cardW, cardH, 18);
         ctx.fill();
+        ctx.strokeStyle = unlocked ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
+        ctx.lineWidth = 1;
+        roundRect(startX, cy, cardW, cardH, 18);
+        ctx.stroke();
 
+        // Left color accent bar
         if (unlocked) {
-            ctx.strokeStyle = course.color;
-            ctx.lineWidth = 2;
-            roundRect(startX, cy, cardW, cardH, 14);
-            ctx.stroke();
+            ctx.fillStyle = course.color;
+            roundRect(startX, cy, 5, cardH, 3);
+            ctx.fill();
         }
 
-        // Icon
-        ctx.font = '32px -apple-system,sans-serif';
+        // Icon — large
+        ctx.font = '36px -apple-system,sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(course.icon, startX + 14, cy + 48);
+        if (unlocked) ctx.fillText(course.icon, startX + 16, cy + 50);
 
-        // Name + desc
-        ctx.fillStyle = unlocked ? '#fff' : '#666';
-        ctx.font = 'bold 18px -apple-system,sans-serif';
-        ctx.fillText(course.name, startX + 58, cy + 32);
+        // Name
+        ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.25)';
+        ctx.font = '600 18px -apple-system,sans-serif';
+        ctx.fillText(course.name, startX + 62, cy + 32);
 
-        ctx.fillStyle = unlocked ? '#aaa' : '#555';
+        // Description
+        ctx.fillStyle = unlocked ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)';
         ctx.font = '13px -apple-system,sans-serif';
-        ctx.fillText(course.desc, startX + 58, cy + 52);
+        ctx.fillText(course.desc, startX + 62, cy + 52);
 
-        // Holes + par info
+        // Holes + par
         const totalPar = course.holes.reduce((s, h) => s + h.par, 0);
-        ctx.fillText(course.holes.length + ' holes \u2022 Par ' + totalPar, startX + 58, cy + 72);
+        ctx.fillStyle = unlocked ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)';
+        ctx.font = '12px -apple-system,sans-serif';
+        ctx.fillText(course.holes.length + ' holes  \u2022  Par ' + totalPar, startX + 62, cy + 72);
 
-        // Best score
+        // Best score pill
         const best = loadData('best_' + i, null);
         if (best !== null && unlocked) {
             ctx.textAlign = 'right';
+            ctx.fillStyle = 'rgba(255,235,59,0.12)';
+            roundRect(startX + cardW - 80, cy + 82, 66, 20, 10);
+            ctx.fill();
             ctx.fillStyle = '#ffeb3b';
-            ctx.font = 'bold 14px -apple-system,sans-serif';
-            ctx.fillText('Best: ' + best, startX + cardW - 14, cy + 72);
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            ctx.fillText('Best: ' + best, startX + cardW - 16, cy + 96);
         }
 
+        // Locked overlay
         if (!unlocked) {
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            roundRect(startX, cy, cardW, cardH, 14);
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            roundRect(startX, cy, cardW, cardH, 18);
             ctx.fill();
-            ctx.fillStyle = '#888';
-            ctx.font = '24px -apple-system,sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.font = '28px -apple-system,sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('\u{1F512}', startX + cardW / 2, cy + cardH / 2 + 8);
+            ctx.fillText('\u{1F512}', startX + cardW / 2, cy + cardH / 2 + 10);
         }
 
         cy += cardH + gap;
     }
 
-    // Back button
-    const bw = Math.min(W() - 60, 280);
-    drawBtn((W() - bw) / 2, cy + 10, bw, 48, 'Back', '#555');
+    // Back button — ghost style
+    const bw = Math.min(W() - 48, 280);
+    const bx = (W() - bw) / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    roundRect(bx, cy + 12, bw, 48, 24);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    roundRect(bx, cy + 12, bw, 48, 24);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '15px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Back', W() / 2, cy + 42);
 }
 
 function careerTouchStart(sx, sy) {
-    const cardW = Math.min(W() - 40, 300);
-    const cardH = 100;
-    const gap = 16;
+    const cardW = Math.min(W() - 28, 340);
+    const cardH = 110;
+    const gap = 12;
     const startX = (W() - cardW) / 2;
-    let cy = 80;
+    let cy = 84;
 
     for (let i = 0; i < CAREER_COURSES.length; i++) {
         if (hitBtn(sx, sy, startX, cy, cardW, cardH) && player.unlocked.includes(i)) {
@@ -1099,8 +1172,8 @@ function careerTouchStart(sx, sy) {
     }
 
     // Back
-    const bw = Math.min(W() - 60, 280);
-    if (hitBtn(sx, sy, (W() - bw) / 2, cy + 10, bw, 48)) state = 'menu';
+    const bw = Math.min(W() - 48, 280);
+    if (hitBtn(sx, sy, (W() - bw) / 2, cy + 12, bw, 48)) state = 'menu';
 }
 
 // ---- Gameplay Drawing ----
