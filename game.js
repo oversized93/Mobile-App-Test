@@ -2138,6 +2138,7 @@ function gameLoop(time) {
             const zoomFactor = cam.targetZoom || 1;
             setCameraOverhead(ball.x, ball.y, zoomFactor * 0.5);
         }
+        if (typeof cam3dSkipLerp !== 'undefined') cam3dSkipLerp = scouting;
         updateCamera3D(dt);
         render3D();
         // Make 2D canvas transparent for HUD overlay

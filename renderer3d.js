@@ -260,16 +260,20 @@ function setCameraBehindBall(bx, bz, targetX, targetZ, distance) {
     cam3dLookAt.z = bz + nz * 30;
 }
 
+let cam3dSkipLerp = false; // set true during panning to prevent fights
+
 function updateCamera3D(dt) {
     if (!camera3d) return;
-    const spd = 3 * dt;
-    camera3d.position.x += (cam3dTarget.x - camera3d.position.x) * spd;
-    camera3d.position.y += (cam3dTarget.y - camera3d.position.y) * spd;
-    camera3d.position.z += (cam3dTarget.z - camera3d.position.z) * spd;
-
-    // Smooth look-at
-    const currentLook = new THREE.Vector3();
-    camera3d.getWorldDirection(currentLook);
+    if (!cam3dSkipLerp) {
+        const spd = 3 * dt;
+        camera3d.position.x += (cam3dTarget.x - camera3d.position.x) * spd;
+        camera3d.position.y += (cam3dTarget.y - camera3d.position.y) * spd;
+        camera3d.position.z += (cam3dTarget.z - camera3d.position.z) * spd;
+    } else {
+        // Only lerp Y (height) during panning, X/Z are set directly
+        const spd = 3 * dt;
+        camera3d.position.y += (cam3dTarget.y - camera3d.position.y) * spd;
+    }
     const targetLook = new THREE.Vector3(cam3dLookAt.x, cam3dLookAt.y, cam3dLookAt.z);
     camera3d.lookAt(targetLook);
 }
@@ -300,11 +304,17 @@ function panCamera3D(dx, dy) {
     right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
     forward.crossVectors(new THREE.Vector3(0, 1, 0), right).normalize();
 
-    const scale = camera3d.position.y * 0.003; // pan speed based on height
-    cam3dTarget.x -= (dx * right.x + dy * forward.x) * scale;
-    cam3dTarget.z -= (dx * right.z + dy * forward.z) * scale;
-    cam3dLookAt.x -= (dx * right.x + dy * forward.x) * scale;
-    cam3dLookAt.z -= (dx * right.z + dy * forward.z) * scale;
+    const scale = camera3d.position.y * 0.004;
+    // Flip: dragging right moves camera left (natural pan)
+    const mx = (dx * right.x + dy * forward.x) * scale;
+    const mz = (dx * right.z + dy * forward.z) * scale;
+    cam3dTarget.x += mx;
+    cam3dTarget.z += mz;
+    cam3dLookAt.x += mx;
+    cam3dLookAt.z += mz;
+    // Also set immediate position to prevent lerp shakiness
+    camera3d.position.x += mx;
+    camera3d.position.z += mz;
 }
 
 // ---- Zoom camera ----
