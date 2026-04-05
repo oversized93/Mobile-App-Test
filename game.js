@@ -589,32 +589,29 @@ function onTouchStart(sx, sy) {
         }
 
         // ---- UI buttons ----
-        // SHOOT button (only when locked)
+        // SHOOT / Cancel buttons (slim bottom bar when locked)
         if (shotLocked) {
-            const shootBtnW = 160, shootBtnH = 50;
-            const shootBtnX = (W() - shootBtnW) / 2, shootBtnY = H() - 185;
+            const shootBtnW = W() * 0.55, shootBtnH = 42;
+            const shootBtnX = 12, shootBtnY = H() - 52;
             if (hitBtn(sx, sy, shootBtnX, shootBtnY, shootBtnW, shootBtnH)) {
-                // Save camera state
                 preMeterCam = { x: cam.targetX, y: cam.targetY, zoom: cam.targetZoom, rot: cam.targetRot };
-                // Rotate camera behind ball looking toward target
                 const aDx = lockedDirX, aDy = lockedDirY;
-                const behindAngle = Math.atan2(aDx, -aDy); // rotate so target is "up"
+                const behindAngle = Math.atan2(aDx, -aDy);
                 cam.targetRot = behindAngle;
                 cam.targetX = ball.x;
                 cam.targetY = ball.y;
                 cam.targetZoom = Math.max(cam.targetZoom * 1.5, 3);
-                // Start meter
                 meterActive = true;
                 meterPhase = 2;
-                meterAngle = -1; // start at left edge
+                meterAngle = -1;
                 meterDir = 1;
                 curl = 0;
                 curlDragStartX = W() / 2;
                 meterSpeed = (0.75 + (CLUBS[selectedClub].maxPower / 500) * 0.75);
                 return;
             }
-            const cancelW = 80, cancelH = 36;
-            const cancelX = (W() - cancelW) / 2, cancelY = shootBtnY + shootBtnH + 10;
+            const cancelW = W() * 0.3, cancelH = 42;
+            const cancelX = W() - cancelW - 12, cancelY = H() - 52;
             if (hitBtn(sx, sy, cancelX, cancelY, cancelW, cancelH)) {
                 shotLocked = false;
                 return;
@@ -1395,33 +1392,33 @@ function drawPlaying() {
                 ctx.arc(ls.x, ls.y, 3, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Accuracy rings
-                for (let ring = 3; ring >= 1; ring--) {
-                    ctx.strokeStyle = `rgba(255,255,255,${0.1 + (3 - ring) * 0.08})`;
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.arc(ls.x, ls.y, ring * 12, 0, Math.PI * 2);
-                    ctx.stroke();
-                }
+                // Accuracy rings + distance ring (only during aiming, not when locked)
+                if (!shotLocked && !meterActive) {
+                    for (let ring = 3; ring >= 1; ring--) {
+                        ctx.strokeStyle = `rgba(255,255,255,${0.1 + (3 - ring) * 0.08})`;
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.arc(ls.x, ls.y, ring * 12, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
 
-                // Distance ring (max club range)
-                const maxRangeW = club3D.maxYds * YDS_TO_WORLD;
-                // Draw a few points around the ring projected to screen
-                ctx.strokeStyle = 'rgba(255,255,100,0.2)';
-                ctx.lineWidth = 1;
-                ctx.setLineDash([6, 6]);
-                ctx.beginPath();
-                const ringPts = 36;
-                for (let i = 0; i <= ringPts; i++) {
-                    const a = (i / ringPts) * Math.PI * 2;
-                    const rx = ball.x + Math.cos(a) * maxRangeW;
-                    const ry = ball.y + Math.sin(a) * maxRangeW;
-                    const rs = worldToScreen3D(rx, ry);
-                    if (i === 0) ctx.moveTo(rs.x, rs.y);
-                    else ctx.lineTo(rs.x, rs.y);
+                    const maxRangeW = club3D.maxYds * YDS_TO_WORLD;
+                    ctx.strokeStyle = 'rgba(255,255,100,0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([6, 6]);
+                    ctx.beginPath();
+                    const ringPts = 36;
+                    for (let i = 0; i <= ringPts; i++) {
+                        const a = (i / ringPts) * Math.PI * 2;
+                        const rx = ball.x + Math.cos(a) * maxRangeW;
+                        const ry = ball.y + Math.sin(a) * maxRangeW;
+                        const rs = worldToScreen3D(rx, ry);
+                        if (i === 0) ctx.moveTo(rs.x, rs.y);
+                        else ctx.lineTo(rs.x, rs.y);
+                    }
+                    ctx.stroke();
+                    ctx.setLineDash([]);
                 }
-                ctx.stroke();
-                ctx.setLineDash([]);
 
                 // ---- Ball guide dots (bounce/roll prediction, projected to screen) ----
                 const topSpinM = spin.top || 0;
@@ -1713,21 +1710,21 @@ function drawPlaying() {
 
     }
 
-    // ---- Step 2: Shot locked — show SHOOT + Cancel buttons ----
+    // ---- Step 2: Shot locked — slim bottom bar ----
     if (shotLocked && !meterActive) {
-        const shootBtnW = 160, shootBtnH = 50;
-        const shootBtnX = (W() - shootBtnW) / 2, shootBtnY = H() - 185;
+        // Dark bottom bar
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0, H() - 60, W(), 60);
+
+        // TAKE SHOT button (left side, prominent)
+        const shootBtnW = W() * 0.55, shootBtnH = 42;
+        const shootBtnX = 12, shootBtnY = H() - 52;
         drawBtn(shootBtnX, shootBtnY, shootBtnW, shootBtnH, 'TAKE SHOT', '#e65100');
 
-        const cancelW = 80, cancelH = 36;
-        const cancelX = (W() - cancelW) / 2, cancelY = shootBtnY + shootBtnH + 10;
-        drawBtn(cancelX, cancelY, cancelW, cancelH, 'Cancel', '#555');
-
-        const club = CLUBS[selectedClub];
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px -apple-system,sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(club.name + ' \u2022 Drag target to re-aim', W() / 2, shootBtnY - 12);
+        // Cancel (right side, subtle)
+        const cancelW = W() * 0.3, cancelH = 42;
+        const cancelX = W() - cancelW - 12, cancelY = H() - 52;
+        drawBtn(cancelX, cancelY, cancelW, cancelH, 'Cancel', '#444');
     }
 
     // ---- Accuracy arc (behind-ball fan view) ----
@@ -1837,7 +1834,7 @@ function drawPlaying() {
     }
 
     // ---- Spin control (shown when not moving, not in meter mode) ----
-    const showSpin = !ball.moving && !holeComplete && !flyoverActive && !meterActive && terrainAt(ball.x, ball.y) !== T.GREEN;
+    const showSpin = !ball.moving && !holeComplete && !flyoverActive && !meterActive && !shotLocked && terrainAt(ball.x, ball.y) !== T.GREEN;
     if (showSpin) {
         const spX = W() - 60, spY = shotLocked ? H() - 290 : H() - 190, spR = 28;
 
@@ -1904,7 +1901,7 @@ function drawPlaying() {
         if (meterActive) {
             // shown on the meter itself
         } else if (shotLocked) {
-            ctx.fillText('Adjust spin \u2022 Drag to re-aim \u2022 Tap TAKE SHOT', W() / 2, H() - 24);
+            // hint is in the bottom bar now
         } else if (onGreen) {
             ctx.fillText('Drag back from ball to putt \u2022 Release to putt', W() / 2, H() - 24);
         } else if (!aiming) {
@@ -1912,8 +1909,8 @@ function drawPlaying() {
         }
     }
 
-    // Zoom, rotate, recenter buttons (left side)
-    if (!ball.moving && !flyoverActive) {
+    // Zoom, rotate, recenter buttons (left side) — hide when locked or in meter
+    if (!ball.moving && !flyoverActive && !shotLocked && !meterActive) {
         drawBtn(8, 66, 32, 28, '+', 'rgba(255,255,255,0.2)', '#ccc');
         drawBtn(8, 98, 32, 28, '−', 'rgba(255,255,255,0.2)', '#ccc');
         drawBtn(8, 134, 32, 28, '\u21BB', 'rgba(255,255,255,0.2)', '#ccc'); // ↻ rotate right
