@@ -2,23 +2,24 @@
 
 ## Remaining Work
 
-### Must Have (game isn't playable without these)
-- [ ] **Touch input handlers for aiming** — Wire up `onTouchStart/Move/End` in game.js for the Golf Clash drag-back-to-aim mechanic. Show dotted aim line + power meter while dragging.
-- [ ] **Screen: Main Menu** — Title, Play Career, Course Builder, Character buttons.
-- [ ] **Screen: Career Select** — Show 3 courses (Sunny Meadows, Oceanside Links, Mountain Ridge) with lock/unlock state. Tap to start a round.
-- [ ] **Screen: Gameplay HUD** — Hole name, par, stroke count, minimap.
-- [ ] **Screen: Hole Complete** — Show strokes vs par, score name (birdie/bogey/etc), "Next Hole" button.
-- [ ] **Screen: Round Complete** — Scorecard for all holes, total vs par, save best score.
-- [ ] **Main game loop** — `requestAnimationFrame` loop that dispatches to the correct screen's update/draw based on `state`.
-- [ ] **Builder integration** — Menu → Builder → test play → back to menu flow.
+### Done
+- [x] Touch input handlers for aiming (Golf Clash drag-back mechanic + power meter)
+- [x] Main Menu with Play Career, Course Builder, Custom Courses, Character
+- [x] Career Select with lock/unlock, course info, best scores
+- [x] Gameplay HUD (hole name, par, stroke count, terrain indicator, quit button)
+- [x] Hole Complete screen (score name, strokes vs par, running total)
+- [x] Round Complete scorecard (per-hole breakdown, total, best score tracking)
+- [x] Main game loop with state machine
+- [x] Builder integration (menu → builder → test play → back)
+- [x] Character Creator (name + ball color picker)
+- [x] Career unlock progression (complete course to unlock next)
+- [x] Best scores display on career select
+- [x] Shot trail (dotted line showing ball path)
+- [x] Water animation shimmer + tree detail rendering
 
-### Should Have (makes it way better)
-- [ ] **Character Creator** — Pick name and ball color before career.
-- [ ] **Career unlock progression** — Complete course 1 to unlock course 2, etc.
-- [ ] **Best scores display** — Show personal best per course on career select.
+### Should Have (next improvements)
 - [ ] **Hole overview** — Brief zoom-out to show full hole before first shot.
-- [ ] **Shot trail** — Fading dotted line showing ball's path after each shot.
-- [ ] **Terrain rendering polish** — Add subtle noise/texture to terrain, not just flat colors.
+- [ ] **Terrain rendering polish** — Add subtle noise/texture to terrain.
 
 ### Nice to Have (future features)
 - [ ] **Multiple holes in builder** — Build full 3+ hole courses, not just single holes.

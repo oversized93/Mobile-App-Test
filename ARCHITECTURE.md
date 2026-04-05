@@ -82,17 +82,15 @@ All save data uses localStorage with `gt_` prefix:
 - `gt_player` — player name, ball color, unlocked courses
 - `gt_customHoles` — array of saved custom hole data
 
-## Current Status (WIP)
-The following are complete:
+## Current Status
+All core systems are implemented and playable:
 - [x] Engine (canvas, input, camera, terrain, drawing helpers)
 - [x] Career courses (3 courses, 9 holes)
 - [x] Course builder (paint, save, load)
 - [x] Ball physics and shot mechanics
-
-Still needs to be built in `game.js`:
-- [ ] Touch input handlers for aiming (Golf Clash drag-back mechanic)
-- [ ] Screen rendering: main menu, character creator, career select, gameplay HUD
-- [ ] Hole complete / round complete screens
-- [ ] Main game loop (`requestAnimationFrame`)
-- [ ] Builder integration (entering/exiting builder from menu)
-- [ ] Career progression (unlock courses based on score)
+- [x] Golf Clash drag-back-to-aim touch controls
+- [x] All screens: menu, character creator, career select, gameplay HUD
+- [x] Hole complete + round complete scorecard screens
+- [x] Main game loop
+- [x] Builder integration (menu → builder → test play → back)
+- [x] Career progression (complete a course to unlock the next)
