@@ -512,23 +512,15 @@ function onTouchStart(sx, sy) {
         if (ball.moving || holeComplete) return;
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
 
-        // ---- Shot meter active: tap to lock power or accuracy ----
+        // ---- Shot meter active: tap to lock accuracy ----
         if (meterActive) {
-            if (meterPhase === 1) {
-                // First tap: lock power
-                meterPowerResult = meterPos; // 0-1
-                meterPhase = 2;
-                meterPos = 1; // start at top for downswing
-                curl = 0;
-                curlDragStartX = sx;
-            } else if (meterPhase === 2) {
-                // Second tap: lock accuracy, fire!
-                const accuracy = meterPos; // -1 to 1, 0 = center = perfect
-                fireFromMeter(lockedDirX, lockedDirY, meterPowerResult, accuracy, curl);
-                meterActive = false;
-                meterPhase = 0;
-                shotLocked = false;
-            }
+            // Single tap: lock accuracy, fire!
+            const accuracy = meterPos; // -1 to 1, 0 = center = perfect
+            const powerPct = lockedPower / CLUBS[selectedClub].maxPower;
+            fireFromMeter(lockedDirX, lockedDirY, powerPct, accuracy, curl);
+            meterActive = false;
+            meterPhase = 0;
+            shotLocked = false;
             return;
         }
 
@@ -539,9 +531,12 @@ function onTouchStart(sx, sy) {
             const shootBtnX = (W() - shootBtnW) / 2, shootBtnY = H() - 185;
             if (hitBtn(sx, sy, shootBtnX, shootBtnY, shootBtnW, shootBtnH)) {
                 meterActive = true;
-                meterPhase = 1;
-                meterPos = 0;
-                meterSpeed = 1.5 + (CLUBS[selectedClub].maxPower / 500) * 1.5;
+                meterPhase = 2; // skip power phase, go straight to accuracy
+                meterPos = 1;   // start at top, sweep down
+                curl = 0;
+                curlDragStartX = W() / 2;
+                // Half speed for accuracy meter
+                meterSpeed = (0.75 + (CLUBS[selectedClub].maxPower / 500) * 0.75);
                 return;
             }
             const cancelW = 80, cancelH = 36;
@@ -1404,7 +1399,7 @@ function drawPlaying() {
         ctx.fillText(club.name + ' \u2022 Drag target to re-aim', W() / 2, shootBtnY - 12);
     }
 
-    // ---- Shot meter (vertical two-tap) ----
+    // ---- Shot meter (accuracy only) ----
     if (meterActive) {
         const mx = W() - 50, my = 100, mw = 28, mh = H() - 260;
 
@@ -1418,35 +1413,8 @@ function drawPlaying() {
         roundRect(mx, my, mw, mh, 6);
         ctx.fill();
 
-        if (meterPhase === 1) {
-            // Phase 1: power — green at top, filling up
-            const fillH = meterPos * mh;
-            const grad = ctx.createLinearGradient(0, my + mh, 0, my);
-            grad.addColorStop(0, '#4caf50');
-            grad.addColorStop(0.7, '#ffeb3b');
-            grad.addColorStop(1, '#f44336');
-            ctx.fillStyle = grad;
-            roundRect(mx, my + mh - fillH, mw, fillH, 4);
-            ctx.fill();
-
-            // Marker
-            const markerY = my + mh - fillH;
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(mx - 6, markerY - 2, mw + 12, 4);
-
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 13px -apple-system,sans-serif';
-            ctx.textAlign = 'right';
-            ctx.fillText('TAP for', mx - 14, my + mh / 2 - 8);
-            ctx.fillText('POWER', mx - 14, my + mh / 2 + 8);
-        } else if (meterPhase === 2) {
-            // Phase 2: accuracy — show target zone in center, needle sweeps down
-            // Power fill (locked)
-            const powerH = meterPowerResult * mh;
-            ctx.fillStyle = 'rgba(76,175,80,0.3)';
-            roundRect(mx, my + mh - powerH, mw, powerH, 4);
-            ctx.fill();
-
+        {
+            // Accuracy meter — sweep marker toward center target line
             // Target zone (center of bar)
             const targetZoneH = mh * 0.12;
             const targetZoneY = my + mh / 2 - targetZoneH / 2;
@@ -1478,8 +1446,8 @@ function drawPlaying() {
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 12px -apple-system,sans-serif';
             ctx.textAlign = 'right';
-            ctx.fillText('TAP for', mx - 14, my + mh / 2 - 16);
-            ctx.fillText('ACCURACY', mx - 14, my + mh / 2);
+            ctx.fillText('TAP to', mx - 14, my + mh / 2 - 16);
+            ctx.fillText('SHOOT', mx - 14, my + mh / 2);
             ctx.font = '10px -apple-system,sans-serif';
             ctx.fillStyle = '#aaa';
             ctx.fillText('Drag L/R: curl', mx - 14, my + mh / 2 + 16);
@@ -1858,17 +1826,10 @@ function gameLoop(time) {
             }
             camLerp(dt);
         } else {
-            // Update shot meter
+            // Update shot meter (accuracy sweep: 1 → -1 → 1 ...)
             if (meterActive) {
-                if (meterPhase === 1) {
-                    // Sweep up: 0 → 1
-                    meterPos += meterSpeed * dt;
-                    if (meterPos > 1.1) meterPos = 0; // loops back if you miss
-                } else if (meterPhase === 2) {
-                    // Sweep down: 1 → -1
-                    meterPos -= meterSpeed * dt * 1.3; // slightly faster downswing
-                    if (meterPos < -1.1) meterPos = 1; // loops back
-                }
+                meterPos -= meterSpeed * dt;
+                if (meterPos < -1.1) meterPos = 1; // loops back
             }
             updateBall(dt);
             camLerp(dt);
