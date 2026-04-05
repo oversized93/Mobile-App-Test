@@ -1322,6 +1322,86 @@ function drawPlaying() {
     const dp = window.devicePixelRatio || 1;
     ctx.setTransform(dp, 0, 0, dp, 0, 0);
 
+    // ---- 3D aim guides (projected to screen) ----
+    if (is3D && !ball.moving && !holeComplete) {
+        const onGreen3D = terrainAt(ball.x, ball.y) === T.GREEN;
+        const club3D = CLUBS[selectedClub];
+        const hasTgt = !onGreen3D && !flyoverActive;
+
+        if (hasTgt && aimPower > 5) {
+            // Project ball and target to screen
+            const bs = worldToScreen3D(ball.x, ball.y);
+            const dirLen = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
+
+            if (dirLen > 0) {
+                const nx = aimDirX / dirLen, ny = aimDirY / dirLen;
+                const usePower = (shotLocked || meterActive) ? lockedPower : aimPower;
+                const useDir = (shotLocked || meterActive) ? { x: lockedDirX, y: lockedDirY } : { x: aimDirX, y: aimDirY };
+                const uLen = Math.sqrt(useDir.x * useDir.x + useDir.y * useDir.y);
+                const unx = useDir.x / uLen, uny = useDir.y / uLen;
+                const landDist = (usePower / club3D.maxPower) * club3D.maxYds * YDS_TO_WORLD;
+                const landWx = ball.x + unx * landDist;
+                const landWy = ball.y + uny * landDist;
+                const ls = worldToScreen3D(landWx, landWy);
+
+                // Aim line (from ball to target)
+                ctx.strokeStyle = 'rgba(100,220,255,0.8)';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(bs.x, bs.y);
+                ctx.lineTo(ls.x, ls.y);
+                ctx.stroke();
+
+                // Target crosshair
+                ctx.strokeStyle = 'rgba(255,255,100,0.9)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(ls.x, ls.y, 16, 0, Math.PI * 2);
+                ctx.stroke();
+                // Crosshair lines
+                ctx.beginPath();
+                ctx.moveTo(ls.x - 22, ls.y); ctx.lineTo(ls.x - 8, ls.y);
+                ctx.moveTo(ls.x + 8, ls.y); ctx.lineTo(ls.x + 22, ls.y);
+                ctx.moveTo(ls.x, ls.y - 22); ctx.lineTo(ls.x, ls.y - 8);
+                ctx.moveTo(ls.x, ls.y + 8); ctx.lineTo(ls.x, ls.y + 22);
+                ctx.stroke();
+                // Center dot
+                ctx.fillStyle = 'rgba(255,255,100,0.9)';
+                ctx.beginPath();
+                ctx.arc(ls.x, ls.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Accuracy rings
+                for (let ring = 3; ring >= 1; ring--) {
+                    ctx.strokeStyle = `rgba(255,255,255,${0.1 + (3 - ring) * 0.08})`;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(ls.x, ls.y, ring * 12, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Distance ring (max club range)
+                const maxRangeW = club3D.maxYds * YDS_TO_WORLD;
+                // Draw a few points around the ring projected to screen
+                ctx.strokeStyle = 'rgba(255,255,100,0.2)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([6, 6]);
+                ctx.beginPath();
+                const ringPts = 36;
+                for (let i = 0; i <= ringPts; i++) {
+                    const a = (i / ringPts) * Math.PI * 2;
+                    const rx = ball.x + Math.cos(a) * maxRangeW;
+                    const ry = ball.y + Math.sin(a) * maxRangeW;
+                    const rs = worldToScreen3D(rx, ry);
+                    if (i === 0) ctx.moveTo(rs.x, rs.y);
+                    else ctx.lineTo(rs.x, rs.y);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+    }
+
     // ---- HUD overlay ----
     // Top bar
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
