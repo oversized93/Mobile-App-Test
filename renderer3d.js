@@ -23,10 +23,10 @@ function init3D() {
     threeCanvas = document.getElementById('three-canvas');
     scene3d = new THREE.Scene();
     scene3d.background = new THREE.Color('#1a472a');
-    scene3d.fog = new THREE.Fog('#1a472a', 400, 1200);
+    scene3d.fog = new THREE.Fog('#1a472a', 1500, 3000);
 
     // Camera
-    camera3d = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 2000);
+    camera3d = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 5000);
     camera3d.position.set(0, 300, 0);
     camera3d.lookAt(0, 0, 0);
 
@@ -55,7 +55,7 @@ function init3D() {
     scene3d.add(dirLight);
 
     // Skybox (simple gradient)
-    const skyGeo = new THREE.SphereGeometry(900, 32, 16);
+    const skyGeo = new THREE.SphereGeometry(2500, 32, 16);
     const skyMat = new THREE.MeshBasicMaterial({
         color: 0x87ceeb,
         side: THREE.BackSide
@@ -309,7 +309,7 @@ function panCamera3D(dx, dy) {
 
 // ---- Zoom camera ----
 function zoomCamera3D(factor) {
-    cam3dTarget.y = Math.max(20, Math.min(500, cam3dTarget.y * factor));
+    cam3dTarget.y = Math.max(20, Math.min(1500, cam3dTarget.y * factor));
 }
 
 // ---- Project world point to screen ----
