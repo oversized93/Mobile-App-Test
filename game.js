@@ -79,6 +79,26 @@ function autoSelectClub() {
     selectedClub = 0; // Driver if nothing else reaches
 }
 
+function updateTargetFromClub() {
+    if (!currentHole) return;
+    const club = CLUBS[selectedClub];
+    const hx = (currentHole.hole.x + 0.5) * CELL;
+    const hy = (currentHole.hole.y + 0.5) * CELL;
+    const dx = hx - ball.x, dy = hy - ball.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const maxRange = club.maxYds * YDS_TO_WORLD;
+    if (dist <= maxRange) {
+        targetX = hx; targetY = hy;
+    } else {
+        targetX = ball.x + (dx / dist) * maxRange;
+        targetY = ball.y + (dy / dist) * maxRange;
+    }
+    aimDirX = targetX - ball.x;
+    aimDirY = targetY - ball.y;
+    const aDist = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
+    aimPower = Math.min(aDist / (club.maxYds * YDS_TO_WORLD) * club.maxPower, club.maxPower);
+}
+
 function cycleClub(dir) {
     const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
     if (onGreen) return; // Locked to putter on green
@@ -102,6 +122,26 @@ function startHole(hole) {
     scouting = false;
     generateWind();
     autoSelectClub();
+
+    // Place default target along tee-to-hole line at club range
+    const holeWorldX = (hole.hole.x + 0.5) * CELL;
+    const holeWorldY = (hole.hole.y + 0.5) * CELL;
+    const dx = holeWorldX - ball.x, dy = holeWorldY - ball.y;
+    const distToH = Math.sqrt(dx * dx + dy * dy);
+    const club = CLUBS[selectedClub];
+    const maxRange = club.maxYds * YDS_TO_WORLD;
+    if (distToH <= maxRange) {
+        targetX = holeWorldX;
+        targetY = holeWorldY;
+    } else {
+        targetX = ball.x + (dx / distToH) * maxRange;
+        targetY = ball.y + (dy / distToH) * maxRange;
+    }
+    // Pre-calculate aim from default target
+    aimDirX = targetX - ball.x;
+    aimDirY = targetY - ball.y;
+    const aDist = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
+    aimPower = Math.min(aDist / (club.maxYds * YDS_TO_WORLD) * club.maxPower, club.maxPower);
 
     // Start flyover: zoom out to show whole hole, pan from hole to ball
     centerCamOnHole();
@@ -492,7 +532,8 @@ function onTouchStart(sx, sy) {
             return;
         }
 
-        // ---- Shot locked: SHOOT, Cancel, adjust spin, or re-drag target ----
+        // ---- UI buttons (work in both locked and normal states) ----
+        // SHOOT button (only when locked)
         if (shotLocked && !onGreen) {
             const shootBtnW = 160, shootBtnH = 50;
             const shootBtnX = (W() - shootBtnW) / 2, shootBtnY = H() - 185;
@@ -509,32 +550,18 @@ function onTouchStart(sx, sy) {
                 shotLocked = false;
                 return;
             }
-            // Spin still adjustable
-            const spX = W() - 60, spY = H() - 290, spR = 28;
-            const sdx = sx - spX, sdy = sy - spY;
-            if (sdx * sdx + sdy * sdy < (spR + 10) * (spR + 10)) {
-                spinAdjusting = true;
-                spin.side = Math.max(-1, Math.min(1, sdx / (spR * 0.8)));
-                spin.top = Math.max(-1, Math.min(1, -sdy / (spR * 0.8)));
-                return;
-            }
-            // Can re-drag target to re-aim
-            draggingTarget = true;
-            const wp = screenToWorld(sx, sy);
-            targetX = wp.x; targetY = wp.y;
-            return;
         }
-
-        // ---- Normal: club, spin, target drag, putt, scout ----
+        // Club switching
         const clubY = H() - 120;
-        if (!onGreen && sy >= clubY && sy <= clubY + 36) {
-            if (sx < W() / 2 - 40) { cycleClub(-1); return; }
-            if (sx > W() / 2 + 40) { cycleClub(1); return; }
+        if (!onGreen && !shotLocked && sy >= clubY && sy <= clubY + 36) {
+            if (sx < W() / 2 - 40) { cycleClub(-1); updateTargetFromClub(); return; }
+            if (sx > W() / 2 + 40) { cycleClub(1); updateTargetFromClub(); return; }
         }
         // Spin control
+        const spinY = shotLocked ? H() - 290 : H() - 190;
         if (!onGreen && !flyoverActive) {
-            const spX = W() - 60, spY = H() - 190, spR = 28;
-            const sdx = sx - spX, sdy = sy - spY;
+            const spX = W() - 60, spR = 28;
+            const sdx = sx - spX, sdy = sy - spinY;
             if (sdx * sdx + sdy * sdy < (spR + 10) * (spR + 10)) {
                 spinAdjusting = true;
                 spin.side = Math.max(-1, Math.min(1, sdx / (spR * 0.8)));
@@ -542,24 +569,33 @@ function onTouchStart(sx, sy) {
                 return;
             }
         }
-        // Putting: drag back from ball
+
+        // ---- Putting: drag back from ball ----
         if (onGreen) {
             const bs = worldToScreen(ball.x, ball.y);
-            const dx = sx - bs.x, dy = sy - bs.y;
-            if (dx * dx + dy * dy < 80 * 80) {
+            const bdx = sx - bs.x, bdy = sy - bs.y;
+            if (bdx * bdx + bdy * bdy < 80 * 80) {
                 aiming = true;
                 putting = true;
                 aimStartX = sx; aimStartY = sy;
                 return;
             }
         }
-        // Normal: drag to place/move target on ground
+
+        // ---- Target or camera: touch near target = drag target, else = pan camera ----
         if (!onGreen && sy < H() - 140) {
-            draggingTarget = true;
-            aiming = true;
-            const wp = screenToWorld(sx, sy);
-            targetX = wp.x; targetY = wp.y;
-            return;
+            const ts = worldToScreen(targetX, targetY);
+            const tdx = sx - ts.x, tdy = sy - ts.y;
+            if (tdx * tdx + tdy * tdy < 50 * 50) {
+                // Grabbed the target — drag it
+                draggingTarget = true;
+                aiming = true;
+                return;
+            }
+            // Didn't grab target — pan camera
+            scouting = true;
+            scoutCamX = cam.x;
+            scoutCamY = cam.y;
         }
     }
 }
@@ -1020,9 +1056,12 @@ function drawPlaying() {
     }
 
     // Landing zone indicator (when aiming, shot locked, or needle)
-    const showAimPower = (aiming && aimPower > 10) ? aimPower : (shotLocked || meterActive) ? lockedPower : 0;
-    const showAimDirX = (aiming && aimPower > 10) ? aimDirX : lockedDirX;
-    const showAimDirY = (aiming && aimPower > 10) ? aimDirY : lockedDirY;
+    // Always show aim guides when we have a target (not putting, not in ball flight)
+    const onGreenNow = terrainAt(ball.x, ball.y) === T.GREEN;
+    const hasTarget = !onGreenNow && !ball.moving && !holeComplete && !flyoverActive;
+    const showAimPower = (aiming && aimPower > 10) ? aimPower : (shotLocked || meterActive) ? lockedPower : hasTarget ? aimPower : 0;
+    const showAimDirX = (aiming && aimPower > 10) ? aimDirX : (shotLocked || meterActive) ? lockedDirX : aimDirX;
+    const showAimDirY = (aiming && aimPower > 10) ? aimDirY : (shotLocked || meterActive) ? lockedDirY : aimDirY;
     if (showAimPower > 10) {
         const club = CLUBS[selectedClub];
         const len = Math.sqrt(showAimDirX * showAimDirX + showAimDirY * showAimDirY);
@@ -1105,7 +1144,7 @@ function drawPlaying() {
     }
 
     // Aim line / Putt guide (visible during aim, locked, or needle)
-    const aimVis = (aiming && aimPower > 5) || shotLocked || meterActive;
+    const aimVis = (aiming && aimPower > 5) || shotLocked || meterActive || hasTarget;
     const visAimDirX = (aiming && aimPower > 5) ? aimDirX : lockedDirX;
     const visAimDirY = (aiming && aimPower > 5) ? aimDirY : lockedDirY;
     const visAimPower = (aiming && aimPower > 5) ? aimPower : lockedPower;
@@ -1519,7 +1558,7 @@ function drawPlaying() {
         } else if (onGreen) {
             ctx.fillText('Drag back from ball to putt \u2022 Release to putt', W() / 2, H() - 24);
         } else if (!aiming) {
-            ctx.fillText('Drag course: place target \u2022 Arrows: club \u2022 Pinch: zoom', W() / 2, H() - 24);
+            ctx.fillText('Drag target to aim \u2022 Drag elsewhere to pan \u2022 Arrows: club', W() / 2, H() - 24);
         }
     }
 
