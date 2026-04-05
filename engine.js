@@ -168,9 +168,26 @@ function worldToScreen(wx, wy) {
 
 // ---- Touch state ----
 let touch = { down: false, x: 0, y: 0, startX: 0, startY: 0, moved: false };
+let pinching = false;
+let pinchStartDist = 0;
+let pinchStartZoom = 1;
+let manualZoom = false; // true when user has pinched — overrides auto-zoom
+
+function getTouchDist(e) {
+    const t1 = e.touches[0], t2 = e.touches[1];
+    const dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
 
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
+    if (e.touches.length === 2) {
+        // Start pinch zoom
+        pinching = true;
+        pinchStartDist = getTouchDist(e);
+        pinchStartZoom = cam.targetZoom;
+        return;
+    }
     const t = e.touches[0];
     touch.down = true;
     touch.x = t.clientX;
@@ -183,6 +200,14 @@ canvas.addEventListener('touchstart', (e) => {
 
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
+    if (pinching && e.touches.length === 2) {
+        const dist = getTouchDist(e);
+        const scale = dist / pinchStartDist;
+        cam.targetZoom = Math.max(0.3, Math.min(8, pinchStartZoom * scale));
+        cam.zoom = cam.targetZoom; // instant for responsiveness
+        manualZoom = true;
+        return;
+    }
     const t = e.touches[0];
     touch.x = t.clientX;
     touch.y = t.clientY;
@@ -193,6 +218,11 @@ canvas.addEventListener('touchmove', (e) => {
 
 canvas.addEventListener('touchend', (e) => {
     e.preventDefault();
+    if (pinching) {
+        pinching = false;
+        if (e.touches.length === 0) { touch.down = false; }
+        return;
+    }
     touch.down = false;
     if (typeof onTouchEnd === 'function') onTouchEnd(touch.x, touch.y);
 }, { passive: false });

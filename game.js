@@ -33,11 +33,11 @@ const SCORE_NAMES = {
 const YDS_TO_WORLD = 3;
 
 const CLUBS = [
-    { name: 'Driver',  maxPower: 500, launch: 160, airMin: 0.15, maxYds: 230 },
-    { name: '3 Wood',  maxPower: 420, launch: 140, airMin: 0.18, maxYds: 195 },
-    { name: '5 Iron',  maxPower: 340, launch: 120, airMin: 0.20, maxYds: 160 },
-    { name: '7 Iron',  maxPower: 260, launch: 105, airMin: 0.22, maxYds: 120 },
-    { name: 'P Wedge', maxPower: 180, launch: 130, airMin: 0.15, maxYds: 80  },
+    { name: 'Driver',  maxPower: 500, launch: 320, airMin: 0.15, maxYds: 230 },
+    { name: '3 Wood',  maxPower: 420, launch: 280, airMin: 0.18, maxYds: 195 },
+    { name: '5 Iron',  maxPower: 340, launch: 240, airMin: 0.20, maxYds: 160 },
+    { name: '7 Iron',  maxPower: 260, launch: 210, airMin: 0.22, maxYds: 120 },
+    { name: 'P Wedge', maxPower: 180, launch: 260, airMin: 0.15, maxYds: 80  },
     { name: 'Putter',  maxPower: 120, launch: 0,   airMin: 999,  maxYds: 40  }
 ];
 let selectedClub = 0;
@@ -211,9 +211,9 @@ function updateBall(dt) {
                     notify('Landed in trees!');
                 }
 
-                // Bounce: lose most speed on landing, keep some roll
-                ball.vx *= 0.55;
-                ball.vy *= 0.55;
+                // Bounce: heavy speed loss on landing, short roll (~15% of total distance)
+                ball.vx *= 0.3;
+                ball.vy *= 0.3;
                 // Don't check hole while landing — need to roll in
             }
             continue; // Skip ground checks while airborne
@@ -283,11 +283,13 @@ function onBallStopped() {
     shotTrail = [];
     centerCamOnBall();
     autoSelectClub();
-    // Zoom in tight when on green for putting
-    if (ter === T.GREEN) {
-        cam.targetZoom = Math.min(calcZoom() * 2.5, 6);
-    } else {
-        cam.targetZoom = calcZoom();
+    // Auto-zoom only if user hasn't manually pinch-zoomed
+    if (!manualZoom) {
+        if (ter === T.GREEN) {
+            cam.targetZoom = Math.min(calcZoom() * 2.5, 6);
+        } else {
+            cam.targetZoom = calcZoom();
+        }
     }
 }
 
@@ -330,6 +332,7 @@ function takeShot(power, dirX, dirY) {
     shotTrail = [];
     aiming = false;
     putting = false;
+    manualZoom = false; // reset so auto-zoom works after ball stops
 }
 
 // ---- Touch Handlers (Golf Clash aiming) ----
@@ -1094,6 +1097,12 @@ function drawPlaying() {
         }
     }
 
+    // Zoom buttons (left side)
+    if (!ball.moving && !flyoverActive) {
+        drawBtn(8, 66, 32, 28, '+', 'rgba(255,255,255,0.2)', '#ccc');
+        drawBtn(8, 98, 32, 28, '−', 'rgba(255,255,255,0.2)', '#ccc');
+    }
+
     // Back button (small)
     drawBtn(W() - 58, 62, 50, 30, 'Quit', 'rgba(255,255,255,0.15)', '#aaa');
 }
@@ -1300,11 +1309,25 @@ function roundDoneTouchStart(sx, sy) {
 }
 
 // ---- Quit button in gameplay ----
-function checkQuitBtn(sx, sy) {
+function checkPlayingUI(sx, sy) {
+    // Quit button
     if (hitBtn(sx, sy, W() - 58, 62, 50, 30)) {
         if (customCoursePlay) { state = 'builder'; }
         else { state = 'menu'; }
         return true;
+    }
+    // Zoom buttons
+    if (!ball.moving && !flyoverActive) {
+        if (hitBtn(sx, sy, 8, 66, 32, 28)) {
+            cam.targetZoom = Math.min(cam.targetZoom * 1.4, 8);
+            manualZoom = true;
+            return true;
+        }
+        if (hitBtn(sx, sy, 8, 98, 32, 28)) {
+            cam.targetZoom = Math.max(cam.targetZoom / 1.4, 0.3);
+            manualZoom = true;
+            return true;
+        }
     }
     return false;
 }
@@ -1378,7 +1401,7 @@ function gameLoop(time) {
 // Override onTouchStart to also check quit button during play
 const _origTouchStart = onTouchStart;
 onTouchStart = function(sx, sy) {
-    if (state === 'playing' && checkQuitBtn(sx, sy)) return;
+    if (state === 'playing' && checkPlayingUI(sx, sy)) return;
     _origTouchStart(sx, sy);
 };
 
