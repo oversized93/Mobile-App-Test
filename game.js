@@ -561,12 +561,6 @@ function onTouchStart(sx, sy) {
             targetX = wp.x; targetY = wp.y;
             return;
         }
-        // Scout (fallback)
-        if (sy < H() - 140) {
-            scouting = true;
-            scoutCamX = cam.x;
-            scoutCamY = cam.y;
-        }
     }
 }
 

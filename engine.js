@@ -181,6 +181,8 @@ let pinchStartDist = 0;
 let pinchStartZoom = 1;
 let pinchStartAngle = 0;
 let pinchStartRot = 0;
+let pinchStartMidX = 0, pinchStartMidY = 0;
+let pinchStartCamX = 0, pinchStartCamY = 0;
 let manualZoom = false;
 
 function getTouchDist(e) {
@@ -197,12 +199,17 @@ function getTouchAngle(e) {
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     if (e.touches.length === 2) {
-        // Start pinch zoom + rotate
+        // Start pinch zoom + rotate + pan
         pinching = true;
         pinchStartDist = getTouchDist(e);
         pinchStartZoom = cam.targetZoom;
         pinchStartAngle = getTouchAngle(e);
         pinchStartRot = cam.targetRot;
+        const t1 = e.touches[0], t2 = e.touches[1];
+        pinchStartMidX = (t1.clientX + t2.clientX) / 2;
+        pinchStartMidY = (t1.clientY + t2.clientY) / 2;
+        pinchStartCamX = cam.targetX;
+        pinchStartCamY = cam.targetY;
         return;
     }
     const t = e.touches[0];
@@ -227,6 +234,17 @@ canvas.addEventListener('touchmove', (e) => {
         const angle = getTouchAngle(e);
         cam.targetRot = pinchStartRot + (angle - pinchStartAngle);
         cam.rot = cam.targetRot;
+        // Pan (two-finger drag)
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const midX = (t1.clientX + t2.clientX) / 2;
+        const midY = (t1.clientY + t2.clientY) / 2;
+        const dx = (midX - pinchStartMidX) / cam.zoom;
+        const dy = (midY - pinchStartMidY) / cam.zoom;
+        const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
+        cam.targetX = pinchStartCamX - (dx * cos - dy * sin);
+        cam.targetY = pinchStartCamY - (dx * sin + dy * cos);
+        cam.x = cam.targetX;
+        cam.y = cam.targetY;
         manualZoom = true;
         return;
     }
