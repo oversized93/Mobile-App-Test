@@ -773,8 +773,8 @@ function drawPlaying() {
         const len = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
         if (len > 0) {
             const nx = aimDirX / len, ny = aimDirY / len;
-            // Estimate landing spot — power scaled to distance + wind offset
-            const landDist = aimPower * 0.75;
+            // Estimate landing spot — scale power to match the distance ring
+            const landDist = (aimPower / club.maxPower) * club.maxYds * YDS_TO_WORLD;
             const windOffX = Math.cos(wind.angle) * wind.speed * (club.launch > 0 ? 1.2 : 0.3);
             const windOffY = Math.sin(wind.angle) * wind.speed * (club.launch > 0 ? 1.2 : 0.3);
             const landX = ball.x + nx * landDist + windOffX;
@@ -814,7 +814,8 @@ function drawPlaying() {
         const len = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
         if (len > 0) {
             const nx = aimDirX / len, ny = aimDirY / len;
-            const lineLen = aimPower * 0.4;
+            const club = CLUBS[selectedClub];
+            const lineLen = (aimPower / club.maxPower) * club.maxYds * YDS_TO_WORLD;
 
             // Dotted aim line
             ctx.strokeStyle = 'rgba(255,255,100,0.7)';
