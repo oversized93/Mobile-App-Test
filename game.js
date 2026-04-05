@@ -717,7 +717,12 @@ function onTouchMove(sx, sy) {
 function onTouchEnd(sx, sy) {
     if (state === 'builder') { builderState.painting = false; return; }
     if (state === 'playing' && spinAdjusting) { spinAdjusting = false; return; }
-    if (state === 'playing' && scouting) { scouting = false; return; }
+    if (state === 'playing' && scouting) {
+        scouting = false;
+        // Keep camera where user left it — set manualZoom to prevent auto-cam
+        manualZoom = true;
+        return;
+    }
     if (state === 'playing' && draggingTarget) {
         draggingTarget = false;
         if (aimPower > 5) {
@@ -2127,14 +2132,15 @@ function gameLoop(time) {
             const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
             setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 50, ball.y + tdy / tlen * 50, 35);
         } else if (onGreenNow && !ball.moving) {
-            if (!scouting) {
+            if (!scouting && !manualZoom) {
                 const hx = (currentHole.hole.x + 0.5) * CELL;
                 const hy = (currentHole.hole.y + 0.5) * CELL;
                 setCameraBehindBall(ball.x, ball.y, hx, hy, 25);
             }
         } else if (ball.moving) {
+            manualZoom = false; // reset when ball moves
             setCameraOverhead(ball.x, ball.y, 1.5);
-        } else if (!scouting) {
+        } else if (!scouting && !manualZoom) {
             const zoomFactor = cam.targetZoom || 1;
             setCameraOverhead(ball.x, ball.y, zoomFactor * 0.5);
         }

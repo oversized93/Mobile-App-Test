@@ -1,184 +1,144 @@
 # Golf Tycoon — Architecture
 
 ## Overview
-A mobile-first browser golf game combining Golf Clash-style gameplay with RollerCoaster Tycoon-style course building. Built as vanilla JS with HTML5 Canvas — no frameworks, no dependencies.
+A mobile-first browser golf game combining Golf Clash-style gameplay with RollerCoaster Tycoon-style course building. Hybrid rendering: **Three.js 3D** for gameplay, **2D Canvas** for menus, builder, and HUD overlays.
 
 ## File Structure
 
 ```
-index.html      — Entry point. Loads all scripts, sets up canvas.
-engine.js       — Core engine: canvas, input, camera, terrain types, drawing helpers.
+index.html      — Entry point. Dual canvas setup, loads Three.js CDN + all scripts.
+engine.js       — Core engine: 2D canvas, touch/mouse input, terrain constants, drawing helpers.
 courses.js      — Pre-built career course data (9 holes across 3 courses).
-builder.js      — Course builder UI and logic (paint terrain, place tee/hole, save/load).
+builder.js      — Course builder UI and logic (2D canvas — paint terrain, place tee/hole, save/load).
+renderer3d.js   — NEW: Three.js scene, 3D terrain/ball/flag, camera system, raycasting.
 game.js         — Game state, ball physics, shot mechanics, screens, and main loop.
 ```
 
+## Rendering Architecture
+
+### Dual Canvas System
+- **Three.js canvas** (`#three-canvas`): 3D gameplay rendering (terrain, ball, flag, trees, sky)
+- **2D Canvas** (`#c`): HUD overlay on top of 3D during gameplay; full rendering for menus/builder
+- Three.js canvas sits behind, 2D canvas is transparent during gameplay
+- `show3D()` / `hide3D()` toggle the 3D canvas visibility per state
+
+### What renders in 3D (renderer3d.js)
+- Terrain mesh: colored planes per grid cell with height variation per terrain type
+- Trees: cone (canopy) + cylinder (trunk) with shadows
+- Water: semi-transparent reflective planes
+- Ball: sphere with standard material, shadows
+- Flag: pole (cylinder) + flag (plane)
+- Hole: dark circle on ground
+- Target: ring mesh on ground (yellow)
+- Skybox: large sphere with sky blue color
+- Lighting: ambient + directional with shadow maps
+
+### What renders in 2D (game.js HUD overlay)
+- Aim line (cyan, projected via `worldToScreen3D`)
+- Target crosshair + accuracy rings (projected)
+- Distance ring (projected)
+- Putt guide line (glowing cyan with arrow, projected)
+- Top bar (hole name, par, strokes, terrain)
+- Club selector bar
+- Wind compass
+- Spin control ball
+- TAKE SHOT / Cancel buttons
+- Accuracy fan arc
+- Zoom/rotate/recenter buttons
+- Notifications
+
 ## Script Load Order
-Scripts must load in this order (each depends on the previous):
-1. `engine.js` — defines globals: canvas, ctx, terrain constants, camera, input, helpers
-2. `courses.js` — uses `makeGrid`, `fillRect`, `fillCircle` and terrain constants from engine
-3. `builder.js` — uses terrain constants, drawing helpers, and grid utilities
-4. `game.js` — uses everything above; contains the main game loop
+1. `three.min.js` (CDN r128) — Three.js library
+2. `engine.js` — 2D canvas, input, terrain constants
+3. `courses.js` — terrain grid data
+4. `builder.js` — course builder (2D only)
+5. `renderer3d.js` — Three.js scene setup, camera, raycasting
+6. `game.js` — game logic, calls into renderer3d for 3D, engine for 2D
 
 ## Key Systems
 
-### Terrain (engine.js)
+### Terrain (engine.js + renderer3d.js)
 Grid-based terrain with 10 types. Each cell is `CELL` (16px) in world space.
-- `T.FAIRWAY`, `T.GREEN`, `T.ROUGH` — normal play surfaces with different friction
-- `T.SAND` — high friction (ball slows fast)
-- `T.WATER` — ball resets + 1 stroke penalty
-- `T.TREE` — ball bounces back (ground) or drops with speed loss (air)
-- `T.OOB` — out of bounds, ball resets + 1 stroke penalty
-- Friction values in `TERRAIN_FRICTION` — applied per-frame as `velocity *= friction^(dt*60)`
+- 2D: flat colored rectangles with friction values
+- 3D: `PlaneGeometry` per cell, positioned at terrain-specific heights:
+  - Water: -1.5, Sand: -0.3, Green: +0.2, Tee: +0.3, OOB: -0.5, default: 0
+- Trees rendered as 3D cone+cylinder on TREE cells
+- Water gets extra semi-transparent plane for reflective look
 
-### Camera (engine.js)
-Smooth-follow camera with zoom and **360° rotation**. Key functions:
-- `camTransform()` / `camRestore()` — push/pop canvas transform (includes rotation)
-- `screenToWorld()` / `worldToScreen()` — coordinate conversion (rotation-aware)
-- `cam.targetX/Y/Zoom/Rot` — lerps toward targets each frame
-- **Two-finger gestures**: pinch to zoom, twist to rotate, drag to pan (all simultaneous)
-- Manual zoom/rotate/recenter buttons in HUD as fallback
+### 3D Camera System (renderer3d.js)
+`PerspectiveCamera` with smooth lerp transitions between modes:
 
-### Input (engine.js)
-Unified touch + mouse input. Sets global `touch` object.
-- Single-finger: dispatched to `onTouchStart/Move/End` in game.js
-- Two-finger: handled directly in engine.js for pinch-zoom, twist-rotate, and pan
-- `pinching` flag prevents single-finger handlers from firing during two-finger gestures
+**Overhead** (`setCameraOverhead`): looks down at an angle for aiming/planning. Height based on zoom level. Used when ball is stopped and not on green.
+
+**Behind-ball** (`setCameraBehindBall`): positioned behind the ball looking toward the target/hole. Used for:
+- Accuracy meter (full shots)
+- Putting (on green, looking toward hole)
+
+**Follow** (`setCameraOverhead` with ball tracking): follows ball during flight.
+
+**Scouting override**: when `scouting=true`, auto-positioning is skipped so `panCamera3D` can move the camera freely. `cam3dSkipLerp` prevents the lerp from fighting user panning.
+
+Camera properties: FOV 60°, near 1, far 5000. Fog 1500-3000. Skybox radius 2500.
+
+### 3D ↔ 2D Coordinate Conversion (renderer3d.js)
+- `screenToWorld3D(sx, sy)`: raycast from screen point to ground plane (y=0), returns world {x, y}
+- `worldToScreen3D(wx, wy)`: project world point to screen via camera, returns screen {x, y}
+- `panCamera3D(dx, dy)`: translate screen drag delta to 3D camera movement using camera's right/forward vectors. Moves both target and position immediately to prevent shakiness.
+- `zoomCamera3D(factor)`: adjust camera height
 
 ### Ball Physics (game.js)
 - Position + velocity model with per-terrain friction
-- Sub-step collision to prevent tunneling through thin terrain
-- **Airborne system**: velocity calculated from physics so flight distance matches displayed club range. `velocity = (targetDist * 0.85) / airTime`. Ball spends ~85% of distance in air, ~15% rolling.
-- **Gravity**: constant `GRAVITY = 400` pulls ball down during flight
-- **Curl**: continuous lateral force perpendicular to velocity during airborne flight, bends the ball's arc
-- **Spin**: sidespin curves initial trajectory; topspin/backspin affects landing roll factor (0.1x backspin to 0.5x topspin)
-- Water/OOB trigger reset to last safe position + penalty stroke
-- Hole detection: ball within 6px of hole center at speed < 200 (ground only)
+- **Airborne system**: velocity calculated from physics so flight distance matches displayed club range
+- **Gravity**: constant `GRAVITY = 400`
+- **Curl**: continuous lateral force perpendicular to velocity during airborne flight
+- **Spin**: sidespin curves trajectory; topspin/backspin affects landing roll factor
+- Ball position synced to 3D via `updateBall3D(wx, wy, wz, color)` each frame
 
 ### Shot Flow (game.js) — Golf Clash Style
-Three-step process for full shots:
 
-**Step 1 — Aim:**
-- A target (crosshair + accuracy rings) auto-places toward the hole at club max range
-- Player drags the target to aim — target clamped within club's max range
-- Dragging anywhere else pans the camera
-- Aim line, landing zone, ball guide, and distance ring all visible
-- Can switch clubs (auto-repositions target), adjust spin
-- Release target to lock aim → TAKE SHOT button appears
+**Step 1 — Aim (overhead view):**
+- Target auto-placed toward hole at club max range
+- Drag target to re-aim (clamped to club range)
+- Drag elsewhere to pan 3D camera
+- Aim line, accuracy rings, distance ring shown as 2D overlay projected from 3D
+- Switch clubs, adjust spin
 
 **Step 2 — Confirm:**
-- TAKE SHOT + Cancel buttons visible
-- Can still adjust spin or re-drag target
-- Tap TAKE SHOT to proceed to accuracy meter
+- TAKE SHOT + Cancel buttons
+- Can re-drag target or adjust spin
 
-**Step 3 — Accuracy Meter:**
-- Vertical meter on right side of screen
-- Marker sweeps downward toward center target line
-- Tap to stop — center = Perfect!, off-center = hook/slice (up to 17° deviation)
-- During sweep, drag left/right to apply curl (bends flight arc)
-- Shows Perfect!/Great!/Good/Hook!/Slice! feedback
+**Step 3 — Accuracy (behind-ball view):**
+- Camera auto-rotates behind ball looking toward target
+- Colored fan arc at bottom of screen (green center → yellow → red edges)
+- Arrow sweeps across arc, tap to stop
+- Drag left/right for curl during sweep
+- Camera restores after shot
 
-**Putts** (on green): separate mechanic — drag back from ball to aim, release to putt. No accuracy meter, no curl.
+**Putts (behind-ball view):**
+- Camera auto-positions behind ball facing hole
+- Drag back from ball to aim + set power
+- Glowing cyan putt guide line (wide glow + thin core + arrow + distance in feet)
+- Direction converted from screen to world space via `screenToWorld3D` raycasting
+- Release to putt (no accuracy meter)
 
 ### Club System (game.js)
-6 clubs with distinct characteristics:
-| Club | Max Yards | Behavior |
-|------|-----------|----------|
-| Driver | 230 | Longest, high launch — tee shots |
-| 3 Wood | 195 | Long fairway shots |
-| 5 Iron | 160 | Medium approach |
-| 7 Iron | 120 | Short, controlled |
-| P Wedge | 80 | High arc, short game |
-| Putter | 40 | Ground only — auto-selected on green |
-
-Each club has: `maxPower`, `launch` (air height), `airMin` (minimum power % to go airborne), `maxYds`.
-
-- **Auto-select**: picks shortest club that reaches the hole after each shot
-- **Manual switch**: tap arrows in the club bar to cycle (auto-repositions target)
-- **Distance ring**: dashed circle on course showing max range of selected club
-- **Target clamping**: target can't be dragged beyond max range
-- **Yards display**: club bar shows `Club (X yds)` + distance to hole with reach indicator
-
-Distance conversion: `YDS_TO_WORLD = 3` (1 yard = 3 world units). All yard calculations use this constant.
-
-### Spin System (game.js)
-- **Spin control**: ball icon in bottom-right corner with draggable red dot
-- **Topspin** (drag up): increases roll after landing (0.5x speed retained)
-- **Backspin** (drag down): decreases roll (0.1x speed retained — ball checks up)
-- **Sidespin** (drag left/right): curves initial ball trajectory perpendicular to aim
-- **Curl** (separate from spin): applied during accuracy meter by dragging left/right. Continuous lateral force during flight that bends the arc. Used for doglegs and shaping around obstacles.
-- Spin resets after each shot
+6 clubs: Driver (230 yds), 3 Wood (195), 5 Iron (160), 7 Iron (120), P Wedge (80), Putter (40).
 
 ### Wind System (game.js)
-- Random wind generated per hole: 1-13 mph, random direction
-- **HUD**: compass circle with directional arrow + mph readout (top-right corner)
-- **Physics**: wind force applied to ball velocity on shot. Air shots affected ~4.5x more than ground shots
-- **Skill element**: wind is NOT factored into aim guides — player must read the compass and manually offset their aim to compensate
-
-### Camera System (game.js + engine.js)
-- **Hole flyover**: at start of each hole, camera zooms out to show full layout, then pans to ball. Tap to skip.
-- **Auto-follow**: camera tracks ball during shots, zooms in tighter on the green
-- **Manual pan**: one-finger drag (not on target) pans camera to scout the hole
-- **Two-finger**: pinch zoom (0.3x–8x), twist rotate (360°), drag pan — all simultaneous
-- **Buttons**: +/−/↻/↺/◎ for zoom, rotate, and recenter
-- **Manual zoom override**: user zoom persists until next shot, then auto-zoom resumes
-- **Rotation-aware panning**: drag direction accounts for camera rotation angle
-
-### Visual Indicators
-- **Accuracy rings**: 3 concentric circles around the landing target showing dispersion zones
-- **Ball guide line**: fading dots after the landing zone showing predicted bounce/roll path (accounts for spin)
-- **Green slope arrows**: subtle directional arrows on the green showing break toward the hole
-- **Landing zone crosshair**: target with crosshair lines, center dot
-- **Distance ring**: dashed circle at club's max range
-- **Shot trail**: dotted line showing ball's actual path after each shot
-
-### Course Data (courses.js)
-Each hole is:
-```js
-{
-    grid: number[][],  // 2D array of terrain type IDs
-    cols: number,
-    rows: number,
-    tee: { x, y },    // grid coordinates
-    hole: { x, y },   // grid coordinates
-    par: number,
-    name: string
-}
-```
-Career courses are arrays of holes grouped into named courses.
-- Par 3s: ~25 cells tee-to-hole (reachable in 1 iron shot)
-- Par 4s: ~50 cells (driver + iron approach)
-- Par 5s: ~65-70 cells (driver + long iron + short iron)
+Random 1-13 mph per hole. Compass HUD. Affects ball physics but NOT shown in aim guides.
 
 ### Course Builder (builder.js)
-- Paint-based terrain editor with selectable brush size (1-3)
-- Tool palette: all terrain types + Set Tee / Set Hole markers
-- Save to localStorage under `gt_customHoles`
-- Can test-play custom holes directly from builder
+Pure 2D canvas. Paint terrain, place tee/hole, save to localStorage, test-play.
 
 ### Persistence
-All save data uses localStorage with `gt_` prefix:
-- `gt_player` — player name, ball color, unlocked courses
-- `gt_customHoles` — array of saved custom hole data
-- `gt_best_N` — best score per career course
+localStorage with `gt_` prefix: player data, custom courses, best scores.
 
 ## Current Status
-All core systems are implemented and playable:
-- [x] Engine (canvas, input, camera with rotation, terrain, drawing helpers)
-- [x] Career courses (3 courses, 9 holes with proper par-length scaling)
-- [x] Course builder (paint, save, load, test play)
-- [x] Ball physics with airborne system, physics-based flight distance
-- [x] Golf Clash-style target-based aiming with draggable landing zone
-- [x] Accuracy meter (single-tap timing mini-game with hook/slice)
-- [x] Curl system (drag during meter to bend flight arc)
-- [x] Ball spin (top/back/side via spin control ball)
-- [x] Ball guide line (predicted bounce/roll after landing)
-- [x] Accuracy rings around landing target
-- [x] Green slope indicators (directional arrows)
-- [x] Club system (6 clubs, auto-select, manual switch, target clamping)
-- [x] Wind system (random per hole, compass HUD, NOT shown in guides)
-- [x] Hole flyover + 360° camera (pinch/twist/pan)
-- [x] All screens: menu, character creator, career select, gameplay HUD
-- [x] Hole complete + round complete scorecard screens
-- [x] Builder integration (menu → builder → test play → back)
-- [x] Career progression (complete a course to unlock the next)
+- [x] Three.js 3D rendering for gameplay (terrain, ball, flag, trees, water, sky, shadows)
+- [x] Dual canvas: 3D behind, 2D HUD overlay on top
+- [x] 3D camera: overhead, behind-ball, follow, scouting pan
+- [x] 3D raycasting for target drag and putt direction
+- [x] Projected aim guides (aim line, crosshair, rings, distance ring, putt guide)
+- [x] Behind-ball accuracy fan arc
+- [x] Behind-ball putting with glowing guide line
+- [x] All previous features (clubs, spin, curl, wind, career, builder, etc.)
