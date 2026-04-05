@@ -29,6 +29,9 @@ const SCORE_NAMES = {
 };
 
 // ---- Club system ----
+// Yard conversion: 1 yard = 3 world units (CELL = 16, so ~5 yards per cell)
+const YDS_TO_WORLD = 3;
+
 const CLUBS = [
     { name: 'Driver',  maxPower: 500, launch: 160, airMin: 0.15, maxYds: 230 },
     { name: '3 Wood',  maxPower: 420, launch: 140, airMin: 0.18, maxYds: 195 },
@@ -67,10 +70,9 @@ function autoSelectClub() {
     if (onGreen) { selectedClub = CLUBS.length - 1; return; } // Putter
 
     const dist = distToHole();
-    // Pick the shortest club that can reach the hole
-    // Club max range ≈ maxPower * ~0.9 (accounting for air time and friction)
+    // Pick the shortest club whose max range reaches the hole
     for (let i = CLUBS.length - 2; i >= 0; i--) {
-        if (CLUBS[i].maxPower * 0.85 >= dist) {
+        if (CLUBS[i].maxYds * YDS_TO_WORLD >= dist) {
             selectedClub = i;
             return;
         }
@@ -755,7 +757,7 @@ function drawPlaying() {
     // Max distance ring for selected club (when ball is stopped)
     if (!ball.moving && !holeComplete && !flyoverActive) {
         const club = CLUBS[selectedClub];
-        const maxDist = club.maxPower * 0.85; // effective max range in world units
+        const maxDist = club.maxYds * YDS_TO_WORLD; // max range in world units
         ctx.strokeStyle = 'rgba(255,255,100,0.25)';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([6, 6]);
@@ -943,7 +945,7 @@ function drawPlaying() {
         ctx.font = 'bold 14px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         const dist = distToHole();
-        const distYds = Math.round(dist / 3);
+        const distYds = Math.round(dist / YDS_TO_WORLD);
         const canReach = club.maxYds >= distYds;
         const reachColor = canReach ? '#4caf50' : '#f44';
         ctx.fillText(club.name + ' (' + club.maxYds + ' yds)', W() / 2 - 30, clubY + 16);
