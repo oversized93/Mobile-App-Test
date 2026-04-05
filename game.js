@@ -465,14 +465,17 @@ let aiming = false; // true when target is being positioned (replaces old aiming
 let shotLocked = false;
 let lockedPower = 0, lockedDirX = 0, lockedDirY = 0;
 
-// Shot meter (two-tap): phase 1 = power (up), phase 2 = accuracy (down) + curl
+// Shot meter: accuracy arc with sweeping arrow
 let meterActive = false;
-let meterPhase = 0;    // 0=inactive, 1=power sweep up, 2=accuracy sweep down
-let meterPos = 0;      // 0 to 1 for phase 1, 1 to -1 for phase 2
+let meterPhase = 0;
+let meterAngle = 0;    // current arrow angle in the arc (-1 to 1, 0 = center)
 let meterSpeed = 2.0;
-let meterPowerResult = 1.0; // where player stopped in phase 1
-let curl = 0;          // -1 to 1, applied during phase 2 by dragging left/right
+let meterDir = 1;      // sweep direction
+let curl = 0;
 let curlDragStartX = 0;
+
+// Camera state saved before entering meter mode
+let preMeterCam = { x: 0, y: 0, zoom: 1, rot: 0 };
 
 // Ball spin
 let spin = { top: 0, side: 0 };
@@ -514,15 +517,17 @@ function onTouchStart(sx, sy) {
         if (ball.moving || holeComplete) return;
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
 
-        // ---- Shot meter active: tap to lock accuracy ----
+        // ---- Shot meter active: tap to fire ----
         if (meterActive) {
-            // Single tap: lock accuracy, fire!
-            const accuracy = meterPos; // -1 to 1, 0 = center = perfect
+            const accuracy = meterAngle; // -1 to 1, 0 = center = perfect
             const powerPct = lockedPower / CLUBS[selectedClub].maxPower;
             fireFromMeter(lockedDirX, lockedDirY, powerPct, accuracy, curl);
             meterActive = false;
             meterPhase = 0;
             shotLocked = false;
+            // Restore camera
+            cam.targetRot = preMeterCam.rot;
+            cam.targetZoom = preMeterCam.zoom;
             return;
         }
 
@@ -562,9 +567,20 @@ function onTouchStart(sx, sy) {
             const shootBtnW = 160, shootBtnH = 50;
             const shootBtnX = (W() - shootBtnW) / 2, shootBtnY = H() - 185;
             if (hitBtn(sx, sy, shootBtnX, shootBtnY, shootBtnW, shootBtnH)) {
+                // Save camera state
+                preMeterCam = { x: cam.targetX, y: cam.targetY, zoom: cam.targetZoom, rot: cam.targetRot };
+                // Rotate camera behind ball looking toward target
+                const aDx = lockedDirX, aDy = lockedDirY;
+                const behindAngle = Math.atan2(aDx, -aDy); // rotate so target is "up"
+                cam.targetRot = behindAngle;
+                cam.targetX = ball.x;
+                cam.targetY = ball.y;
+                cam.targetZoom = Math.max(cam.targetZoom * 1.5, 3);
+                // Start meter
                 meterActive = true;
                 meterPhase = 2;
-                meterPos = 1;
+                meterAngle = -1; // start at left edge
+                meterDir = 1;
                 curl = 0;
                 curlDragStartX = W() / 2;
                 meterSpeed = (0.75 + (CLUBS[selectedClub].maxPower / 500) * 0.75);
@@ -1425,58 +1441,109 @@ function drawPlaying() {
         ctx.fillText(club.name + ' \u2022 Drag target to re-aim', W() / 2, shootBtnY - 12);
     }
 
-    // ---- Shot meter (accuracy only) ----
+    // ---- Accuracy arc (behind-ball fan view) ----
     if (meterActive) {
-        const mx = W() - 50, my = 100, mw = 28, mh = H() - 260;
+        // Fan arc at bottom of screen
+        const arcCx = W() / 2;
+        const arcCy = H() - 40;
+        const arcR = Math.min(W() * 0.42, 180);
+        const arcSpread = Math.PI * 0.55; // total arc angle (~100°)
+        const arcStart = -Math.PI / 2 - arcSpread / 2;
+        const arcEnd = -Math.PI / 2 + arcSpread / 2;
 
-        // Background
-        ctx.fillStyle = 'rgba(0,0,0,0.8)';
-        roundRect(mx - 8, my - 8, mw + 16, mh + 16, 10);
-        ctx.fill();
-
-        // Track
-        ctx.fillStyle = '#333';
-        roundRect(mx, my, mw, mh, 6);
-        ctx.fill();
-
-        {
-            // Accuracy meter — sweep marker toward center target line
-            // Target zone (center of bar)
-            const targetZoneH = mh * 0.12;
-            const targetZoneY = my + mh / 2 - targetZoneH / 2;
-            ctx.fillStyle = 'rgba(76,175,80,0.5)';
-            ctx.fillRect(mx, targetZoneY, mw, targetZoneH);
-
-            // Center target line
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(mx - 4, my + mh / 2);
-            ctx.lineTo(mx + mw + 4, my + mh / 2);
-            ctx.stroke();
-
-            // Sweeping marker (meterPos: 1 → -1, mapped to top → bottom)
-            const markerY = my + ((1 - meterPos) / 2) * mh;
-            ctx.fillStyle = '#ff5722';
-            ctx.fillRect(mx - 8, markerY - 3, mw + 16, 6);
-
-            // Curl indicator
-            if (Math.abs(curl) > 0.05) {
-                ctx.fillStyle = '#4cf';
-                ctx.font = 'bold 12px -apple-system,sans-serif';
-                ctx.textAlign = 'right';
-                const curlLabel = curl < 0 ? '\u21B0 Curl L' : '\u21B1 Curl R';
-                ctx.fillText(curlLabel, mx - 14, markerY + 4);
+        // Draw colored fan segments (red → yellow → green → yellow → red)
+        const segments = 30;
+        for (let i = 0; i < segments; i++) {
+            const t = i / segments;
+            const a1 = arcStart + t * arcSpread;
+            const a2 = arcStart + (t + 1) / segments * arcSpread;
+            // Distance from center (0 = center, 1 = edge)
+            const fromCenter = Math.abs(t - 0.5) * 2;
+            let r, g, b;
+            if (fromCenter < 0.3) {
+                r = 46; g = 175; b = 80; // green
+            } else if (fromCenter < 0.6) {
+                const p = (fromCenter - 0.3) / 0.3;
+                r = 46 + (255 - 46) * p; g = 175 + (235 - 175) * p; b = 80 - 80 * p; // → yellow
+            } else {
+                const p = (fromCenter - 0.6) / 0.4;
+                r = 255; g = 235 - 175 * p; b = 0; // → red/orange
             }
+            ctx.fillStyle = `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.85)`;
+            ctx.beginPath();
+            ctx.moveTo(arcCx, arcCy);
+            ctx.arc(arcCx, arcCy, arcR, a1, a2);
+            ctx.closePath();
+            ctx.fill();
+        }
 
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 12px -apple-system,sans-serif';
-            ctx.textAlign = 'right';
-            ctx.fillText('TAP to', mx - 14, my + mh / 2 - 16);
-            ctx.fillText('SHOOT', mx - 14, my + mh / 2);
-            ctx.font = '10px -apple-system,sans-serif';
-            ctx.fillStyle = '#aaa';
-            ctx.fillText('Drag L/R: curl', mx - 14, my + mh / 2 + 16);
+        // Arc outline
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(arcCx, arcCy, arcR, arcStart, arcEnd);
+        ctx.stroke();
+
+        // Center target line (perfect zone)
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(arcCx, arcCy);
+        ctx.lineTo(arcCx, arcCy - arcR - 8);
+        ctx.stroke();
+
+        // Sweeping arrow (meterAngle: -1 to 1 mapped across the arc)
+        const arrowAngle = -Math.PI / 2 + meterAngle * (arcSpread / 2);
+        const arrowLen = arcR + 15;
+        const arrowX = arcCx + Math.cos(arrowAngle) * arrowLen;
+        const arrowY = arcCy + Math.sin(arrowAngle) * arrowLen;
+        const arrowBaseX = arcCx + Math.cos(arrowAngle) * (arcR * 0.3);
+        const arrowBaseY = arcCy + Math.sin(arrowAngle) * (arcR * 0.3);
+
+        // Arrow line
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(arrowBaseX, arrowBaseY);
+        ctx.lineTo(arrowX, arrowY);
+        ctx.stroke();
+
+        // Arrow head
+        const headLen = 10;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(arrowX, arrowY);
+        ctx.lineTo(arrowX - Math.cos(arrowAngle - 0.4) * headLen, arrowY - Math.sin(arrowAngle - 0.4) * headLen);
+        ctx.lineTo(arrowX - Math.cos(arrowAngle + 0.4) * headLen, arrowY - Math.sin(arrowAngle + 0.4) * headLen);
+        ctx.fill();
+
+        // Ball representation at arc center
+        drawBall(arcCx, arcCy, 14, player.ballColor);
+
+        // Target bullseye at top (above arc)
+        const bullX = arcCx, bullY = arcCy - arcR - 30;
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(bullX, bullY, 12, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(bullX, bullY, 6, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#e33';
+        ctx.beginPath(); ctx.arc(bullX, bullY, 3, 0, Math.PI * 2); ctx.fill();
+
+        // "TAP TO SHOOT" text
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 16px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('TAP TO SHOOT', W() / 2, arcCy - arcR - 55);
+
+        // Curl indicator
+        if (Math.abs(curl) > 0.05) {
+            ctx.fillStyle = '#4cf';
+            ctx.font = 'bold 13px -apple-system,sans-serif';
+            ctx.fillText(curl < 0 ? '\u21B0 Curl Left' : '\u21B1 Curl Right', W() / 2, arcCy + 30);
+        } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.font = '11px -apple-system,sans-serif';
+            ctx.fillText('Drag L/R for curl', W() / 2, arcCy + 30);
         }
     }
 
@@ -1852,10 +1919,11 @@ function gameLoop(time) {
             }
             camLerp(dt);
         } else {
-            // Update shot meter (accuracy sweep: 1 → -1 → 1 ...)
+            // Update shot meter (arrow sweeps across arc)
             if (meterActive) {
-                meterPos -= meterSpeed * dt;
-                if (meterPos < -1.1) meterPos = 1; // loops back
+                meterAngle += meterDir * meterSpeed * dt * 2;
+                if (meterAngle > 1) { meterAngle = 1; meterDir = -1; }
+                if (meterAngle < -1) { meterAngle = -1; meterDir = 1; }
             }
             updateBall(dt);
             camLerp(dt);
