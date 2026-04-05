@@ -143,6 +143,13 @@ function startHole(hole) {
     const aDist = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
     aimPower = Math.min(aDist / (club.maxYds * YDS_TO_WORLD) * club.maxPower, club.maxPower);
 
+    // Reset camera fully for new hole
+    cam.targetRot = 0;
+    cam.rot = 0;
+    manualZoom = false;
+    shotLocked = false;
+    meterActive = false;
+
     // Start flyover: zoom out to show whole hole, pan from hole to ball
     centerCamOnHole();
     cam.zoom = calcZoom();
@@ -338,12 +345,24 @@ function onBallStopped() {
     autoSelectClub();
     updateTargetFromClub(); // reposition target for new ball position
     shotLocked = false;
-    // Auto-zoom only if user hasn't manually pinch-zoomed
+
+    // Distance-based zoom: closer to hole = more zoom for precision
     if (!manualZoom) {
+        const dist = distToHole();
+        const maxDist = 800; // rough max distance on any hole
+        const closeness = 1 - Math.min(dist / maxDist, 1); // 0 = far, 1 = very close
         if (ter === T.GREEN) {
-            cam.targetZoom = Math.min(calcZoom() * 2.5, 6);
+            // On green: zoom in tight + rotate behind ball facing hole
+            cam.targetZoom = Math.min(calcZoom() * 3 + closeness * 2, 7);
+            const hx = (currentHole.hole.x + 0.5) * CELL;
+            const hy = (currentHole.hole.y + 0.5) * CELL;
+            const dx = hx - ball.x, dy = hy - ball.y;
+            cam.targetRot = Math.atan2(dx, -dy); // behind ball, hole is "up"
         } else {
-            cam.targetZoom = calcZoom();
+            // Off green: zoom more as you get closer
+            const baseZoom = calcZoom();
+            cam.targetZoom = baseZoom + closeness * baseZoom * 0.8;
+            cam.targetRot = 0; // reset rotation off green
         }
     }
 }
