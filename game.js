@@ -310,6 +310,22 @@ function updateBall(dt) {
         ball.vx *= Math.pow(fric, stepDt * 60);
         ball.vy *= Math.pow(fric, stepDt * 60);
 
+        // Green slope forces — ball breaks toward hole with variation
+        if (ter === T.GREEN && currentHole) {
+            const holeWx = (currentHole.hole.x + 0.5) * CELL;
+            const holeWy = (currentHole.hole.y + 0.5) * CELL;
+            const toHx = holeWx - ball.x, toHy = holeWy - ball.y;
+            const toHd = Math.sqrt(toHx * toHx + toHy * toHy);
+            if (toHd > 2) {
+                const gc = Math.floor(ball.x / CELL), gr = Math.floor(ball.y / CELL);
+                const seed = Math.sin(gc * 12.9898 + gr * 78.233) * 43758.5453;
+                const variation = (seed - Math.floor(seed)) * 0.8 - 0.4;
+                const slopeAng = Math.atan2(toHy, toHx) + variation;
+                ball.vx += Math.cos(slopeAng) * 1.5 * stepDt * 60;
+                ball.vy += Math.sin(slopeAng) * 1.5 * stepDt * 60;
+            }
+        }
+
         // Check if ball rolls into hole (only on ground)
         const hx = (currentHole.hole.x + 0.5) * CELL;
         const hy = (currentHole.hole.y + 0.5) * CELL;
@@ -442,7 +458,7 @@ function takeShot(power, dirX, dirY) {
         velocity = (targetDist * 0.85) / Math.max(airTime, 0.1);
     } else {
         // Ground shot (putt or low power) — velocity for rolling the full distance
-        velocity = targetDist * 2.5; // friction will eat most of this
+        velocity = targetDist * 1.2; // slower for dramatic putting
     }
 
     ball.vx = (dirX / len) * velocity;
@@ -1365,13 +1381,23 @@ function drawPlaying() {
                 const landWy = ball.y + uny * landDist;
                 const ls = worldToScreen3D(landWx, landWy);
 
-                // Aim line (from ball to target)
-                ctx.strokeStyle = 'rgba(100,220,255,0.8)';
-                ctx.lineWidth = 2.5;
-                ctx.beginPath();
-                ctx.moveTo(bs.x, bs.y);
-                ctx.lineTo(ls.x, ls.y);
-                ctx.stroke();
+                // Aim line (from ball to target) — skip if ball is behind camera
+                if (!bs.behind && !ls.behind) {
+                    ctx.strokeStyle = 'rgba(100,220,255,0.8)';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.moveTo(bs.x, bs.y);
+                    ctx.lineTo(ls.x, ls.y);
+                    ctx.stroke();
+                } else if (!ls.behind) {
+                    // Ball behind camera but target visible — draw from screen edge
+                    ctx.strokeStyle = 'rgba(100,220,255,0.4)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(ls.x, H());
+                    ctx.lineTo(ls.x, ls.y);
+                    ctx.stroke();
+                }
 
                 // Target crosshair
                 ctx.strokeStyle = 'rgba(255,255,100,0.9)';

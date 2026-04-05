@@ -424,12 +424,15 @@ function orbitCamera3D(angle, centerX, centerZ) {
 
 // ---- Project world point to screen ----
 function worldToScreen3D(wx, wy) {
-    if (!camera3d) return { x: 0, y: 0 };
+    if (!camera3d) return { x: 0, y: 0, behind: true };
     const vec = new THREE.Vector3(wx, 0, wy);
     vec.project(camera3d);
+    // Check if point is behind camera (z > 1 after projection)
+    const behind = vec.z > 1;
     return {
         x: (vec.x + 1) / 2 * window.innerWidth,
-        y: (-vec.y + 1) / 2 * window.innerHeight
+        y: (-vec.y + 1) / 2 * window.innerHeight,
+        behind: behind
     };
 }
 
