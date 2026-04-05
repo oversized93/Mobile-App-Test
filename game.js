@@ -28,6 +28,49 @@ const SCORE_NAMES = {
     '0': 'Par', '1': 'Bogey', '2': 'Double Bogey', '3': 'Triple Bogey'
 };
 
+// ---- Club system ----
+const CLUBS = [
+    { name: 'Driver',  maxPower: 500, launch: 160, airMin: 0.15, icon: '\u{1F3CC}\uFE0F' },
+    { name: '3 Wood',  maxPower: 420, launch: 140, airMin: 0.18, icon: '\u{1F3CC}\uFE0F' },
+    { name: '5 Iron',  maxPower: 340, launch: 120, airMin: 0.20, icon: '\u{1F3CC}\uFE0F' },
+    { name: '7 Iron',  maxPower: 260, launch: 105, airMin: 0.22, icon: '\u{1F3CC}\uFE0F' },
+    { name: 'P Wedge', maxPower: 180, launch: 130, airMin: 0.15, icon: '\u{1F3CC}\uFE0F' },
+    { name: 'Putter',  maxPower: 120, launch: 0,   airMin: 999,  icon: '\u{1F3CC}\uFE0F' }
+];
+let selectedClub = 0;
+
+function distToHole() {
+    if (!currentHole) return 0;
+    const hx = (currentHole.hole.x + 0.5) * CELL;
+    const hy = (currentHole.hole.y + 0.5) * CELL;
+    const dx = ball.x - hx, dy = ball.y - hy;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function autoSelectClub() {
+    const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
+    if (onGreen) { selectedClub = CLUBS.length - 1; return; } // Putter
+
+    const dist = distToHole();
+    // Pick the shortest club that can reach the hole
+    // Club max range ≈ maxPower * ~0.9 (accounting for air time and friction)
+    for (let i = CLUBS.length - 2; i >= 0; i--) {
+        if (CLUBS[i].maxPower * 0.85 >= dist) {
+            selectedClub = i;
+            return;
+        }
+    }
+    selectedClub = 0; // Driver if nothing else reaches
+}
+
+function cycleClub(dir) {
+    const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
+    if (onGreen) return; // Locked to putter on green
+    selectedClub = (selectedClub + dir + CLUBS.length) % CLUBS.length;
+    // Don't allow putter off the green
+    if (selectedClub === CLUBS.length - 1) selectedClub = dir > 0 ? 0 : CLUBS.length - 2;
+}
+
 function notify(text) { notification = { text, timer: 2.5 }; }
 
 // ---- Start a hole ----
@@ -44,6 +87,7 @@ function startHole(hole) {
     cam.zoom = cam.targetZoom;
     centerCamOnBall();
     cam.x = cam.targetX; cam.y = cam.targetY;
+    autoSelectClub();
 }
 
 function calcZoom() {
@@ -214,6 +258,7 @@ function onBallStopped() {
     }
     shotTrail = [];
     centerCamOnBall();
+    autoSelectClub();
     // Zoom in a bit more when on green
     if (ter === T.GREEN) {
         cam.targetZoom = Math.min(calcZoom() * 1.8, 5);
@@ -233,8 +278,8 @@ function onHoleComplete() {
 
 // ---- Shot mechanic (Golf Clash style) ----
 function takeShot(power, dirX, dirY) {
-    const maxPower = 500;
-    const p = Math.min(power, maxPower);
+    const club = CLUBS[selectedClub];
+    const p = Math.min(power, club.maxPower);
     const len = Math.sqrt(dirX * dirX + dirY * dirY);
     if (len === 0) return;
     ball.vx = (dirX / len) * p;
@@ -244,14 +289,11 @@ function takeShot(power, dirX, dirY) {
     ball.vz = 0;
     ball.airborne = false;
 
-    // Launch into air if NOT on the green and power > 30%
-    // On the green, shots are always putts (rolling only)
-    const ter = terrainAt(ball.x, ball.y);
-    const powerPct = p / maxPower;
-    if (ter !== T.GREEN && powerPct > 0.30) {
+    // Launch into air based on club type
+    const powerPct = p / club.maxPower;
+    if (club.launch > 0 && powerPct > club.airMin) {
         ball.airborne = true;
-        // Higher power = higher launch. Scales from 80 to 200
-        ball.vz = 80 + powerPct * 120;
+        ball.vz = club.launch * powerPct;
     }
 
     strokes++;
@@ -289,6 +331,12 @@ function onTouchStart(sx, sy) {
     if (state === 'roundDone') { roundDoneTouchStart(sx, sy); return; }
     if (state === 'playing') {
         if (ball.moving || holeComplete) return;
+        // Club switching arrows (tap left/right side of club bar)
+        const clubY = H() - 120;
+        if (sy >= clubY && sy <= clubY + 36) {
+            if (sx < W() / 2 - 40) { cycleClub(-1); return; }
+            if (sx > W() / 2 + 40) { cycleClub(1); return; }
+        }
         // Check if touching near the ball (screen coords)
         const bs = worldToScreen(ball.x, ball.y);
         const dx = sx - bs.x, dy = sy - bs.y;
@@ -309,7 +357,7 @@ function onTouchMove(sx, sy) {
         // Direction is OPPOSITE of drag (drag back to shoot forward)
         aimDirX = -dx;
         aimDirY = -dy;
-        aimPower = Math.min(dragDist * 3.5, 500);
+        aimPower = Math.min(dragDist * 3.5, CLUBS[selectedClub].maxPower);
     }
 }
 
@@ -738,12 +786,49 @@ function drawPlaying() {
     const ter = terrainAt(ball.x, ball.y);
     ctx.fillText(TERRAIN_NAMES[ter] || '', W() - 12, 42);
 
+    // Club selector (always visible when ball is stopped)
+    if (!ball.moving && !holeComplete) {
+        const club = CLUBS[selectedClub];
+        const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
+        const clubY = H() - 120;
+
+        // Club display bar
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        roundRect(20, clubY, W() - 40, 36, 10);
+        ctx.fill();
+
+        // Left arrow
+        if (!onGreen) {
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = 'bold 20px -apple-system,sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('\u25C0', 30, clubY + 24);
+        }
+
+        // Club name + distance info
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 15px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        const dist = distToHole();
+        const distYds = Math.round(dist / 3); // rough conversion to "yards"
+        ctx.fillText(club.name + '  \u2022  ' + distYds + ' yds to hole', W() / 2, clubY + 24);
+
+        // Right arrow
+        if (!onGreen) {
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = 'bold 20px -apple-system,sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('\u25B6', W() - 30, clubY + 24);
+        }
+    }
+
     // Power meter (when aiming)
     if (aiming && aimPower > 10) {
+        const club = CLUBS[selectedClub];
         const meterW = W() - 40;
         const meterH = 12;
         const mx = 20, my = H() - 80;
-        const pct = Math.min(aimPower / 500, 1);
+        const pct = Math.min(aimPower / club.maxPower, 1);
 
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         roundRect(mx - 4, my - 4, meterW + 8, meterH + 8, 8);
@@ -766,18 +851,17 @@ function drawPlaying() {
         ctx.font = 'bold 12px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
-        const willFly = !onGreen && pct > 0.30;
-        const shotLabel = onGreen ? 'PUTT ' + Math.round(pct * 100) + '%' :
-            (willFly ? '\u2708\uFE0F AIR ' + Math.round(pct * 100) + '%' : 'ROLL ' + Math.round(pct * 100) + '%');
+        const willFly = club.launch > 0 && pct > club.airMin;
+        const shotLabel = club.name + ' \u2022 ' + (onGreen ? 'PUTT' : (willFly ? 'AIR' : 'ROLL')) + ' ' + Math.round(pct * 100) + '%';
         ctx.fillText(shotLabel, W() / 2, my - 8);
     }
 
     // Hint text when not moving
     if (!ball.moving && !aiming && !holeComplete) {
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.font = '14px -apple-system,sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '13px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Drag from ball to aim', W() / 2, H() - 30);
+        ctx.fillText('Tap arrows to change club \u2022 Drag from ball to aim', W() / 2, H() - 24);
     }
 
     // Back button (small)
