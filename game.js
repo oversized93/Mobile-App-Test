@@ -421,11 +421,12 @@ function onTouchMove(sx, sy) {
         }
     }
     if (state === 'playing' && scouting) {
-        // Pan camera by dragging
-        const dx = sx - touch.startX;
-        const dy = sy - touch.startY;
-        cam.targetX = scoutCamX - dx / cam.zoom;
-        cam.targetY = scoutCamY - dy / cam.zoom;
+        // Pan camera by dragging — rotate drag delta to match camera rotation
+        const dx = (sx - touch.startX) / cam.zoom;
+        const dy = (sy - touch.startY) / cam.zoom;
+        const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
+        cam.targetX = scoutCamX - (dx * cos - dy * sin);
+        cam.targetY = scoutCamY - (dx * sin + dy * cos);
     }
 }
 
