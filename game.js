@@ -635,12 +635,10 @@ function onTouchStart(sx, sy) {
             }
         }
 
-        // ---- Camera pan (fallback) ----
-        if (sy < H() - 140) {
-            scouting = true;
-            scoutLastX = sx;
-            scoutLastY = sy;
-        }
+        // ---- Camera pan (fallback — any touch that wasn't caught above) ----
+        scouting = true;
+        scoutLastX = sx;
+        scoutLastY = sy;
     }
 }
 
@@ -680,7 +678,19 @@ function onTouchMove(sx, sy) {
         const dx = sx - aimStartX;
         const dy = sy - aimStartY;
         const dragDist = Math.sqrt(dx * dx + dy * dy);
-        aimDirX = -dx; aimDirY = -dy;
+
+        // Convert screen drag to world direction
+        // In 3D behind-ball view, screen "down" = toward ball, "up" = toward hole
+        if (scene3dReady && typeof screenToWorld3D === 'function') {
+            const startW = screenToWorld3D(aimStartX, aimStartY);
+            const curW = screenToWorld3D(sx, sy);
+            // Direction from current drag point to start = direction ball should go (opposite of drag)
+            aimDirX = startW.x - curW.x;
+            aimDirY = startW.y - curW.y;
+        } else {
+            aimDirX = -dx; aimDirY = -dy;
+        }
+
         aimPower = Math.min(dragDist * 1.8, CLUBS[selectedClub].maxPower);
         const len = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
         if (len > 0) {
@@ -1398,6 +1408,56 @@ function drawPlaying() {
                 ctx.stroke();
                 ctx.setLineDash([]);
             }
+        }
+
+        // ---- 3D Putt guide (glowing line from ball to target) ----
+        if (onGreen3D && putting && aimPower > 3) {
+            const bs = worldToScreen3D(ball.x, ball.y);
+            const ps = worldToScreen3D(puttTargetX, puttTargetY);
+
+            // Glowing putt path (wide glow + thin core)
+            ctx.strokeStyle = 'rgba(0,180,255,0.25)';
+            ctx.lineWidth = 16;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(bs.x, bs.y);
+            ctx.lineTo(ps.x, ps.y);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(0,220,255,0.6)';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(bs.x, bs.y);
+            ctx.lineTo(ps.x, ps.y);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(bs.x, bs.y);
+            ctx.lineTo(ps.x, ps.y);
+            ctx.stroke();
+
+            // Arrow at the target end
+            const adx = ps.x - bs.x, ady = ps.y - bs.y;
+            const aLen = Math.sqrt(adx * adx + ady * ady);
+            if (aLen > 10) {
+                const anx = adx / aLen, any = ady / aLen;
+                ctx.fillStyle = 'rgba(0,200,255,0.8)';
+                ctx.beginPath();
+                ctx.moveTo(ps.x, ps.y);
+                ctx.lineTo(ps.x - anx * 14 - any * 8, ps.y - any * 14 + anx * 8);
+                ctx.lineTo(ps.x - anx * 14 + any * 8, ps.y - any * 14 - anx * 8);
+                ctx.fill();
+            }
+
+            // Distance in feet
+            const puttDist = Math.sqrt((puttTargetX - ball.x) ** 2 + (puttTargetY - ball.y) ** 2);
+            const puttFeet = Math.round(puttDist / 1.5);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(puttFeet + ' ft', (bs.x + ps.x) / 2, (bs.y + ps.y) / 2 - 15);
         }
     }
 
