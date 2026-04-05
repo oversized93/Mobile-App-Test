@@ -30,14 +30,29 @@ const SCORE_NAMES = {
 
 // ---- Club system ----
 const CLUBS = [
-    { name: 'Driver',  maxPower: 500, launch: 160, airMin: 0.15, icon: '\u{1F3CC}\uFE0F' },
-    { name: '3 Wood',  maxPower: 420, launch: 140, airMin: 0.18, icon: '\u{1F3CC}\uFE0F' },
-    { name: '5 Iron',  maxPower: 340, launch: 120, airMin: 0.20, icon: '\u{1F3CC}\uFE0F' },
-    { name: '7 Iron',  maxPower: 260, launch: 105, airMin: 0.22, icon: '\u{1F3CC}\uFE0F' },
-    { name: 'P Wedge', maxPower: 180, launch: 130, airMin: 0.15, icon: '\u{1F3CC}\uFE0F' },
-    { name: 'Putter',  maxPower: 120, launch: 0,   airMin: 999,  icon: '\u{1F3CC}\uFE0F' }
+    { name: 'Driver',  maxPower: 500, launch: 160, airMin: 0.15, maxYds: 230 },
+    { name: '3 Wood',  maxPower: 420, launch: 140, airMin: 0.18, maxYds: 195 },
+    { name: '5 Iron',  maxPower: 340, launch: 120, airMin: 0.20, maxYds: 160 },
+    { name: '7 Iron',  maxPower: 260, launch: 105, airMin: 0.22, maxYds: 120 },
+    { name: 'P Wedge', maxPower: 180, launch: 130, airMin: 0.15, maxYds: 80  },
+    { name: 'Putter',  maxPower: 120, launch: 0,   airMin: 999,  maxYds: 40  }
 ];
 let selectedClub = 0;
+
+// ---- Wind system ----
+let wind = { speed: 0, angle: 0 }; // speed in mph, angle in radians
+
+function generateWind() {
+    wind.speed = Math.random() * 12 + 1; // 1-13 mph
+    wind.angle = Math.random() * Math.PI * 2;
+}
+
+// ---- Flyover & scouting state ----
+let flyoverActive = false;
+let flyoverTimer = 0;
+let flyoverPhase = 'toHole'; // 'toHole' | 'pause' | 'toBall'
+let scouting = false;
+let scoutCamX = 0, scoutCamY = 0;
 
 function distToHole() {
     if (!currentHole) return 0;
@@ -83,11 +98,18 @@ function startHole(hole) {
     aiming = false;
     holeComplete = false;
     shotTrail = [];
-    cam.targetZoom = calcZoom();
-    cam.zoom = cam.targetZoom;
-    centerCamOnBall();
-    cam.x = cam.targetX; cam.y = cam.targetY;
+    scouting = false;
+    generateWind();
     autoSelectClub();
+
+    // Start flyover: zoom out to show whole hole, pan from hole to ball
+    centerCamOnHole();
+    cam.zoom = calcZoom();
+    cam.x = cam.targetX;
+    cam.y = cam.targetY;
+    flyoverActive = true;
+    flyoverTimer = 0;
+    flyoverPhase = 'overview';
 }
 
 function calcZoom() {
@@ -296,6 +318,11 @@ function takeShot(power, dirX, dirY) {
         ball.vz = club.launch * powerPct;
     }
 
+    // Apply wind force to initial velocity (stronger effect on airborne shots)
+    const windForce = wind.speed * (ball.airborne ? 1.8 : 0.4);
+    ball.vx += Math.cos(wind.angle) * windForce;
+    ball.vy += Math.sin(wind.angle) * windForce;
+
     strokes++;
     lastSafePos = { x: ball.x, y: ball.y };
     shotTrail = [];
@@ -330,6 +357,13 @@ function onTouchStart(sx, sy) {
     if (state === 'holeDone') { holeDoneTouchStart(sx, sy); return; }
     if (state === 'roundDone') { roundDoneTouchStart(sx, sy); return; }
     if (state === 'playing') {
+        // Tap to skip flyover
+        if (flyoverActive) {
+            flyoverActive = false;
+            centerCamOnBall();
+            cam.targetZoom = calcZoom();
+            return;
+        }
         if (ball.moving || holeComplete) return;
         // Club switching arrows (tap left/right side of club bar)
         const clubY = H() - 120;
@@ -337,13 +371,19 @@ function onTouchStart(sx, sy) {
             if (sx < W() / 2 - 40) { cycleClub(-1); return; }
             if (sx > W() / 2 + 40) { cycleClub(1); return; }
         }
-        // Check if touching near the ball (screen coords)
+        // Check if touching near the ball (screen coords) — start aiming
         const bs = worldToScreen(ball.x, ball.y);
         const dx = sx - bs.x, dy = sy - bs.y;
         if (dx * dx + dy * dy < 80 * 80) {
             aiming = true;
+            scouting = false;
             aimStartX = sx; aimStartY = sy;
             dragStartWorldX = ball.x; dragStartWorldY = ball.y;
+        } else if (sy < H() - 140) {
+            // Touch away from ball and UI — start scouting (pan camera)
+            scouting = true;
+            scoutCamX = cam.x;
+            scoutCamY = cam.y;
         }
     }
 }
@@ -359,10 +399,22 @@ function onTouchMove(sx, sy) {
         aimDirY = -dy;
         aimPower = Math.min(dragDist * 3.5, CLUBS[selectedClub].maxPower);
     }
+    if (state === 'playing' && scouting) {
+        // Pan camera by dragging
+        const dx = sx - touch.startX;
+        const dy = sy - touch.startY;
+        cam.targetX = scoutCamX - dx / cam.zoom;
+        cam.targetY = scoutCamY - dy / cam.zoom;
+    }
 }
 
 function onTouchEnd(sx, sy) {
     if (state === 'builder') { builderState.painting = false; return; }
+    if (state === 'playing' && scouting) {
+        scouting = false;
+        centerCamOnBall(); // Snap back
+        return;
+    }
     if (state === 'playing' && aiming) {
         if (aimPower > 15) {
             takeShot(aimPower, aimDirX, aimDirY);
@@ -700,6 +752,49 @@ function drawPlaying() {
     ctx.fill();
     drawFlag(hx + 1, hy, 0.6);
 
+    // Max distance ring for selected club (when ball is stopped)
+    if (!ball.moving && !holeComplete && !flyoverActive) {
+        const club = CLUBS[selectedClub];
+        const maxDist = club.maxPower * 0.85; // effective max range in world units
+        ctx.strokeStyle = 'rgba(255,255,100,0.25)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, maxDist, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // Landing zone indicator (when aiming)
+    if (aiming && aimPower > 10) {
+        const club = CLUBS[selectedClub];
+        const len = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
+        if (len > 0) {
+            const nx = aimDirX / len, ny = aimDirY / len;
+            // Estimate landing spot — power scaled to distance + wind offset
+            const landDist = aimPower * 0.75;
+            const windOffX = Math.cos(wind.angle) * wind.speed * (club.launch > 0 ? 1.2 : 0.3);
+            const windOffY = Math.sin(wind.angle) * wind.speed * (club.launch > 0 ? 1.2 : 0.3);
+            const landX = ball.x + nx * landDist + windOffX;
+            const landY = ball.y + ny * landDist + windOffY;
+
+            // Landing zone circle
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.arc(landX, landY, 8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Landing zone dot
+            ctx.fillStyle = 'rgba(255,255,100,0.6)';
+            ctx.beginPath();
+            ctx.arc(landX, landY, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
     // Shot trail
     if (shotTrail.length > 1) {
         ctx.strokeStyle = 'rgba(255,255,255,0.25)';
@@ -786,6 +881,44 @@ function drawPlaying() {
     const ter = terrainAt(ball.x, ball.y);
     ctx.fillText(TERRAIN_NAMES[ter] || '', W() - 12, 42);
 
+    // ---- Wind compass ----
+    const wcx = W() - 40, wcy = 90, wcr = 24;
+    // Background circle
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath();
+    ctx.arc(wcx, wcy, wcr + 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Compass ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(wcx, wcy, wcr, 0, Math.PI * 2);
+    ctx.stroke();
+    // Wind arrow
+    const arrowLen = Math.min(wind.speed / 13, 1) * (wcr - 4);
+    const wax = Math.cos(wind.angle) * arrowLen;
+    const way = Math.sin(wind.angle) * arrowLen;
+    ctx.strokeStyle = '#4cf';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(wcx - wax * 0.3, wcy - way * 0.3);
+    ctx.lineTo(wcx + wax, wcy + way);
+    ctx.stroke();
+    // Arrow head
+    const headLen = 6;
+    const aAngle = Math.atan2(way, wax);
+    ctx.fillStyle = '#4cf';
+    ctx.beginPath();
+    ctx.moveTo(wcx + wax, wcy + way);
+    ctx.lineTo(wcx + wax - Math.cos(aAngle - 0.5) * headLen, wcy + way - Math.sin(aAngle - 0.5) * headLen);
+    ctx.lineTo(wcx + wax - Math.cos(aAngle + 0.5) * headLen, wcy + way - Math.sin(aAngle + 0.5) * headLen);
+    ctx.fill();
+    // Wind speed text
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.round(wind.speed) + ' mph', wcx, wcy + wcr + 16);
+
     // Club selector (always visible when ball is stopped)
     if (!ball.moving && !holeComplete) {
         const club = CLUBS[selectedClub];
@@ -805,13 +938,18 @@ function drawPlaying() {
             ctx.fillText('\u25C0', 30, clubY + 24);
         }
 
-        // Club name + distance info
+        // Club name + max yards + distance to hole
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 15px -apple-system,sans-serif';
+        ctx.font = 'bold 14px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         const dist = distToHole();
-        const distYds = Math.round(dist / 3); // rough conversion to "yards"
-        ctx.fillText(club.name + '  \u2022  ' + distYds + ' yds to hole', W() / 2, clubY + 24);
+        const distYds = Math.round(dist / 3);
+        const canReach = club.maxYds >= distYds;
+        const reachColor = canReach ? '#4caf50' : '#f44';
+        ctx.fillText(club.name + ' (' + club.maxYds + ' yds)', W() / 2 - 30, clubY + 16);
+        ctx.fillStyle = reachColor;
+        ctx.font = '12px -apple-system,sans-serif';
+        ctx.fillText(distYds + ' yds to hole' + (canReach ? ' \u2713' : ''), W() / 2 - 30, clubY + 32);
 
         // Right arrow
         if (!onGreen) {
@@ -856,12 +994,17 @@ function drawPlaying() {
         ctx.fillText(shotLabel, W() / 2, my - 8);
     }
 
-    // Hint text when not moving
-    if (!ball.moving && !aiming && !holeComplete) {
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.font = '13px -apple-system,sans-serif';
+    // Hint text
+    if (flyoverActive) {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '14px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Tap arrows to change club \u2022 Drag from ball to aim', W() / 2, H() - 24);
+        ctx.fillText('Tap to skip', W() / 2, H() - 30);
+    } else if (!ball.moving && !aiming && !holeComplete) {
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '12px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Arrows: change club \u2022 Drag ball: aim \u2022 Drag elsewhere: scout', W() / 2, H() - 24);
     }
 
     // Back button (small)
@@ -1108,10 +1251,26 @@ function gameLoop(time) {
 
     // Update
     if (state === 'playing') {
-        updateBall(dt);
-        camLerp(dt);
-        if (holeComplete && !ball.moving) {
-            state = 'holeDone';
+        // Flyover animation
+        if (flyoverActive) {
+            flyoverTimer += dt;
+            if (flyoverPhase === 'overview' && flyoverTimer > 2.0) {
+                // After showing overview, zoom to ball
+                flyoverPhase = 'toBall';
+                centerCamOnBall();
+                cam.targetZoom = calcZoom();
+                flyoverTimer = 0;
+            }
+            if (flyoverPhase === 'toBall' && flyoverTimer > 1.0) {
+                flyoverActive = false;
+            }
+            camLerp(dt);
+        } else {
+            updateBall(dt);
+            camLerp(dt);
+            if (holeComplete && !ball.moving) {
+                state = 'holeDone';
+            }
         }
     }
 
