@@ -877,10 +877,9 @@ function drawPlaying() {
             const nx = aimDirX / len, ny = aimDirY / len;
             // Estimate landing spot — scale power to match the distance ring
             const landDist = (aimPower / club.maxPower) * club.maxYds * YDS_TO_WORLD;
-            const windOffX = Math.cos(wind.angle) * wind.speed * (club.launch > 0 ? 1.2 : 0.3);
-            const windOffY = Math.sin(wind.angle) * wind.speed * (club.launch > 0 ? 1.2 : 0.3);
-            const landX = ball.x + nx * landDist + windOffX;
-            const landY = ball.y + ny * landDist + windOffY;
+            // Landing zone does NOT account for wind — player must adjust aim manually
+            const landX = ball.x + nx * landDist;
+            const landY = ball.y + ny * landDist;
 
             // Landing zone circle
             ctx.strokeStyle = 'rgba(255,255,255,0.5)';
