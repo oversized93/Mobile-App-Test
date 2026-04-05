@@ -1156,7 +1156,7 @@ function drawPlaying() {
         const club = CLUBS[selectedClub];
         const meterW = W() - 40;
         const meterH = 12;
-        const mx = 20, my = H() - 80;
+        const mx = 20, my = H() - 160;
         const pct = Math.min(aimPower / club.maxPower, 1);
 
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -1186,51 +1186,57 @@ function drawPlaying() {
 
         // ---- Needle meter (swings while aiming) ----
         if (needleActive) {
-            const ny = my + 22;
-            const nw = W() - 80;
-            const nx = 40;
-            const nh = 10;
+            const ny = my + 26;
+            const nw = W() - 60;
+            const nx = 30;
+            const nh = 18;
 
             // Track background
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            roundRect(nx - 4, ny - 4, nw + 8, nh + 8, 6);
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            roundRect(nx - 6, ny - 6, nw + 12, nh + 12, 10);
             ctx.fill();
 
-            // Color zones: green center, yellow sides, red edges
-            const third = nw / 3;
+            // Color zones: red → yellow → green → yellow → red
+            const fifth = nw / 5;
             ctx.fillStyle = '#c33';
-            roundRect(nx, ny, nw, nh, 4);
+            roundRect(nx, ny, nw, nh, 6);
             ctx.fill();
             ctx.fillStyle = '#cc8800';
-            roundRect(nx + third * 0.5, ny, nw - third, nh, 4);
+            roundRect(nx + fifth * 0.7, ny, nw - fifth * 1.4, nh, 6);
             ctx.fill();
             ctx.fillStyle = '#2a7d2a';
-            roundRect(nx + third, ny, third, nh, 4);
+            roundRect(nx + fifth * 1.5, ny, nw - fifth * 3, nh, 6);
             ctx.fill();
 
-            // Center line
-            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-            ctx.lineWidth = 1;
+            // Center line (target)
+            ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(nx + nw / 2, ny - 2);
-            ctx.lineTo(nx + nw / 2, ny + nh + 2);
+            ctx.moveTo(nx + nw / 2, ny - 4);
+            ctx.lineTo(nx + nw / 2, ny + nh + 4);
             ctx.stroke();
 
-            // Needle indicator
+            // Needle indicator (white triangle + line)
             const needleX = nx + (needlePos + 1) / 2 * nw;
             ctx.fillStyle = '#fff';
             ctx.beginPath();
-            ctx.moveTo(needleX, ny - 5);
-            ctx.lineTo(needleX - 4, ny - 1);
-            ctx.lineTo(needleX + 4, ny - 1);
+            ctx.moveTo(needleX, ny - 8);
+            ctx.lineTo(needleX - 6, ny - 1);
+            ctx.lineTo(needleX + 6, ny - 1);
             ctx.fill();
-            ctx.fillRect(needleX - 1.5, ny, 3, nh);
+            ctx.fillRect(needleX - 2, ny, 4, nh);
+            // Bottom triangle
+            ctx.beginPath();
+            ctx.moveTo(needleX, ny + nh + 8);
+            ctx.lineTo(needleX - 6, ny + nh + 1);
+            ctx.lineTo(needleX + 6, ny + nh + 1);
+            ctx.fill();
 
             // Label
-            ctx.fillStyle = '#aaa';
-            ctx.font = '10px -apple-system,sans-serif';
+            ctx.fillStyle = '#ccc';
+            ctx.font = 'bold 11px -apple-system,sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('Release timing', W() / 2, ny + nh + 14);
+            ctx.fillText('RELEASE TIMING', W() / 2, ny + nh + 22);
         }
     }
 
