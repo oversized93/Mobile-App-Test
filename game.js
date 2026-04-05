@@ -55,6 +55,7 @@ let flyoverTimer = 0;
 let flyoverPhase = 'toHole'; // 'toHole' | 'pause' | 'toBall'
 let scouting = false;
 let scoutCamX = 0, scoutCamY = 0;
+let scoutLastX = 0, scoutLastY = 0;
 
 function distToHole() {
     if (!currentHole) return 0;
@@ -565,8 +566,8 @@ function onTouchStart(sx, sy) {
             }
             // On green but didn't touch ball — pan camera
             scouting = true;
-            scoutCamX = cam.x;
-            scoutCamY = cam.y;
+            scoutLastX = sx;
+            scoutLastY = sy;
             return;
         }
 
@@ -637,8 +638,8 @@ function onTouchStart(sx, sy) {
         // ---- Camera pan (fallback) ----
         if (sy < H() - 140) {
             scouting = true;
-            scoutCamX = cam.x;
-            scoutCamY = cam.y;
+            scoutLastX = sx;
+            scoutLastY = sy;
         }
     }
 }
@@ -690,17 +691,15 @@ function onTouchMove(sx, sy) {
         return;
     }
     if (state === 'playing' && scouting) {
+        const dx = sx - scoutLastX;
+        const dy = sy - scoutLastY;
+        scoutLastX = sx;
+        scoutLastY = sy;
         if (scene3dReady && typeof panCamera3D === 'function') {
-            // Frame delta: difference from previous touch position
-            const dx = sx - touch.x;
-            const dy = sy - touch.y;
             panCamera3D(dx, dy);
         } else {
-            const dx = (sx - touch.startX) / cam.zoom;
-            const dy = (sy - touch.startY) / cam.zoom;
-            const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
-            cam.targetX = scoutCamX - (dx * cos - dy * sin);
-            cam.targetY = scoutCamY - (dx * sin + dy * cos);
+            cam.targetX -= dx / cam.zoom;
+            cam.targetY -= dy / cam.zoom;
         }
     }
 }
