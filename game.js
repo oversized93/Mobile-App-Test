@@ -388,20 +388,28 @@ function fireFromMeter(dirX, dirY, powerPct, accuracy, curlAmt) {
 
     const club = CLUBS[selectedClub];
 
-    // Apply accuracy as hook/slice rotation
-    const maxDeviation = 0.3; // ~17 degrees
-    const deviation = accuracy * maxDeviation;
+    // Apply accuracy as hook/slice — scaled by zone
+    // Green zone (center 33%): no deviation. Yellow: mild. Red: moderate.
+    const absAcc = Math.abs(accuracy);
+    let deviation = 0;
+    if (absAcc < 0.33) {
+        deviation = 0; // green zone — perfect
+    } else if (absAcc < 0.66) {
+        deviation = ((absAcc - 0.33) / 0.33) * 0.08; // yellow: 0 to ~5°
+    } else {
+        deviation = 0.08 + ((absAcc - 0.66) / 0.34) * 0.12; // red: 5° to ~12°
+    }
+    deviation *= Math.sign(accuracy);
     const cos = Math.cos(deviation), sin = Math.sin(deviation);
     const newDirX = dirX * cos - dirY * sin;
     const newDirY = dirX * sin + dirY * cos;
 
-    // Power from phase 1 result
     const finalPower = club.maxPower * powerPct;
 
-    if (Math.abs(accuracy) < 0.12) notify('Perfect!');
-    else if (Math.abs(accuracy) < 0.3) notify('Great!');
-    else if (Math.abs(accuracy) < 0.5) notify('Good');
-    else if (accuracy < -0.5) notify('Hook!');
+    if (absAcc < 0.33) notify('Perfect!');
+    else if (absAcc < 0.5) notify('Great!');
+    else if (absAcc < 0.66) notify('Good');
+    else if (accuracy < -0.66) notify('Hook!');
     else notify('Slice!');
 
     // Store curl for flight physics

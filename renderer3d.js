@@ -70,7 +70,7 @@ function init3D() {
     scene3d.add(flagGroup);
 
     // Ball
-    const ballGeo = new THREE.SphereGeometry(2.5, 16, 16);
+    const ballGeo = new THREE.SphereGeometry(3.5, 16, 16);
     const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.1 });
     ballMesh = new THREE.Mesh(ballGeo, ballMat);
     ballMesh.castShadow = true;
@@ -146,21 +146,30 @@ function buildTerrain3D(hole) {
             mesh.receiveShadow = true;
             terrainGroup.add(mesh);
 
-            // Trees as 3D cones
+            // Trees — sparse placement (skip some for natural look)
             if (t === T.TREE) {
-                const trunkGeo = new THREE.CylinderGeometry(1, 1.5, 8, 8);
-                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3520 });
-                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-                trunk.position.set((c + 0.5) * cellSize, 4 + height, (r + 0.5) * cellSize);
-                trunk.castShadow = true;
-                terrainGroup.add(trunk);
+                const treeHash = (c * 7 + r * 13) % 5;
+                if (treeHash < 2) { // only ~40% of tree cells get actual trees
+                    const sizeVar = 0.8 + ((c * 31 + r * 17) % 10) / 20; // 0.8 to 1.3
+                    const trunkH = 12 * sizeVar;
+                    const canopyR = 10 * sizeVar;
+                    const canopyH = 18 * sizeVar;
 
-                const leafGeo = new THREE.ConeGeometry(6, 14, 8);
-                const leafMat = new THREE.MeshStandardMaterial({ color: 0x1a5c2a });
-                const leaf = new THREE.Mesh(leafGeo, leafMat);
-                leaf.position.set((c + 0.5) * cellSize, 14 + height, (r + 0.5) * cellSize);
-                leaf.castShadow = true;
-                terrainGroup.add(leaf);
+                    const trunkGeo = new THREE.CylinderGeometry(1.2, 2, trunkH, 6);
+                    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030 });
+                    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                    trunk.position.set((c + 0.5) * cellSize, trunkH / 2 + height, (r + 0.5) * cellSize);
+                    trunk.castShadow = true;
+                    terrainGroup.add(trunk);
+
+                    const leafGeo = new THREE.ConeGeometry(canopyR, canopyH, 8);
+                    const leafColors = [0x1a6b2a, 0x1a5c2a, 0x227a32, 0x1e6830];
+                    const leafMat = new THREE.MeshStandardMaterial({ color: leafColors[treeHash % leafColors.length] });
+                    const leaf = new THREE.Mesh(leafGeo, leafMat);
+                    leaf.position.set((c + 0.5) * cellSize, trunkH + canopyH / 2 - 2 + height, (r + 0.5) * cellSize);
+                    leaf.castShadow = true;
+                    terrainGroup.add(leaf);
+                }
             }
 
             // Water shimmer plane (slightly above water)
@@ -190,16 +199,17 @@ function buildTerrain3D(hole) {
     const flagX = (hole.hole.x + 0.5) * cellSize;
     const flagZ = (hole.hole.y + 0.5) * cellSize;
 
-    const poleGeo = new THREE.CylinderGeometry(0.3, 0.3, 25, 8);
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+    const poleGeo = new THREE.CylinderGeometry(0.4, 0.4, 35, 8);
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
     const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(flagX, 12.5, flagZ);
+    pole.position.set(flagX, 17.5, flagZ);
+    pole.castShadow = true;
     flagGroup.add(pole);
 
-    const flagGeo = new THREE.PlaneGeometry(8, 5);
-    const flagMat = new THREE.MeshStandardMaterial({ color: 0xee3333, side: THREE.DoubleSide });
+    const flagGeo = new THREE.PlaneGeometry(12, 7);
+    const flagMat = new THREE.MeshStandardMaterial({ color: 0xee2222, side: THREE.DoubleSide });
     const flag = new THREE.Mesh(flagGeo, flagMat);
-    flag.position.set(flagX + 4, 22, flagZ);
+    flag.position.set(flagX + 6, 31, flagZ);
     flagGroup.add(flag);
 
     // Position hole
@@ -222,7 +232,7 @@ function getTerrainHeight(t) {
 // Three.js: x = horizontal, y = up, z = depth (into screen)
 function updateBall3D(wx, wy, wz, color) {
     if (!ballMesh) return;
-    ballMesh.position.set(wx, (wz || 0) * 0.15 + 2.5, wy); // wz is air height
+    ballMesh.position.set(wx, (wz || 0) * 0.15 + 3.5, wy);
     if (color) ballMesh.material.color.set(color);
 }
 
