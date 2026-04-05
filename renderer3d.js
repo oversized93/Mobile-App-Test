@@ -321,6 +321,21 @@ function zoomCamera3D(factor) {
     cam3dTarget.y = Math.max(20, Math.min(1500, cam3dTarget.y * factor));
 }
 
+// ---- Orbit camera around a point ----
+function orbitCamera3D(angle, centerX, centerZ) {
+    // Rotate camera position around the center point by angle
+    const dx = cam3dTarget.x - centerX;
+    const dz = cam3dTarget.z - centerZ;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    cam3dTarget.x = centerX + dx * cos - dz * sin;
+    cam3dTarget.z = centerZ + dx * sin + dz * cos;
+    camera3d.position.x = cam3dTarget.x;
+    camera3d.position.z = cam3dTarget.z;
+    // Look at stays the same (center point)
+    cam3dLookAt.x = centerX;
+    cam3dLookAt.z = centerZ;
+}
+
 // ---- Project world point to screen ----
 function worldToScreen3D(wx, wy) {
     if (!camera3d) return { x: 0, y: 0 };

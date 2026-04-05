@@ -1412,57 +1412,152 @@ function drawPlaying() {
                 }
                 ctx.stroke();
                 ctx.setLineDash([]);
+
+                // ---- Ball guide dots (bounce/roll prediction, projected to screen) ----
+                const topSpinM = spin.top || 0;
+                const simRF = 0.3 + topSpinM * 0.2;
+                const pctG = Math.min(usePower / club3D.maxPower, 1);
+                const simVzG = club3D.launch * pctG;
+                const simATG = 2 * simVzG / GRAVITY;
+                const simFVG = simATG > 0 ? (landDist * 0.85) / simATG : landDist * 2.5;
+                let gvx = unx * simFVG * simRF;
+                let gvy = uny * simFVG * simRF;
+                let gx = landWx, gy = landWy;
+                for (let s = 0; s < 40; s++) {
+                    const ter = terrainAt(gx, gy);
+                    if (ter === T.WATER || ter === T.OOB || ter === T.TREE) break;
+                    const fric = TERRAIN_FRICTION[ter] || 0.97;
+                    gvx *= Math.pow(fric, 0.03 * 60);
+                    gvy *= Math.pow(fric, 0.03 * 60);
+                    gx += gvx * 0.03;
+                    gy += gvy * 0.03;
+                    if (Math.sqrt(gvx * gvx + gvy * gvy) < 3) break;
+                    const gs = worldToScreen3D(gx, gy);
+                    const alpha = 0.5 * (1 - s / 40);
+                    ctx.fillStyle = `rgba(255,200,50,${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(gs.x, gs.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             }
         }
 
-        // ---- 3D Putt guide (glowing line from ball to target) ----
-        if (onGreen3D && putting && aimPower > 3) {
-            const bs = worldToScreen3D(ball.x, ball.y);
-            const ps = worldToScreen3D(puttTargetX, puttTargetY);
-
-            // Glowing putt path (wide glow + thin core)
-            ctx.strokeStyle = 'rgba(0,180,255,0.25)';
-            ctx.lineWidth = 16;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(bs.x, bs.y);
-            ctx.lineTo(ps.x, ps.y);
-            ctx.stroke();
-
-            ctx.strokeStyle = 'rgba(0,220,255,0.6)';
-            ctx.lineWidth = 6;
-            ctx.beginPath();
-            ctx.moveTo(bs.x, bs.y);
-            ctx.lineTo(ps.x, ps.y);
-            ctx.stroke();
-
-            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(bs.x, bs.y);
-            ctx.lineTo(ps.x, ps.y);
-            ctx.stroke();
-
-            // Arrow at the target end
-            const adx = ps.x - bs.x, ady = ps.y - bs.y;
-            const aLen = Math.sqrt(adx * adx + ady * ady);
-            if (aLen > 10) {
-                const anx = adx / aLen, any = ady / aLen;
-                ctx.fillStyle = 'rgba(0,200,255,0.8)';
-                ctx.beginPath();
-                ctx.moveTo(ps.x, ps.y);
-                ctx.lineTo(ps.x - anx * 14 - any * 8, ps.y - any * 14 + anx * 8);
-                ctx.lineTo(ps.x - anx * 14 + any * 8, ps.y - any * 14 - anx * 8);
-                ctx.fill();
+        // ---- Green slope arrows (projected to screen) ----
+        if (onGreen3D) {
+            const hole = currentHole;
+            for (let r = 0; r < hole.rows; r++) {
+                for (let c = 0; c < hole.cols; c++) {
+                    if (hole.grid[r][c] !== T.GREEN) continue;
+                    const wx = (c + 0.5) * CELL, wy = (r + 0.5) * CELL;
+                    const thx = (hole.hole.x + 0.5) * CELL - wx;
+                    const thy = (hole.hole.y + 0.5) * CELL - wy;
+                    const td = Math.sqrt(thx * thx + thy * thy);
+                    if (td < 4) continue;
+                    const seed = Math.sin(c * 12.9898 + r * 78.233) * 43758.5453;
+                    const variation = (seed - Math.floor(seed)) * 0.8 - 0.4;
+                    const ang = Math.atan2(thy, thx) + variation;
+                    const aLen = 3;
+                    const startS = worldToScreen3D(wx - Math.cos(ang) * aLen, wy - Math.sin(ang) * aLen);
+                    const endS = worldToScreen3D(wx + Math.cos(ang) * aLen, wy + Math.sin(ang) * aLen);
+                    ctx.strokeStyle = 'rgba(0,100,0,0.35)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(startS.x, startS.y);
+                    ctx.lineTo(endS.x, endS.y);
+                    ctx.stroke();
+                    // Arrowhead
+                    const hS = worldToScreen3D(wx + Math.cos(ang - 0.5) * (aLen - 1), wy + Math.sin(ang - 0.5) * (aLen - 1));
+                    ctx.beginPath();
+                    ctx.moveTo(endS.x, endS.y);
+                    ctx.lineTo(hS.x, hS.y);
+                    ctx.stroke();
+                }
             }
+        }
 
-            // Distance in feet
-            const puttDist = Math.sqrt((puttTargetX - ball.x) ** 2 + (puttTargetY - ball.y) ** 2);
-            const puttFeet = Math.round(puttDist / 1.5);
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 16px -apple-system,sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(puttFeet + ' ft', (bs.x + ps.x) / 2, (bs.y + ps.y) / 2 - 15);
+        // ---- 3D Putt guide (glowing line with slope curve) ----
+        if (onGreen3D && putting && aimPower > 3) {
+            // Simulate putt path with slope influence
+            const puttLen = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
+            if (puttLen > 0) {
+                const puttDist = (aimPower / CLUBS[selectedClub].maxPower) * CLUBS[selectedClub].maxYds * YDS_TO_WORLD;
+                let pvx = (aimDirX / puttLen) * puttDist * 2.5;
+                let pvy = (aimDirY / puttLen) * puttDist * 2.5;
+                let px = ball.x, py = ball.y;
+                const puttPts = [{ x: px, y: py }];
+                for (let s = 0; s < 60; s++) {
+                    // Apply green slope force
+                    const holeWx = (currentHole.hole.x + 0.5) * CELL;
+                    const holeWy = (currentHole.hole.y + 0.5) * CELL;
+                    const toHx = holeWx - px, toHy = holeWy - py;
+                    const toHd = Math.sqrt(toHx * toHx + toHy * toHy);
+                    if (toHd > 2) {
+                        const seed = Math.sin(Math.floor(px / CELL) * 12.9898 + Math.floor(py / CELL) * 78.233) * 43758.5453;
+                        const variation = (seed - Math.floor(seed)) * 0.8 - 0.4;
+                        const slopeAng = Math.atan2(toHy, toHx) + variation;
+                        pvx += Math.cos(slopeAng) * 1.5;
+                        pvy += Math.sin(slopeAng) * 1.5;
+                    }
+                    // Friction
+                    pvx *= 0.92; pvy *= 0.92;
+                    px += pvx * 0.03; py += pvy * 0.03;
+                    if (Math.sqrt(pvx * pvx + pvy * pvy) < 2) break;
+                    if (terrainAt(px, py) !== T.GREEN) break;
+                    puttPts.push({ x: px, y: py });
+                }
+
+                // Project points to screen and draw glowing path
+                const screenPts = puttPts.map(p => worldToScreen3D(p.x, p.y));
+                if (screenPts.length > 1) {
+                    // Wide glow
+                    ctx.strokeStyle = 'rgba(0,180,255,0.2)';
+                    ctx.lineWidth = 16;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(screenPts[0].x, screenPts[0].y);
+                    for (let i = 1; i < screenPts.length; i++) ctx.lineTo(screenPts[i].x, screenPts[i].y);
+                    ctx.stroke();
+                    // Medium glow
+                    ctx.strokeStyle = 'rgba(0,220,255,0.5)';
+                    ctx.lineWidth = 6;
+                    ctx.beginPath();
+                    ctx.moveTo(screenPts[0].x, screenPts[0].y);
+                    for (let i = 1; i < screenPts.length; i++) ctx.lineTo(screenPts[i].x, screenPts[i].y);
+                    ctx.stroke();
+                    // Core
+                    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(screenPts[0].x, screenPts[0].y);
+                    for (let i = 1; i < screenPts.length; i++) ctx.lineTo(screenPts[i].x, screenPts[i].y);
+                    ctx.stroke();
+
+                    // Arrow at end
+                    const last = screenPts[screenPts.length - 1];
+                    const prev = screenPts[Math.max(0, screenPts.length - 3)];
+                    const adx = last.x - prev.x, ady = last.y - prev.y;
+                    const al = Math.sqrt(adx * adx + ady * ady);
+                    if (al > 5) {
+                        const anx = adx / al, any = ady / al;
+                        ctx.fillStyle = 'rgba(0,200,255,0.8)';
+                        ctx.beginPath();
+                        ctx.moveTo(last.x, last.y);
+                        ctx.lineTo(last.x - anx * 14 - any * 8, last.y - any * 14 + anx * 8);
+                        ctx.lineTo(last.x - anx * 14 + any * 8, last.y - any * 14 - anx * 8);
+                        ctx.fill();
+                    }
+                }
+
+                // Distance in feet
+                const totalDist = Math.sqrt((puttTargetX - ball.x) ** 2 + (puttTargetY - ball.y) ** 2);
+                const puttFeet = Math.round(totalDist / 1.5);
+                const midPt = screenPts[Math.floor(screenPts.length / 2)] || screenPts[0];
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 16px -apple-system,sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(puttFeet + ' ft', midPt.x, midPt.y - 15);
+            }
         }
     }
 
@@ -2042,16 +2137,24 @@ function checkPlayingUI(sx, sy) {
             return true;
         }
         if (hitBtn(sx, sy, 8, 134, 32, 28)) {
-            cam.targetRot += Math.PI / 4; // rotate 45° right
+            cam.targetRot += Math.PI / 4;
+            if (scene3dReady && typeof orbitCamera3D === 'function') {
+                orbitCamera3D(Math.PI / 4, ball.x, ball.y);
+                manualZoom = true;
+            }
             return true;
         }
         if (hitBtn(sx, sy, 8, 166, 32, 28)) {
-            cam.targetRot -= Math.PI / 4; // rotate 45° left
+            cam.targetRot -= Math.PI / 4;
+            if (scene3dReady && typeof orbitCamera3D === 'function') {
+                orbitCamera3D(-Math.PI / 4, ball.x, ball.y);
+                manualZoom = true;
+            }
             return true;
         }
         if (hitBtn(sx, sy, 8, 202, 32, 28)) {
             centerCamOnBall();
-            cam.targetRot = 0; // reset rotation
+            cam.targetRot = 0;
             manualZoom = false;
             return true;
         }
