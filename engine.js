@@ -134,35 +134,43 @@ function drawBall(x, y, r, color) {
 }
 
 // ---- Camera ----
-let cam = { x: 0, y: 0, zoom: 1, targetX: 0, targetY: 0, targetZoom: 1 };
+let cam = { x: 0, y: 0, zoom: 1, rot: 0, targetX: 0, targetY: 0, targetZoom: 1, targetRot: 0 };
 
 function camLerp(dt) {
     const spd = 4 * dt;
     cam.x += (cam.targetX - cam.x) * spd;
     cam.y += (cam.targetY - cam.y) * spd;
     cam.zoom += (cam.targetZoom - cam.zoom) * spd;
+    cam.rot += (cam.targetRot - cam.rot) * spd;
 }
 
 function camTransform() {
     ctx.save();
     ctx.translate(W() / 2, H() / 2);
     ctx.scale(cam.zoom, cam.zoom);
+    ctx.rotate(cam.rot);
     ctx.translate(-cam.x, -cam.y);
 }
 
 function camRestore() { ctx.restore(); }
 
 function screenToWorld(sx, sy) {
+    // Account for rotation
+    const dx = (sx - W() / 2) / cam.zoom;
+    const dy = (sy - H() / 2) / cam.zoom;
+    const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
     return {
-        x: (sx - W() / 2) / cam.zoom + cam.x,
-        y: (sy - H() / 2) / cam.zoom + cam.y
+        x: dx * cos - dy * sin + cam.x,
+        y: dx * sin + dy * cos + cam.y
     };
 }
 
 function worldToScreen(wx, wy) {
+    const dx = wx - cam.x, dy = wy - cam.y;
+    const cos = Math.cos(cam.rot), sin = Math.sin(cam.rot);
     return {
-        x: (wx - cam.x) * cam.zoom + W() / 2,
-        y: (wy - cam.y) * cam.zoom + H() / 2
+        x: (dx * cos - dy * sin) * cam.zoom + W() / 2,
+        y: (dx * sin + dy * cos) * cam.zoom + H() / 2
     };
 }
 
@@ -171,7 +179,9 @@ let touch = { down: false, x: 0, y: 0, startX: 0, startY: 0, moved: false };
 let pinching = false;
 let pinchStartDist = 0;
 let pinchStartZoom = 1;
-let manualZoom = false; // true when user has pinched — overrides auto-zoom
+let pinchStartAngle = 0;
+let pinchStartRot = 0;
+let manualZoom = false;
 
 function getTouchDist(e) {
     const t1 = e.touches[0], t2 = e.touches[1];
@@ -179,13 +189,20 @@ function getTouchDist(e) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
+function getTouchAngle(e) {
+    const t1 = e.touches[0], t2 = e.touches[1];
+    return Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+}
+
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     if (e.touches.length === 2) {
-        // Start pinch zoom
+        // Start pinch zoom + rotate
         pinching = true;
         pinchStartDist = getTouchDist(e);
         pinchStartZoom = cam.targetZoom;
+        pinchStartAngle = getTouchAngle(e);
+        pinchStartRot = cam.targetRot;
         return;
     }
     const t = e.touches[0];
@@ -201,10 +218,15 @@ canvas.addEventListener('touchstart', (e) => {
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     if (pinching && e.touches.length === 2) {
+        // Zoom
         const dist = getTouchDist(e);
         const scale = dist / pinchStartDist;
         cam.targetZoom = Math.max(0.3, Math.min(8, pinchStartZoom * scale));
-        cam.zoom = cam.targetZoom; // instant for responsiveness
+        cam.zoom = cam.targetZoom;
+        // Rotate
+        const angle = getTouchAngle(e);
+        cam.targetRot = pinchStartRot + (angle - pinchStartAngle);
+        cam.rot = cam.targetRot;
         manualZoom = true;
         return;
     }

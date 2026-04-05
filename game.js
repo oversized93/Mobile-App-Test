@@ -281,7 +281,6 @@ function onBallStopped() {
         lastSafePos = { x: ball.x, y: ball.y };
     }
     shotTrail = [];
-    centerCamOnBall();
     autoSelectClub();
     // Auto-zoom only if user hasn't manually pinch-zoomed
     if (!manualZoom) {
@@ -379,35 +378,21 @@ function onTouchStart(sx, sy) {
             if (sx < W() / 2 - 40) { cycleClub(-1); return; }
             if (sx > W() / 2 + 40) { cycleClub(1); return; }
         }
-        // Putting mode: on the green, drag TARGET where you want ball to go
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
-        if (onGreen && sy < H() - 140) {
-            putting = true;
+        // Check if touching near the ball (screen coords) — start aiming
+        const bs = worldToScreen(ball.x, ball.y);
+        const dx = sx - bs.x, dy = sy - bs.y;
+        if (dx * dx + dy * dy < 80 * 80) {
             aiming = true;
+            putting = onGreen;
             scouting = false;
-            const wp = screenToWorld(sx, sy);
-            puttTargetX = wp.x;
-            puttTargetY = wp.y;
-            // Calculate direction + power from ball to target
-            const pdx = puttTargetX - ball.x, pdy = puttTargetY - ball.y;
-            const pdist = Math.sqrt(pdx * pdx + pdy * pdy);
-            aimDirX = pdx; aimDirY = pdy;
-            aimPower = Math.min(pdist * 1.2, CLUBS[selectedClub].maxPower);
-        } else if (!onGreen) {
-            // Normal shot: check if touching near the ball — drag back to aim
-            const bs = worldToScreen(ball.x, ball.y);
-            const dx = sx - bs.x, dy = sy - bs.y;
-            if (dx * dx + dy * dy < 80 * 80) {
-                aiming = true;
-                putting = false;
-                scouting = false;
-                aimStartX = sx; aimStartY = sy;
-                dragStartWorldX = ball.x; dragStartWorldY = ball.y;
-            } else if (sy < H() - 140) {
-                scouting = true;
-                scoutCamX = cam.x;
-                scoutCamY = cam.y;
-            }
+            aimStartX = sx; aimStartY = sy;
+            dragStartWorldX = ball.x; dragStartWorldY = ball.y;
+        } else if (sy < H() - 140) {
+            // Touch away from ball and UI — start scouting (pan camera)
+            scouting = true;
+            scoutCamX = cam.x;
+            scoutCamY = cam.y;
         }
     }
 }
@@ -415,22 +400,23 @@ function onTouchStart(sx, sy) {
 function onTouchMove(sx, sy) {
     if (state === 'builder' && builderState.painting) { builderPaint(sx, sy); return; }
     if (state === 'playing' && aiming) {
+        // Both normal shots and putts: drag back from ball, direction is opposite
+        const dx = sx - aimStartX;
+        const dy = sy - aimStartY;
+        const dragDist = Math.sqrt(dx * dx + dy * dy);
+        aimDirX = -dx;
+        aimDirY = -dy;
         if (putting) {
-            // Putting: drag the target position
-            const wp = screenToWorld(sx, sy);
-            puttTargetX = wp.x;
-            puttTargetY = wp.y;
-            const pdx = puttTargetX - ball.x, pdy = puttTargetY - ball.y;
-            const pdist = Math.sqrt(pdx * pdx + pdy * pdy);
-            aimDirX = pdx; aimDirY = pdy;
-            aimPower = Math.min(pdist * 1.2, CLUBS[selectedClub].maxPower);
+            // Putter: slower scaling for precision
+            aimPower = Math.min(dragDist * 1.8, CLUBS[selectedClub].maxPower);
+            // Calculate target position for the putt guide visual
+            const len = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
+            if (len > 0) {
+                const puttDist = (aimPower / CLUBS[selectedClub].maxPower) * CLUBS[selectedClub].maxYds * YDS_TO_WORLD;
+                puttTargetX = ball.x + (aimDirX / len) * puttDist;
+                puttTargetY = ball.y + (aimDirY / len) * puttDist;
+            }
         } else {
-            // Normal shot: drag back from ball
-            const dx = sx - aimStartX;
-            const dy = sy - aimStartY;
-            const dragDist = Math.sqrt(dx * dx + dy * dy);
-            aimDirX = -dx;
-            aimDirY = -dy;
             aimPower = Math.min(dragDist * 3.5, CLUBS[selectedClub].maxPower);
         }
     }
@@ -447,7 +433,6 @@ function onTouchEnd(sx, sy) {
     if (state === 'builder') { builderState.painting = false; return; }
     if (state === 'playing' && scouting) {
         scouting = false;
-        centerCamOnBall(); // Snap back
         return;
     }
     if (state === 'playing' && aiming) {
@@ -1091,16 +1076,19 @@ function drawPlaying() {
         ctx.textAlign = 'center';
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
         if (onGreen) {
-            ctx.fillText('Drag to set putt target \u2022 Release to putt', W() / 2, H() - 24);
+            ctx.fillText('Drag back from ball to putt \u2022 Release to putt', W() / 2, H() - 24);
         } else {
             ctx.fillText('Arrows: change club \u2022 Drag ball: aim \u2022 Drag elsewhere: scout', W() / 2, H() - 24);
         }
     }
 
-    // Zoom buttons (left side)
+    // Zoom, rotate, recenter buttons (left side)
     if (!ball.moving && !flyoverActive) {
         drawBtn(8, 66, 32, 28, '+', 'rgba(255,255,255,0.2)', '#ccc');
         drawBtn(8, 98, 32, 28, '−', 'rgba(255,255,255,0.2)', '#ccc');
+        drawBtn(8, 134, 32, 28, '\u21BB', 'rgba(255,255,255,0.2)', '#ccc'); // ↻ rotate right
+        drawBtn(8, 166, 32, 28, '\u21BA', 'rgba(255,255,255,0.2)', '#ccc'); // ↺ rotate left
+        drawBtn(8, 202, 32, 28, '\u25CE', 'rgba(255,255,255,0.2)', '#ccc'); // ◎ recenter+reset
     }
 
     // Back button (small)
@@ -1326,6 +1314,20 @@ function checkPlayingUI(sx, sy) {
         if (hitBtn(sx, sy, 8, 98, 32, 28)) {
             cam.targetZoom = Math.max(cam.targetZoom / 1.4, 0.3);
             manualZoom = true;
+            return true;
+        }
+        if (hitBtn(sx, sy, 8, 134, 32, 28)) {
+            cam.targetRot += Math.PI / 4; // rotate 45° right
+            return true;
+        }
+        if (hitBtn(sx, sy, 8, 166, 32, 28)) {
+            cam.targetRot -= Math.PI / 4; // rotate 45° left
+            return true;
+        }
+        if (hitBtn(sx, sy, 8, 202, 32, 28)) {
+            centerCamOnBall();
+            cam.targetRot = 0; // reset rotation
+            manualZoom = false;
             return true;
         }
     }
