@@ -228,10 +228,6 @@ function updateBall(dt) {
             ball.z += ball.vz * stepDt;
             ball.vz -= GRAVITY * stepDt;
 
-            // Light air drag
-            ball.vx *= Math.pow(0.998, stepDt * 60);
-            ball.vy *= Math.pow(0.998, stepDt * 60);
-
             // Curl: continuous lateral force perpendicular to velocity
             if (ball.curl !== 0) {
                 const spd = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
@@ -442,10 +438,8 @@ function takeShot(power, dirX, dirY) {
         ball.vz = club.launch * powerPct;
         // airTime = 2 * vz / GRAVITY
         const airTime = 2 * ball.vz / GRAVITY;
-        // Compensate for air drag: drag = 0.998^(t*60), average over flight ≈ (1 + dragEnd) / 2
-        const dragEnd = Math.pow(0.998, airTime * 60);
-        const avgDragFactor = (1 + dragEnd) / 2; // average velocity retention
-        velocity = (targetDist * 0.85) / Math.max(airTime * avgDragFactor, 0.1);
+        // velocity = distance / time (no air drag — clean physics)
+        velocity = (targetDist * 0.85) / Math.max(airTime, 0.1);
     } else {
         // Ground shot (putt or low power) — velocity for rolling the full distance
         velocity = targetDist * 2.5; // friction will eat most of this
