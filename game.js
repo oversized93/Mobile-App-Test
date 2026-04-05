@@ -656,7 +656,13 @@ function onTouchMove(sx, sy) {
     }
     if (state === 'playing' && meterActive && meterPhase === 2) {
         // During accuracy phase, drag left/right for curl
-        curl = Math.max(-1, Math.min(1, (sx - curlDragStartX) / 80));
+        // Only apply curl if dragged significantly (dead zone of 15px)
+        const curlDelta = sx - curlDragStartX;
+        if (Math.abs(curlDelta) > 15) {
+            curl = Math.max(-1, Math.min(1, (curlDelta - Math.sign(curlDelta) * 15) / 65));
+        } else {
+            curl = 0;
+        }
         return;
     }
     if (state === 'playing' && draggingTarget) {
@@ -1743,13 +1749,13 @@ function drawPlaying() {
             // Distance from center (0 = center, 1 = edge)
             const fromCenter = Math.abs(t - 0.5) * 2;
             let r, g, b;
-            if (fromCenter < 0.3) {
-                r = 46; g = 175; b = 80; // green
-            } else if (fromCenter < 0.6) {
-                const p = (fromCenter - 0.3) / 0.3;
+            if (fromCenter < 0.33) {
+                r = 46; g = 175; b = 80; // green — perfect zone
+            } else if (fromCenter < 0.66) {
+                const p = (fromCenter - 0.33) / 0.33;
                 r = 46 + (255 - 46) * p; g = 175 + (235 - 175) * p; b = 80 - 80 * p; // → yellow
             } else {
-                const p = (fromCenter - 0.6) / 0.4;
+                const p = (fromCenter - 0.66) / 0.34;
                 r = 255; g = 235 - 175 * p; b = 0; // → red/orange
             }
             ctx.fillStyle = `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.85)`;
