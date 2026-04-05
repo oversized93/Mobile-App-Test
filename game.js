@@ -526,47 +526,6 @@ function onTouchStart(sx, sy) {
             return;
         }
 
-        // ---- UI buttons (work in both locked and normal states) ----
-        // SHOOT button (only when locked)
-        if (shotLocked && !onGreen) {
-            const shootBtnW = 160, shootBtnH = 50;
-            const shootBtnX = (W() - shootBtnW) / 2, shootBtnY = H() - 185;
-            if (hitBtn(sx, sy, shootBtnX, shootBtnY, shootBtnW, shootBtnH)) {
-                meterActive = true;
-                meterPhase = 2; // skip power phase, go straight to accuracy
-                meterPos = 1;   // start at top, sweep down
-                curl = 0;
-                curlDragStartX = W() / 2;
-                // Half speed for accuracy meter
-                meterSpeed = (0.75 + (CLUBS[selectedClub].maxPower / 500) * 0.75);
-                return;
-            }
-            const cancelW = 80, cancelH = 36;
-            const cancelX = (W() - cancelW) / 2, cancelY = shootBtnY + shootBtnH + 10;
-            if (hitBtn(sx, sy, cancelX, cancelY, cancelW, cancelH)) {
-                shotLocked = false;
-                return;
-            }
-        }
-        // Club switching
-        const clubY = H() - 120;
-        if (!onGreen && !shotLocked && sy >= clubY && sy <= clubY + 36) {
-            if (sx < W() / 2 - 40) { cycleClub(-1); updateTargetFromClub(); return; }
-            if (sx > W() / 2 + 40) { cycleClub(1); updateTargetFromClub(); return; }
-        }
-        // Spin control
-        const spinY = shotLocked ? H() - 290 : H() - 190;
-        if (!onGreen && !flyoverActive) {
-            const spX = W() - 60, spR = 28;
-            const sdx = sx - spX, sdy = sy - spinY;
-            if (sdx * sdx + sdy * sdy < (spR + 10) * (spR + 10)) {
-                spinAdjusting = true;
-                spin.side = Math.max(-1, Math.min(1, sdx / (spR * 0.8)));
-                spin.top = Math.max(-1, Math.min(1, -sdy / (spR * 0.8)));
-                return;
-            }
-        }
-
         // ---- Putting: drag back from ball ----
         if (onGreen) {
             const bs = worldToScreen(ball.x, ball.y);
@@ -577,20 +536,68 @@ function onTouchStart(sx, sy) {
                 aimStartX = sx; aimStartY = sy;
                 return;
             }
+            // On green but didn't touch ball — pan camera
+            scouting = true;
+            scoutCamX = cam.x;
+            scoutCamY = cam.y;
+            return;
         }
 
-        // ---- Target or camera: touch near target = drag target, else = pan camera ----
-        if (!onGreen && sy < H() - 140) {
+        // ---- Target grab: check FIRST before buttons ----
+        if (sy < H() - 140) {
             const ts = worldToScreen(targetX, targetY);
             const tdx = sx - ts.x, tdy = sy - ts.y;
-            const grabRadius = Math.max(60, 40 / Math.min(cam.zoom, 1)); // bigger grab area when zoomed out
+            const grabRadius = Math.max(60, 40 / Math.min(cam.zoom, 1));
             if (tdx * tdx + tdy * tdy < grabRadius * grabRadius) {
-                // Grabbed the target — drag it
                 draggingTarget = true;
                 aiming = true;
+                shotLocked = false; // unlock so we can re-aim freely
                 return;
             }
-            // Didn't grab target — pan camera
+        }
+
+        // ---- UI buttons ----
+        // SHOOT button (only when locked)
+        if (shotLocked) {
+            const shootBtnW = 160, shootBtnH = 50;
+            const shootBtnX = (W() - shootBtnW) / 2, shootBtnY = H() - 185;
+            if (hitBtn(sx, sy, shootBtnX, shootBtnY, shootBtnW, shootBtnH)) {
+                meterActive = true;
+                meterPhase = 2;
+                meterPos = 1;
+                curl = 0;
+                curlDragStartX = W() / 2;
+                meterSpeed = (0.75 + (CLUBS[selectedClub].maxPower / 500) * 0.75);
+                return;
+            }
+            const cancelW = 80, cancelH = 36;
+            const cancelX = (W() - cancelW) / 2, cancelY = shootBtnY + shootBtnH + 10;
+            if (hitBtn(sx, sy, cancelX, cancelY, cancelW, cancelH)) {
+                shotLocked = false;
+                return;
+            }
+        }
+        // Club switching (not when locked)
+        const clubY = H() - 120;
+        if (!shotLocked && sy >= clubY && sy <= clubY + 36) {
+            if (sx < W() / 2 - 40) { cycleClub(-1); updateTargetFromClub(); return; }
+            if (sx > W() / 2 + 40) { cycleClub(1); updateTargetFromClub(); return; }
+        }
+        // Spin control
+        const spinY = shotLocked ? H() - 290 : H() - 190;
+        if (!flyoverActive) {
+            const spX = W() - 60, spR = 28;
+            const sdx = sx - spX, sdy = sy - spinY;
+            if (sdx * sdx + sdy * sdy < (spR + 10) * (spR + 10)) {
+                spinAdjusting = true;
+                spin.side = Math.max(-1, Math.min(1, sdx / (spR * 0.8)));
+                spin.top = Math.max(-1, Math.min(1, -sdy / (spR * 0.8)));
+                return;
+            }
+        }
+
+        // ---- Camera pan (fallback) ----
+        if (sy < H() - 140) {
             scouting = true;
             scoutCamX = cam.x;
             scoutCamY = cam.y;
@@ -1049,8 +1056,8 @@ function drawPlaying() {
     ctx.fill();
     drawFlag(hx + 1, hy, 0.6);
 
-    // Max distance ring for selected club (when ball is stopped)
-    if (!ball.moving && !holeComplete && !flyoverActive) {
+    // Max distance ring for selected club (not on green)
+    if (!ball.moving && !holeComplete && !flyoverActive && terrainAt(ball.x, ball.y) !== T.GREEN) {
         const club = CLUBS[selectedClub];
         const maxDist = club.maxYds * YDS_TO_WORLD; // max range in world units
         ctx.strokeStyle = 'rgba(255,255,100,0.25)';
@@ -1069,7 +1076,7 @@ function drawPlaying() {
     const showAimPower = (shotLocked || meterActive) ? lockedPower : aimPower;
     const showAimDirX = (shotLocked || meterActive) ? lockedDirX : aimDirX;
     const showAimDirY = (shotLocked || meterActive) ? lockedDirY : aimDirY;
-    if (showAimPower > 10) {
+    if (showAimPower > 10 && !onGreenNow) {
         const club = CLUBS[selectedClub];
         const len = Math.sqrt(showAimDirX * showAimDirX + showAimDirY * showAimDirY);
         if (len > 0) {
