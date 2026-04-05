@@ -336,6 +336,8 @@ function onBallStopped() {
     }
     shotTrail = [];
     autoSelectClub();
+    updateTargetFromClub(); // reposition target for new ball position
+    shotLocked = false;
     // Auto-zoom only if user hasn't manually pinch-zoomed
     if (!manualZoom) {
         if (ter === T.GREEN) {
@@ -581,7 +583,8 @@ function onTouchStart(sx, sy) {
         if (!onGreen && sy < H() - 140) {
             const ts = worldToScreen(targetX, targetY);
             const tdx = sx - ts.x, tdy = sy - ts.y;
-            if (tdx * tdx + tdy * tdy < 50 * 50) {
+            const grabRadius = Math.max(60, 40 / Math.min(cam.zoom, 1)); // bigger grab area when zoomed out
+            if (tdx * tdx + tdy * tdy < grabRadius * grabRadius) {
                 // Grabbed the target — drag it
                 draggingTarget = true;
                 aiming = true;
@@ -610,12 +613,21 @@ function onTouchMove(sx, sy) {
     }
     if (state === 'playing' && draggingTarget) {
         const wp = screenToWorld(sx, sy);
-        targetX = wp.x; targetY = wp.y;
-        // Update aim direction + power from ball to target
-        aimDirX = targetX - ball.x;
-        aimDirY = targetY - ball.y;
-        const dist = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
-        aimPower = Math.min(dist / (CLUBS[selectedClub].maxYds * YDS_TO_WORLD) * CLUBS[selectedClub].maxPower, CLUBS[selectedClub].maxPower);
+        const club = CLUBS[selectedClub];
+        const maxRange = club.maxYds * YDS_TO_WORLD;
+        // Clamp target within max club range
+        let dx = wp.x - ball.x, dy = wp.y - ball.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > maxRange) {
+            dx = (dx / dist) * maxRange;
+            dy = (dy / dist) * maxRange;
+        }
+        targetX = ball.x + dx;
+        targetY = ball.y + dy;
+        aimDirX = dx;
+        aimDirY = dy;
+        const clampedDist = Math.sqrt(dx * dx + dy * dy);
+        aimPower = (clampedDist / maxRange) * club.maxPower;
         return;
     }
     if (state === 'playing' && putting) {
