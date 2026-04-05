@@ -572,7 +572,7 @@ function onTouchStart(sx, sy) {
 
         // ---- Target grab: check FIRST before buttons ----
         if (sy < H() - 140) {
-            const ts = worldToScreen(targetX, targetY);
+            const ts = (scene3dReady && typeof worldToScreen3D === 'function') ? worldToScreen3D(targetX, targetY) : worldToScreen(targetX, targetY);
             const tdx = sx - ts.x, tdy = sy - ts.y;
             const grabRadius = Math.max(60, 40 / Math.min(cam.zoom, 1));
             if (tdx * tdx + tdy * tdy < grabRadius * grabRadius) {
@@ -657,7 +657,7 @@ function onTouchMove(sx, sy) {
         return;
     }
     if (state === 'playing' && draggingTarget) {
-        const wp = screenToWorld(sx, sy);
+        const wp = (scene3dReady && typeof screenToWorld3D === 'function') ? screenToWorld3D(sx, sy) : screenToWorld(sx, sy);
         const club = CLUBS[selectedClub];
         const maxRange = club.maxYds * YDS_TO_WORLD;
         // Clamp target within max club range
@@ -690,11 +690,18 @@ function onTouchMove(sx, sy) {
         return;
     }
     if (state === 'playing' && scouting) {
-        const dx = (sx - touch.startX) / cam.zoom;
-        const dy = (sy - touch.startY) / cam.zoom;
-        const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
-        cam.targetX = scoutCamX - (dx * cos - dy * sin);
-        cam.targetY = scoutCamY - (dx * sin + dy * cos);
+        if (scene3dReady && typeof panCamera3D === 'function') {
+            // Frame delta: difference from previous touch position
+            const dx = sx - touch.x;
+            const dy = sy - touch.y;
+            panCamera3D(dx, dy);
+        } else {
+            const dx = (sx - touch.startX) / cam.zoom;
+            const dy = (sy - touch.startY) / cam.zoom;
+            const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
+            cam.targetX = scoutCamX - (dx * cos - dy * sin);
+            cam.targetY = scoutCamY - (dx * sin + dy * cos);
+        }
     }
 }
 

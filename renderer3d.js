@@ -274,6 +274,55 @@ function updateCamera3D(dt) {
     camera3d.lookAt(targetLook);
 }
 
+// ---- Raycast screen point to ground plane (y=0) ----
+const raycaster3d = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+function screenToWorld3D(sx, sy) {
+    if (!camera3d) return { x: 0, y: 0 };
+    const ndc = new THREE.Vector2(
+        (sx / window.innerWidth) * 2 - 1,
+        -(sy / window.innerHeight) * 2 + 1
+    );
+    raycaster3d.setFromCamera(ndc, camera3d);
+    const hit = new THREE.Vector3();
+    raycaster3d.ray.intersectPlane(groundPlane, hit);
+    if (hit) return { x: hit.x, y: hit.z }; // return as 2D world coords (x, z → x, y)
+    return { x: 0, y: 0 };
+}
+
+// ---- Pan camera by screen delta ----
+function panCamera3D(dx, dy) {
+    // Convert screen delta to world delta based on camera orientation
+    const right = new THREE.Vector3();
+    const forward = new THREE.Vector3();
+    camera3d.getWorldDirection(forward);
+    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+    forward.crossVectors(new THREE.Vector3(0, 1, 0), right).normalize();
+
+    const scale = camera3d.position.y * 0.003; // pan speed based on height
+    cam3dTarget.x -= (dx * right.x + dy * forward.x) * scale;
+    cam3dTarget.z -= (dx * right.z + dy * forward.z) * scale;
+    cam3dLookAt.x -= (dx * right.x + dy * forward.x) * scale;
+    cam3dLookAt.z -= (dx * right.z + dy * forward.z) * scale;
+}
+
+// ---- Zoom camera ----
+function zoomCamera3D(factor) {
+    cam3dTarget.y = Math.max(20, Math.min(500, cam3dTarget.y * factor));
+}
+
+// ---- Project world point to screen ----
+function worldToScreen3D(wx, wy) {
+    if (!camera3d) return { x: 0, y: 0 };
+    const vec = new THREE.Vector3(wx, 0, wy);
+    vec.project(camera3d);
+    return {
+        x: (vec.x + 1) / 2 * window.innerWidth,
+        y: (-vec.y + 1) / 2 * window.innerHeight
+    };
+}
+
 // ---- Render ----
 function render3D() {
     if (!renderer3d || !scene3d || !camera3d) return;

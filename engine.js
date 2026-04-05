@@ -210,6 +210,7 @@ canvas.addEventListener('touchstart', (e) => {
         pinchStartMidY = (t1.clientY + t2.clientY) / 2;
         pinchStartCamX = cam.targetX;
         pinchStartCamY = cam.targetY;
+        cam._lastPinchDx = 0; cam._lastPinchDy = 0;
         return;
     }
     const t = e.touches[0];
@@ -225,9 +226,12 @@ canvas.addEventListener('touchstart', (e) => {
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     if (pinching && e.touches.length === 2) {
-        // Zoom
         const dist = getTouchDist(e);
         const scale = dist / pinchStartDist;
+        // 3D zoom
+        if (typeof zoomCamera3D === 'function' && typeof scene3dReady !== 'undefined' && scene3dReady) {
+            zoomCamera3D(pinchStartZoom / (cam.targetZoom || 1));
+        }
         cam.targetZoom = Math.max(0.3, Math.min(8, pinchStartZoom * scale));
         cam.zoom = cam.targetZoom;
         // Rotate
@@ -238,8 +242,15 @@ canvas.addEventListener('touchmove', (e) => {
         const t1 = e.touches[0], t2 = e.touches[1];
         const midX = (t1.clientX + t2.clientX) / 2;
         const midY = (t1.clientY + t2.clientY) / 2;
-        const dx = (midX - pinchStartMidX) / cam.zoom;
-        const dy = (midY - pinchStartMidY) / cam.zoom;
+        const pdx = midX - pinchStartMidX;
+        const pdy = midY - pinchStartMidY;
+        if (typeof panCamera3D === 'function' && typeof scene3dReady !== 'undefined' && scene3dReady) {
+            panCamera3D(pdx - (cam._lastPinchDx || 0), pdy - (cam._lastPinchDy || 0));
+            cam._lastPinchDx = pdx; cam._lastPinchDy = pdy;
+        }
+        // 2D fallback
+        const dx = pdx / cam.zoom;
+        const dy = pdy / cam.zoom;
         const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
         cam.targetX = pinchStartCamX - (dx * cos - dy * sin);
         cam.targetY = pinchStartCamY - (dx * sin + dy * cos);
