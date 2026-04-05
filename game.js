@@ -1836,35 +1836,41 @@ function drawPlaying() {
         ctx.fillText('Cancel', cancelX + cancelW / 2, cancelY + cancelH / 2 + 5);
     }
 
-    // ---- Accuracy arc (behind-ball fan view) ----
+    // ---- Accuracy arc (polished behind-ball fan) ----
     if (meterActive) {
-        // Fan arc at bottom of screen
         const arcCx = W() / 2;
-        const arcCy = H() - 20;
+        const arcCy = H() - 15;
         const arcR = Math.min(W() * 0.28, 120);
         const arcSpread = Math.PI * 0.5;
         const arcStart = -Math.PI / 2 - arcSpread / 2;
         const arcEnd = -Math.PI / 2 + arcSpread / 2;
 
-        // Draw colored fan segments (red → yellow → green → yellow → red)
-        const segments = 30;
+        // Outer glow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.moveTo(arcCx, arcCy);
+        ctx.arc(arcCx, arcCy, arcR + 8, arcStart - 0.05, arcEnd + 0.05);
+        ctx.closePath();
+        ctx.fill();
+
+        // Colored fan segments with smoother gradient
+        const segments = 40;
         for (let i = 0; i < segments; i++) {
             const t = i / segments;
             const a1 = arcStart + t * arcSpread;
             const a2 = arcStart + (t + 1) / segments * arcSpread;
-            // Distance from center (0 = center, 1 = edge)
             const fromCenter = Math.abs(t - 0.5) * 2;
             let r, g, b;
             if (fromCenter < 0.33) {
-                r = 46; g = 175; b = 80; // green — perfect zone
+                r = 56; g = 195; b = 90;
             } else if (fromCenter < 0.66) {
                 const p = (fromCenter - 0.33) / 0.33;
-                r = 46 + (255 - 46) * p; g = 175 + (235 - 175) * p; b = 80 - 80 * p; // → yellow
+                r = 56 + (255 - 56) * p; g = 195 + (220 - 195) * p; b = 90 * (1 - p);
             } else {
                 const p = (fromCenter - 0.66) / 0.34;
-                r = 255; g = 235 - 175 * p; b = 0; // → red/orange
+                r = 255; g = 220 - 160 * p; b = 0;
             }
-            ctx.fillStyle = `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.85)`;
+            ctx.fillStyle = `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.9)`;
             ctx.beginPath();
             ctx.moveTo(arcCx, arcCy);
             ctx.arc(arcCx, arcCy, arcR, a1, a2);
@@ -1872,19 +1878,32 @@ function drawPlaying() {
             ctx.fill();
         }
 
-        // Arc outline
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        // Outer arc ring
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(arcCx, arcCy, arcR, arcStart, arcEnd);
         ctx.stroke();
 
-        // Center target line (perfect zone)
+        // Inner arc ring (subtle)
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(arcCx, arcCy, arcR * 0.5, arcStart, arcEnd);
+        ctx.stroke();
+
+        // Center target line — white with glow
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(arcCx, arcCy - arcR * 0.3);
+        ctx.lineTo(arcCx, arcCy - arcR - 6);
+        ctx.stroke();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(arcCx, arcCy);
-        ctx.lineTo(arcCx, arcCy - arcR - 8);
+        ctx.moveTo(arcCx, arcCy - arcR * 0.3);
+        ctx.lineTo(arcCx, arcCy - arcR - 6);
         ctx.stroke();
 
         // Sweeping arrow (meterAngle: -1 to 1 mapped across the arc)
@@ -2067,58 +2086,88 @@ function drawPlaying() {
 
 // ---- Hole Complete Screen ----
 function drawHoleDone() {
-    drawPlaying(); // Keep course visible behind
+    drawPlaying();
 
-    // Overlay
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    // Dark vignette overlay
+    const vigGrad = ctx.createRadialGradient(W()/2, H()/2, H()*0.2, W()/2, H()/2, H()*0.7);
+    vigGrad.addColorStop(0, 'rgba(0,0,0,0.5)');
+    vigGrad.addColorStop(1, 'rgba(0,0,0,0.85)');
+    ctx.fillStyle = vigGrad;
     ctx.fillRect(0, 0, W(), H());
 
     const diff = strokes - currentHole.par;
     const scoreName = strokes === 1 ? 'HOLE IN ONE!!!' :
         (SCORE_NAMES[String(diff)] || (diff > 0 ? '+' + diff : '' + diff));
 
-    // Score card
-    const cardW = Math.min(W() - 40, 280);
-    const cardH = 240;
+    // Card — glass panel
+    const cardW = Math.min(W() - 32, 300);
+    const cardH = 260;
     const cx = (W() - cardW) / 2;
-    const cy = (H() - cardH) / 2 - 20;
+    const cy = (H() - cardH) / 2 - 10;
 
-    ctx.fillStyle = 'rgba(30,60,30,0.95)';
-    roundRect(cx, cy, cardW, cardH, 20);
+    // Card background
+    const cardGrad = ctx.createLinearGradient(cx, cy, cx, cy + cardH);
+    cardGrad.addColorStop(0, 'rgba(20,50,20,0.95)');
+    cardGrad.addColorStop(1, 'rgba(10,30,10,0.95)');
+    ctx.fillStyle = cardGrad;
+    roundRect(cx, cy, cardW, cardH, 24);
     ctx.fill();
-    ctx.strokeStyle = '#4caf50';
-    ctx.lineWidth = 2;
-    roundRect(cx, cy, cardW, cardH, 20);
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    roundRect(cx, cy, cardW, cardH, 24);
     ctx.stroke();
 
     ctx.textAlign = 'center';
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 20px -apple-system,sans-serif';
-    ctx.fillText(currentHole.name || 'Hole ' + (currentHoleIdx + 1), W() / 2, cy + 40);
+    // Hole name
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '14px -apple-system,sans-serif';
+    ctx.fillText(currentHole.name || 'Hole ' + (currentHoleIdx + 1), W() / 2, cy + 35);
 
-    // Score name (colored)
-    const scoreColor = diff < 0 ? '#4caf50' : diff === 0 ? '#fff' : '#f44336';
+    // Score name — large, colored, with subtle glow
+    const scoreColor = diff < 0 ? '#4caf50' : diff === 0 ? '#fff' : '#ff5252';
     ctx.fillStyle = scoreColor;
-    ctx.font = 'bold 28px -apple-system,sans-serif';
+    ctx.font = 'bold 36px -apple-system,sans-serif';
     ctx.fillText(scoreName, W() / 2, cy + 85);
 
-    ctx.fillStyle = '#ccc';
-    ctx.font = '16px -apple-system,sans-serif';
-    ctx.fillText(strokes + ' stroke' + (strokes !== 1 ? 's' : '') + '  (Par ' + currentHole.par + ')', W() / 2, cy + 118);
+    // Strokes detail
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '15px -apple-system,sans-serif';
+    ctx.fillText(strokes + ' stroke' + (strokes !== 1 ? 's' : '') + '  \u2022  Par ' + currentHole.par, W() / 2, cy + 115);
 
-    // Scorecard so far
-    ctx.fillStyle = '#888';
-    ctx.font = '13px -apple-system,sans-serif';
+    // Divider line
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.moveTo(cx + 30, cy + 135);
+    ctx.lineTo(cx + cardW - 30, cy + 135);
+    ctx.stroke();
+
+    // Round total
     let totalStrokes = holeStrokes.reduce((a, b) => a + b, 0);
     let totalPar = 0;
     for (let i = 0; i < holeStrokes.length; i++) totalPar += currentCourse.holes[i].par;
-    ctx.fillText('Round total: ' + totalStrokes + ' (' + (totalStrokes - totalPar >= 0 ? '+' : '') + (totalStrokes - totalPar) + ')', W() / 2, cy + 150);
+    const roundDiff = totalStrokes - totalPar;
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '13px -apple-system,sans-serif';
+    ctx.fillText('Round', W() / 2, cy + 160);
+    ctx.fillStyle = roundDiff < 0 ? '#4caf50' : roundDiff === 0 ? '#ffeb3b' : '#ff5252';
+    ctx.font = 'bold 20px -apple-system,sans-serif';
+    ctx.fillText(totalStrokes + ' (' + (roundDiff >= 0 ? '+' : '') + roundDiff + ')', W() / 2, cy + 185);
 
-    // Next button
+    // Next button — gradient
     const isLast = currentHoleIdx >= currentCourse.holes.length - 1;
     const btnLabel = isLast ? 'Finish Round' : 'Next Hole';
-    drawBtn(cx + 20, cy + cardH - 60, cardW - 40, 44, btnLabel, '#2e7d32');
+    const btnW = cardW - 48, btnH = 48;
+    const btnX = cx + 24, btnY = cy + cardH - 65;
+    const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX + btnW, btnY);
+    btnGrad.addColorStop(0, '#2e7d32');
+    btnGrad.addColorStop(1, '#1b5e20');
+    ctx.fillStyle = btnGrad;
+    roundRect(btnX, btnY, btnW, btnH, 24);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 17px -apple-system,sans-serif';
+    ctx.fillText(btnLabel, W() / 2, btnY + btnH / 2 + 6);
 }
 
 function holeDoneTouchStart(sx, sy) {
@@ -2142,36 +2191,52 @@ function holeDoneTouchStart(sx, sy) {
 
 // ---- Round Complete Screen ----
 function drawRoundDone() {
-    ctx.fillStyle = '#1a472a';
+    // Rich dark gradient background
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, H());
+    bgGrad.addColorStop(0, '#0a1f0a');
+    bgGrad.addColorStop(1, '#122212');
+    ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, W(), H());
 
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 26px -apple-system,sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Round Complete!', W() / 2, 50);
+    ctx.fillStyle = '#fff';
+    ctx.font = '600 24px -apple-system,sans-serif';
+    ctx.fillText('Round Complete', W() / 2, 44);
 
-    ctx.fillStyle = '#8fbc8f';
-    ctx.font = '16px -apple-system,sans-serif';
-    ctx.fillText(currentCourse.name, W() / 2, 78);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '14px -apple-system,sans-serif';
+    ctx.fillText(currentCourse.name, W() / 2, 68);
 
-    // Scorecard
-    const cardW = Math.min(W() - 30, 320);
+    // Scorecard — glass panel
+    const cardW = Math.min(W() - 24, 340);
     const cx = (W() - cardW) / 2;
-    let cy = 100;
-    const rowH = 34;
+    let cy = 88;
+    const rowH = 38;
+
+    // Card background
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    roundRect(cx, cy, cardW, rowH * (holeStrokes.length + 2) + 8, 16);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    roundRect(cx, cy, cardW, rowH * (holeStrokes.length + 2) + 8, 16);
+    ctx.stroke();
 
     // Header
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(cx, cy, cardW, rowH);
-    ctx.fillStyle = '#aaa';
-    ctx.font = 'bold 13px -apple-system,sans-serif';
+    cy += 4;
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '600 11px -apple-system,sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('Hole', cx + 10, cy + 22);
+    ctx.fillText('HOLE', cx + 14, cy + 24);
     ctx.textAlign = 'center';
-    ctx.fillText('Par', cx + cardW * 0.5, cy + 22);
-    ctx.fillText('Score', cx + cardW * 0.7, cy + 22);
-    ctx.fillText('+/-', cx + cardW * 0.9, cy + 22);
+    ctx.fillText('PAR', cx + cardW * 0.55, cy + 24);
+    ctx.fillText('SCORE', cx + cardW * 0.72, cy + 24);
+    ctx.fillText('+/-', cx + cardW * 0.9, cy + 24);
     cy += rowH;
+
+    // Divider
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath(); ctx.moveTo(cx + 10, cy); ctx.lineTo(cx + cardW - 10, cy); ctx.stroke();
 
     let totalStrokes = 0, totalPar = 0;
 
@@ -2182,70 +2247,113 @@ function drawRoundDone() {
         totalStrokes += sc;
         totalPar += par;
 
-        ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.15)';
-        ctx.fillRect(cx, cy, cardW, rowH);
-
-        ctx.fillStyle = '#ccc';
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
         ctx.font = '14px -apple-system,sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(currentCourse.holes[i].name || ('Hole ' + (i + 1)), cx + 10, cy + 22);
+        ctx.fillText(currentCourse.holes[i].name || ('Hole ' + (i + 1)), cx + 14, cy + 24);
         ctx.textAlign = 'center';
-        ctx.fillText(String(par), cx + cardW * 0.5, cy + 22);
-        ctx.fillText(String(sc), cx + cardW * 0.7, cy + 22);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText(String(par), cx + cardW * 0.55, cy + 24);
+        ctx.fillStyle = '#fff';
+        ctx.font = '600 14px -apple-system,sans-serif';
+        ctx.fillText(String(sc), cx + cardW * 0.72, cy + 24);
 
-        ctx.fillStyle = diff < 0 ? '#4caf50' : diff === 0 ? '#fff' : '#f44336';
-        ctx.fillText(diff === 0 ? 'E' : (diff > 0 ? '+' + diff : String(diff)), cx + cardW * 0.9, cy + 22);
+        // +/- with color pill
+        const diffStr = diff === 0 ? 'E' : (diff > 0 ? '+' + diff : String(diff));
+        const diffCol = diff < 0 ? '#4caf50' : diff === 0 ? '#888' : '#ff5252';
+        ctx.fillStyle = diffCol;
+        ctx.font = 'bold 13px -apple-system,sans-serif';
+        ctx.fillText(diffStr, cx + cardW * 0.9, cy + 24);
 
         cy += rowH;
+        // Row divider
+        if (i < holeStrokes.length - 1) {
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+            ctx.beginPath(); ctx.moveTo(cx + 10, cy); ctx.lineTo(cx + cardW - 10, cy); ctx.stroke();
+        }
     }
 
-    // Total row
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(cx, cy, cardW, rowH + 4);
+    // Total row — emphasized
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.beginPath(); ctx.moveTo(cx + 10, cy); ctx.lineTo(cx + cardW - 10, cy); ctx.stroke();
+    cy += 4;
     const totalDiff = totalStrokes - totalPar;
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 15px -apple-system,sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('TOTAL', cx + 10, cy + 24);
+    ctx.fillText('TOTAL', cx + 14, cy + 24);
     ctx.textAlign = 'center';
-    ctx.fillText(String(totalPar), cx + cardW * 0.5, cy + 24);
-    ctx.fillText(String(totalStrokes), cx + cardW * 0.7, cy + 24);
-    ctx.fillStyle = totalDiff < 0 ? '#4caf50' : totalDiff === 0 ? '#ffeb3b' : '#f44336';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '15px -apple-system,sans-serif';
+    ctx.fillText(String(totalPar), cx + cardW * 0.55, cy + 24);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.fillText(String(totalStrokes), cx + cardW * 0.72, cy + 24);
+    ctx.fillStyle = totalDiff < 0 ? '#4caf50' : totalDiff === 0 ? '#ffeb3b' : '#ff5252';
+    ctx.font = 'bold 15px -apple-system,sans-serif';
     ctx.fillText(totalDiff === 0 ? 'E' : (totalDiff > 0 ? '+' + totalDiff : String(totalDiff)), cx + cardW * 0.9, cy + 24);
 
     cy += rowH + 20;
 
-    // Check/save best score + unlock next course
+    // Check/save best score + unlock
     if (!customCoursePlay) {
         const courseIdx = CAREER_COURSES.indexOf(currentCourse);
         if (courseIdx >= 0) {
             const best = loadData('best_' + courseIdx, null);
             if (best === null || totalStrokes < best) {
                 saveData('best_' + courseIdx, totalStrokes);
+                // Gold pill badge
+                ctx.fillStyle = 'rgba(255,235,59,0.15)';
+                roundRect(W() / 2 - 80, cy, 160, 28, 14);
+                ctx.fill();
                 ctx.fillStyle = '#ffeb3b';
-                ctx.font = 'bold 16px -apple-system,sans-serif';
+                ctx.font = 'bold 14px -apple-system,sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText('New Best Score!', W() / 2, cy);
-                cy += 24;
+                ctx.fillText('\u2605 New Best Score!', W() / 2, cy + 19);
+                cy += 38;
             }
-            // Unlock next course
             if (courseIdx + 1 < CAREER_COURSES.length && !player.unlocked.includes(courseIdx + 1)) {
                 player.unlocked.push(courseIdx + 1);
                 saveData('player', player);
+                ctx.fillStyle = 'rgba(76,175,80,0.15)';
+                roundRect(W() / 2 - 100, cy, 200, 28, 14);
+                ctx.fill();
                 ctx.fillStyle = '#4caf50';
-                ctx.font = 'bold 14px -apple-system,sans-serif';
-                ctx.fillText('Unlocked: ' + CAREER_COURSES[courseIdx + 1].name + '!', W() / 2, cy);
-                cy += 24;
+                ctx.font = 'bold 13px -apple-system,sans-serif';
+                ctx.fillText('\u{1F513} ' + CAREER_COURSES[courseIdx + 1].name + ' Unlocked!', W() / 2, cy + 19);
+                cy += 38;
             }
         }
     }
 
-    // Buttons
-    const bw = Math.min(W() - 60, 260);
+    // Buttons — gradient style
+    const bw = Math.min(W() - 48, 280);
     const bx = (W() - bw) / 2;
-    cy += 10;
-    drawBtn(bx, cy, bw, 46, 'Play Again', '#2e7d32');
-    drawBtn(bx, cy + 58, bw, 46, 'Main Menu', '#555');
+    cy += 12;
+    // Play Again
+    const paGrad = ctx.createLinearGradient(bx, cy, bx + bw, cy);
+    paGrad.addColorStop(0, '#2e7d32');
+    paGrad.addColorStop(1, '#1b5e20');
+    ctx.fillStyle = paGrad;
+    roundRect(bx, cy, bw, 48, 24);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Play Again', W() / 2, cy + 30);
+
+    // Main Menu
+    cy += 60;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(bx, cy, bw, 48, 24);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    roundRect(bx, cy, bw, 48, 24);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '15px -apple-system,sans-serif';
+    ctx.fillText('Main Menu', W() / 2, cy + 30);
 }
 
 function roundDoneTouchStart(sx, sy) {
