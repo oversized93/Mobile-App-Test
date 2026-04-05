@@ -1066,9 +1066,9 @@ function drawPlaying() {
     // Always show aim guides when we have a target (not putting, not in ball flight)
     const onGreenNow = terrainAt(ball.x, ball.y) === T.GREEN;
     const hasTarget = !onGreenNow && !ball.moving && !holeComplete && !flyoverActive;
-    const showAimPower = (aiming && aimPower > 10) ? aimPower : (shotLocked || meterActive) ? lockedPower : hasTarget ? aimPower : 0;
-    const showAimDirX = (aiming && aimPower > 10) ? aimDirX : (shotLocked || meterActive) ? lockedDirX : aimDirX;
-    const showAimDirY = (aiming && aimPower > 10) ? aimDirY : (shotLocked || meterActive) ? lockedDirY : aimDirY;
+    const showAimPower = (shotLocked || meterActive) ? lockedPower : aimPower;
+    const showAimDirX = (shotLocked || meterActive) ? lockedDirX : aimDirX;
+    const showAimDirY = (shotLocked || meterActive) ? lockedDirY : aimDirY;
     if (showAimPower > 10) {
         const club = CLUBS[selectedClub];
         const len = Math.sqrt(showAimDirX * showAimDirX + showAimDirY * showAimDirY);
@@ -1089,29 +1089,35 @@ function drawPlaying() {
                 ctx.stroke();
             }
 
-            // Landing zone target (crosshair)
-            ctx.strokeStyle = 'rgba(255,255,100,0.8)';
-            ctx.lineWidth = 1.5;
+            // Landing zone target (crosshair) — larger and bolder
+            ctx.strokeStyle = 'rgba(255,255,100,0.9)';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(landX, landY, 8, 0, Math.PI * 2);
+            ctx.arc(landX, landY, 12, 0, Math.PI * 2);
             ctx.stroke();
             ctx.beginPath();
-            ctx.moveTo(landX - 12, landY); ctx.lineTo(landX + 12, landY);
-            ctx.moveTo(landX, landY - 12); ctx.lineTo(landX, landY + 12);
+            ctx.moveTo(landX - 18, landY); ctx.lineTo(landX - 6, landY);
+            ctx.moveTo(landX + 6, landY); ctx.lineTo(landX + 18, landY);
+            ctx.moveTo(landX, landY - 18); ctx.lineTo(landX, landY - 6);
+            ctx.moveTo(landX, landY + 6); ctx.lineTo(landX, landY + 18);
             ctx.stroke();
 
             // Center dot
-            ctx.fillStyle = 'rgba(255,255,100,0.8)';
+            ctx.fillStyle = 'rgba(255,255,100,0.9)';
             ctx.beginPath();
-            ctx.arc(landX, landY, 2.5, 0, Math.PI * 2);
+            ctx.arc(landX, landY, 3, 0, Math.PI * 2);
             ctx.fill();
 
             // ---- Ball guide: simulate roll after landing ----
-            const pct = Math.min(showAimPower / club.maxPower, 1);
+            // Match the actual physics: flight velocity * rollFactor
             const topSpinMult = spin.top || 0;
             const simRollFactor = 0.3 + topSpinMult * 0.2;
-            let simVx = nx * showAimPower * simRollFactor;
-            let simVy = ny * showAimPower * simRollFactor;
+            const powerPct = Math.min(showAimPower / club.maxPower, 1);
+            const simVz = club.launch * powerPct;
+            const simAirTime = 2 * simVz / GRAVITY;
+            const simFlightVel = simAirTime > 0 ? (landDist * 0.85) / simAirTime : landDist * 2.5;
+            let simVx = nx * simFlightVel * simRollFactor;
+            let simVy = ny * simFlightVel * simRollFactor;
             let simX = landX, simY = landY;
             const guidePoints = [{ x: simX, y: simY }];
             const simDt = 0.03;
@@ -1150,11 +1156,12 @@ function drawPlaying() {
         ctx.setLineDash([]);
     }
 
-    // Aim line / Putt guide (visible during aim, locked, or needle)
+    // Aim line / Putt guide (visible during aim, locked, or default target)
     const aimVis = (aiming && aimPower > 5) || shotLocked || meterActive || hasTarget;
-    const visAimDirX = (aiming && aimPower > 5) ? aimDirX : lockedDirX;
-    const visAimDirY = (aiming && aimPower > 5) ? aimDirY : lockedDirY;
-    const visAimPower = (aiming && aimPower > 5) ? aimPower : lockedPower;
+    // Priority: locked/meter use locked values, everything else uses current aim values
+    const visAimDirX = (shotLocked || meterActive) ? lockedDirX : aimDirX;
+    const visAimDirY = (shotLocked || meterActive) ? lockedDirY : aimDirY;
+    const visAimPower = (shotLocked || meterActive) ? lockedPower : aimPower;
     if (aimVis && (visAimPower > 5 || putting)) {
         const len = Math.sqrt(visAimDirX * visAimDirX + visAimDirY * visAimDirY);
         if (len > 0) {
