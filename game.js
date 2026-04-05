@@ -328,19 +328,33 @@ function takeShot(power, dirX, dirY) {
     const p = Math.min(power, club.maxPower);
     const len = Math.sqrt(dirX * dirX + dirY * dirY);
     if (len === 0) return;
-    ball.vx = (dirX / len) * p;
-    ball.vy = (dirY / len) * p;
+    const powerPct = p / club.maxPower;
+
+    // Calculate velocity so ball actually travels maxYds at full power
+    // For air shots: distance = velocity * airTime, airTime = 2*vz/gravity
+    // We want ~85% of maxYds covered in air, 15% roll
+    const targetDist = club.maxYds * YDS_TO_WORLD * powerPct;
+    let velocity;
+
     ball.moving = true;
     ball.z = 0;
     ball.vz = 0;
     ball.airborne = false;
 
-    // Launch into air based on club type
-    const powerPct = p / club.maxPower;
     if (club.launch > 0 && powerPct > club.airMin) {
         ball.airborne = true;
         ball.vz = club.launch * powerPct;
+        // airTime = 2 * vz / GRAVITY
+        const airTime = 2 * ball.vz / GRAVITY;
+        // velocity needed to cover 85% of target distance in that air time
+        velocity = (targetDist * 0.85) / Math.max(airTime, 0.1);
+    } else {
+        // Ground shot (putt or low power) — velocity for rolling the full distance
+        velocity = targetDist * 2.5; // friction will eat most of this
     }
+
+    ball.vx = (dirX / len) * velocity;
+    ball.vy = (dirY / len) * velocity;
 
     // Apply sidespin — curves flight perpendicular to aim direction
     if (spin.side !== 0 && ball.airborne) {
