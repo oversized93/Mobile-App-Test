@@ -8,7 +8,7 @@ let player = loadData('player', { name: 'Golfer', ballColor: '#fff', unlocked: [
 let currentCourse = null;
 let currentHoleIdx = 0;
 let currentHole = null;
-let ball = { x: 0, y: 0, vx: 0, vy: 0, z: 0, vz: 0, moving: false, airborne: false };
+let ball = { x: 0, y: 0, vx: 0, vy: 0, z: 0, vz: 0, moving: false, airborne: false, topSpin: 0 };
 let strokes = 0;
 let holeStrokes = [];
 let aiming = false;
@@ -211,9 +211,12 @@ function updateBall(dt) {
                     notify('Landed in trees!');
                 }
 
-                // Bounce: heavy speed loss on landing, short roll (~15% of total distance)
-                ball.vx *= 0.3;
-                ball.vy *= 0.3;
+                // Bounce: heavy speed loss on landing, modified by topspin/backspin
+                // Topspin (+1) = more roll, backspin (-1) = less roll / stops faster
+                const topSpinMult = ball.topSpin || 0;
+                const rollFactor = 0.3 + topSpinMult * 0.2; // range: 0.1 (backspin) to 0.5 (topspin)
+                ball.vx *= Math.max(0.05, rollFactor);
+                ball.vy *= Math.max(0.05, rollFactor);
                 // Don't check hole while landing — need to roll in
             }
             continue; // Skip ground checks while airborne
@@ -301,6 +304,24 @@ function onHoleComplete() {
     holeStrokes.push(strokes);
 }
 
+// ---- Needle accuracy → hook/slice ----
+function fireWithNeedle(power, dirX, dirY, accuracy) {
+    // accuracy: -1 to 1. 0 = perfect. Negative = hook (left), positive = slice (right)
+    // Rotate the aim direction by accuracy * max deviation angle
+    const maxDeviation = 0.3; // radians (~17 degrees max hook/slice)
+    const deviation = accuracy * maxDeviation;
+    const cos = Math.cos(deviation), sin = Math.sin(deviation);
+    const newDirX = dirX * cos - dirY * sin;
+    const newDirY = dirX * sin + dirY * cos;
+
+    if (Math.abs(accuracy) < 0.1) notify('Perfect!');
+    else if (Math.abs(accuracy) < 0.3) notify('Good');
+    else if (accuracy < -0.3) notify('Hook!');
+    else if (accuracy > 0.3) notify('Slice!');
+
+    takeShot(power, newDirX, newDirY);
+}
+
 // ---- Shot mechanic (Golf Clash style) ----
 function takeShot(power, dirX, dirY) {
     const club = CLUBS[selectedClub];
@@ -321,17 +342,32 @@ function takeShot(power, dirX, dirY) {
         ball.vz = club.launch * powerPct;
     }
 
+    // Apply sidespin — curves flight perpendicular to aim direction
+    if (spin.side !== 0 && ball.airborne) {
+        const nx = dirX / len, ny = dirY / len;
+        // Perpendicular vector
+        const perpX = -ny, perpY = nx;
+        const sideForce = spin.side * p * 0.15;
+        ball.vx += perpX * sideForce;
+        ball.vy += perpY * sideForce;
+    }
+
     // Apply wind force to initial velocity (stronger effect on airborne shots)
     const windForce = wind.speed * (ball.airborne ? 1.8 : 0.4);
     ball.vx += Math.cos(wind.angle) * windForce;
     ball.vy += Math.sin(wind.angle) * windForce;
 
+    // Store spin for landing roll adjustment
+    ball.topSpin = spin.top;
+
     strokes++;
     lastSafePos = { x: ball.x, y: ball.y };
     shotTrail = [];
     aiming = false;
+    needleActive = false;
     putting = false;
-    manualZoom = false; // reset so auto-zoom works after ball stops
+    manualZoom = false;
+    spin = { top: 0, side: 0 }; // reset spin after shot
 }
 
 // ---- Touch Handlers (Golf Clash aiming) ----
@@ -339,6 +375,19 @@ let aimDirX = 0, aimDirY = 0, aimPower = 0;
 let dragStartWorldX = 0, dragStartWorldY = 0;
 let putting = false;
 let puttTargetX = 0, puttTargetY = 0;
+
+// ---- Shot needle system ----
+let needleActive = false;
+let needlePos = 0;       // -1 to 1, 0 = perfect center
+let needleSpeed = 3.5;   // swings per second (higher = harder)
+let needleDir = 1;
+let pendingPower = 0;
+let pendingDirX = 0, pendingDirY = 0;
+
+// ---- Ball spin system ----
+let spin = { top: 0, side: 0 }; // -1 to 1 each. top: -1=backspin, 1=topspin. side: -1=left, 1=right
+let spinAdjusting = false;
+let spinTouchId = null;
 let builderTouchAction = null;
 let charColors = ['#fff','#f44','#ff9800','#ffeb3b','#4caf50','#2196f3','#9c27b0','#e91e63','#00bcd4','#000'];
 let charColorIdx = 0;
@@ -379,6 +428,17 @@ function onTouchStart(sx, sy) {
             if (sx > W() / 2 + 40) { cycleClub(1); return; }
         }
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
+        // Spin control touch
+        if (!onGreen && !ball.moving && !holeComplete && !flyoverActive) {
+            const spX = W() - 60, spY = H() - 190, spR = 28;
+            const sdx = sx - spX, sdy = sy - spY;
+            if (sdx * sdx + sdy * sdy < (spR + 10) * (spR + 10)) {
+                spinAdjusting = true;
+                spin.side = Math.max(-1, Math.min(1, sdx / (spR * 0.8)));
+                spin.top = Math.max(-1, Math.min(1, -sdy / (spR * 0.8)));
+                return;
+            }
+        }
         // Check if touching near the ball (screen coords) — start aiming
         const bs = worldToScreen(ball.x, ball.y);
         const dx = sx - bs.x, dy = sy - bs.y;
@@ -388,6 +448,13 @@ function onTouchStart(sx, sy) {
             scouting = false;
             aimStartX = sx; aimStartY = sy;
             dragStartWorldX = ball.x; dragStartWorldY = ball.y;
+            // Start needle swinging for non-putt shots
+            if (!onGreen) {
+                needleActive = true;
+                needlePos = 0;
+                needleDir = 1;
+                needleSpeed = 2.5 + (CLUBS[selectedClub].maxPower / 500) * 2.0;
+            }
         } else if (sy < H() - 140) {
             // Touch away from ball and UI — start scouting (pan camera)
             scouting = true;
@@ -399,6 +466,12 @@ function onTouchStart(sx, sy) {
 
 function onTouchMove(sx, sy) {
     if (state === 'builder' && builderState.painting) { builderPaint(sx, sy); return; }
+    if (state === 'playing' && spinAdjusting) {
+        const spX = W() - 60, spY = H() - 190, spR = 28;
+        spin.side = Math.max(-1, Math.min(1, (sx - spX) / (spR * 0.8)));
+        spin.top = Math.max(-1, Math.min(1, -(sy - spY) / (spR * 0.8)));
+        return;
+    }
     if (state === 'playing' && aiming) {
         // Both normal shots and putts: drag back from ball, direction is opposite
         const dx = sx - aimStartX;
@@ -432,15 +505,24 @@ function onTouchMove(sx, sy) {
 
 function onTouchEnd(sx, sy) {
     if (state === 'builder') { builderState.painting = false; return; }
+    if (state === 'playing' && spinAdjusting) { spinAdjusting = false; return; }
     if (state === 'playing' && scouting) {
         scouting = false;
         return;
     }
     if (state === 'playing' && aiming) {
         if (aimPower > 8) {
-            takeShot(aimPower, aimDirX, aimDirY);
+            if (putting) {
+                // Putts skip the needle — just shoot
+                takeShot(aimPower, aimDirX, aimDirY);
+            } else {
+                // Release fires with needle accuracy applied
+                const accuracy = needlePos; // -1 to 1, 0 = perfect
+                fireWithNeedle(aimPower, aimDirX, aimDirY, accuracy);
+            }
         }
         aiming = false;
+        needleActive = false;
         putting = false;
         aimPower = 0;
     }
@@ -814,6 +896,38 @@ function drawPlaying() {
             ctx.beginPath();
             ctx.arc(landX, landY, 3, 0, Math.PI * 2);
             ctx.fill();
+
+            // ---- Ball guide: simulate roll after landing ----
+            const club = CLUBS[selectedClub];
+            const pct = Math.min(aimPower / club.maxPower, 1);
+            // Simulate: ball lands at landX/landY with reduced velocity
+            const topSpinMult = spin.top || 0;
+            const simRollFactor = 0.3 + topSpinMult * 0.2;
+            let simVx = nx * aimPower * simRollFactor;
+            let simVy = ny * aimPower * simRollFactor;
+            let simX = landX, simY = landY;
+            const guidePoints = [{ x: simX, y: simY }];
+            const simDt = 0.03;
+            for (let s = 0; s < 40; s++) {
+                const ter = terrainAt(simX, simY);
+                if (ter === T.WATER || ter === T.OOB || ter === T.TREE) break;
+                const fric = TERRAIN_FRICTION[ter] || 0.97;
+                simVx *= Math.pow(fric, simDt * 60);
+                simVy *= Math.pow(fric, simDt * 60);
+                simX += simVx * simDt;
+                simY += simVy * simDt;
+                const spd = Math.sqrt(simVx * simVx + simVy * simVy);
+                if (spd < 3) break;
+                guidePoints.push({ x: simX, y: simY });
+            }
+            // Draw guide as fading dots
+            for (let i = 1; i < guidePoints.length; i++) {
+                const alpha = 0.5 * (1 - i / guidePoints.length);
+                ctx.fillStyle = `rgba(255,200,50,${alpha})`;
+                ctx.beginPath();
+                ctx.arc(guidePoints[i].x, guidePoints[i].y, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
     }
 
@@ -1061,8 +1175,110 @@ function drawPlaying() {
         ctx.textAlign = 'center';
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
         const willFly = club.launch > 0 && pct > club.airMin;
-        const shotLabel = club.name + ' \u2022 ' + (onGreen ? 'PUTT' : (willFly ? 'AIR' : 'ROLL')) + ' ' + Math.round(pct * 100) + '%';
+        const shotLabel = club.name + ' \u2022 ' + (willFly ? 'AIR' : 'ROLL') + ' ' + Math.round(pct * 100) + '%';
         ctx.fillText(shotLabel, W() / 2, my - 8);
+
+        // ---- Needle meter (swings while aiming) ----
+        if (needleActive) {
+            const ny = my + 22;
+            const nw = W() - 80;
+            const nx = 40;
+            const nh = 10;
+
+            // Track background
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            roundRect(nx - 4, ny - 4, nw + 8, nh + 8, 6);
+            ctx.fill();
+
+            // Color zones: green center, yellow sides, red edges
+            const third = nw / 3;
+            ctx.fillStyle = '#c33';
+            roundRect(nx, ny, nw, nh, 4);
+            ctx.fill();
+            ctx.fillStyle = '#cc8800';
+            roundRect(nx + third * 0.5, ny, nw - third, nh, 4);
+            ctx.fill();
+            ctx.fillStyle = '#2a7d2a';
+            roundRect(nx + third, ny, third, nh, 4);
+            ctx.fill();
+
+            // Center line
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(nx + nw / 2, ny - 2);
+            ctx.lineTo(nx + nw / 2, ny + nh + 2);
+            ctx.stroke();
+
+            // Needle indicator
+            const needleX = nx + (needlePos + 1) / 2 * nw;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(needleX, ny - 5);
+            ctx.lineTo(needleX - 4, ny - 1);
+            ctx.lineTo(needleX + 4, ny - 1);
+            ctx.fill();
+            ctx.fillRect(needleX - 1.5, ny, 3, nh);
+
+            // Label
+            ctx.fillStyle = '#aaa';
+            ctx.font = '10px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Release timing', W() / 2, ny + nh + 14);
+        }
+    }
+
+    // ---- Spin control (shown when not aiming, not moving, not putting) ----
+    if (!ball.moving && !aiming && !holeComplete && !flyoverActive && terrainAt(ball.x, ball.y) !== T.GREEN) {
+        const spX = W() - 60, spY = H() - 190, spR = 28;
+
+        // Background circle
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.beginPath();
+        ctx.arc(spX, spY, spR + 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ball outline
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(spX, spY, spR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Cross lines
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.beginPath();
+        ctx.moveTo(spX - spR, spY); ctx.lineTo(spX + spR, spY);
+        ctx.moveTo(spX, spY - spR); ctx.lineTo(spX, spY + spR);
+        ctx.stroke();
+
+        // Spin dot position
+        const dotX = spX + spin.side * spR * 0.8;
+        const dotY = spY - spin.top * spR * 0.8; // up = topspin
+        ctx.fillStyle = '#f44';
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Labels
+        ctx.fillStyle = '#888';
+        ctx.font = '9px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('TOP', spX, spY - spR - 8);
+        ctx.fillText('BACK', spX, spY + spR + 14);
+        ctx.textAlign = 'left';
+        ctx.fillText('L', spX - spR - 10, spY + 3);
+        ctx.textAlign = 'right';
+        ctx.fillText('R', spX + spR + 10, spY + 3);
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#aaa';
+        ctx.font = '10px -apple-system,sans-serif';
+        ctx.fillText('SPIN', spX, spY + spR + 26);
     }
 
     // Hint text
@@ -1379,6 +1595,12 @@ function gameLoop(time) {
             }
             camLerp(dt);
         } else {
+            // Update needle swing
+            if (needleActive) {
+                needlePos += needleDir * needleSpeed * dt * 2;
+                if (needlePos > 1) { needlePos = 1; needleDir = -1; }
+                if (needlePos < -1) { needlePos = -1; needleDir = 1; }
+            }
             updateBall(dt);
             camLerp(dt);
             if (holeComplete && !ball.moving) {
