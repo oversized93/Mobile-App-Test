@@ -283,9 +283,9 @@ function onBallStopped() {
     shotTrail = [];
     centerCamOnBall();
     autoSelectClub();
-    // Zoom in a bit more when on green
+    // Zoom in tight when on green for putting
     if (ter === T.GREEN) {
-        cam.targetZoom = Math.min(calcZoom() * 1.8, 5);
+        cam.targetZoom = Math.min(calcZoom() * 2.5, 6);
     } else {
         cam.targetZoom = calcZoom();
     }
@@ -329,11 +329,14 @@ function takeShot(power, dirX, dirY) {
     lastSafePos = { x: ball.x, y: ball.y };
     shotTrail = [];
     aiming = false;
+    putting = false;
 }
 
 // ---- Touch Handlers (Golf Clash aiming) ----
 let aimDirX = 0, aimDirY = 0, aimPower = 0;
 let dragStartWorldX = 0, dragStartWorldY = 0;
+let putting = false;
+let puttTargetX = 0, puttTargetY = 0;
 let builderTouchAction = null;
 let charColors = ['#fff','#f44','#ff9800','#ffeb3b','#4caf50','#2196f3','#9c27b0','#e91e63','#00bcd4','#000'];
 let charColorIdx = 0;
@@ -373,19 +376,35 @@ function onTouchStart(sx, sy) {
             if (sx < W() / 2 - 40) { cycleClub(-1); return; }
             if (sx > W() / 2 + 40) { cycleClub(1); return; }
         }
-        // Check if touching near the ball (screen coords) — start aiming
-        const bs = worldToScreen(ball.x, ball.y);
-        const dx = sx - bs.x, dy = sy - bs.y;
-        if (dx * dx + dy * dy < 80 * 80) {
+        // Putting mode: on the green, drag TARGET where you want ball to go
+        const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
+        if (onGreen && sy < H() - 140) {
+            putting = true;
             aiming = true;
             scouting = false;
-            aimStartX = sx; aimStartY = sy;
-            dragStartWorldX = ball.x; dragStartWorldY = ball.y;
-        } else if (sy < H() - 140) {
-            // Touch away from ball and UI — start scouting (pan camera)
-            scouting = true;
-            scoutCamX = cam.x;
-            scoutCamY = cam.y;
+            const wp = screenToWorld(sx, sy);
+            puttTargetX = wp.x;
+            puttTargetY = wp.y;
+            // Calculate direction + power from ball to target
+            const pdx = puttTargetX - ball.x, pdy = puttTargetY - ball.y;
+            const pdist = Math.sqrt(pdx * pdx + pdy * pdy);
+            aimDirX = pdx; aimDirY = pdy;
+            aimPower = Math.min(pdist * 1.2, CLUBS[selectedClub].maxPower);
+        } else if (!onGreen) {
+            // Normal shot: check if touching near the ball — drag back to aim
+            const bs = worldToScreen(ball.x, ball.y);
+            const dx = sx - bs.x, dy = sy - bs.y;
+            if (dx * dx + dy * dy < 80 * 80) {
+                aiming = true;
+                putting = false;
+                scouting = false;
+                aimStartX = sx; aimStartY = sy;
+                dragStartWorldX = ball.x; dragStartWorldY = ball.y;
+            } else if (sy < H() - 140) {
+                scouting = true;
+                scoutCamX = cam.x;
+                scoutCamY = cam.y;
+            }
         }
     }
 }
@@ -393,13 +412,24 @@ function onTouchStart(sx, sy) {
 function onTouchMove(sx, sy) {
     if (state === 'builder' && builderState.painting) { builderPaint(sx, sy); return; }
     if (state === 'playing' && aiming) {
-        const dx = sx - aimStartX;
-        const dy = sy - aimStartY;
-        const dragDist = Math.sqrt(dx * dx + dy * dy);
-        // Direction is OPPOSITE of drag (drag back to shoot forward)
-        aimDirX = -dx;
-        aimDirY = -dy;
-        aimPower = Math.min(dragDist * 3.5, CLUBS[selectedClub].maxPower);
+        if (putting) {
+            // Putting: drag the target position
+            const wp = screenToWorld(sx, sy);
+            puttTargetX = wp.x;
+            puttTargetY = wp.y;
+            const pdx = puttTargetX - ball.x, pdy = puttTargetY - ball.y;
+            const pdist = Math.sqrt(pdx * pdx + pdy * pdy);
+            aimDirX = pdx; aimDirY = pdy;
+            aimPower = Math.min(pdist * 1.2, CLUBS[selectedClub].maxPower);
+        } else {
+            // Normal shot: drag back from ball
+            const dx = sx - aimStartX;
+            const dy = sy - aimStartY;
+            const dragDist = Math.sqrt(dx * dx + dy * dy);
+            aimDirX = -dx;
+            aimDirY = -dy;
+            aimPower = Math.min(dragDist * 3.5, CLUBS[selectedClub].maxPower);
+        }
     }
     if (state === 'playing' && scouting) {
         // Pan camera by dragging
@@ -418,10 +448,11 @@ function onTouchEnd(sx, sy) {
         return;
     }
     if (state === 'playing' && aiming) {
-        if (aimPower > 15) {
+        if (aimPower > 8) {
             takeShot(aimPower, aimDirX, aimDirY);
         }
         aiming = false;
+        putting = false;
         aimPower = 0;
     }
 }
@@ -809,32 +840,80 @@ function drawPlaying() {
         ctx.setLineDash([]);
     }
 
-    // Aim line
-    if (aiming && aimPower > 10) {
+    // Aim line / Putt guide
+    if (aiming && aimPower > 5) {
         const len = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
         if (len > 0) {
             const nx = aimDirX / len, ny = aimDirY / len;
             const club = CLUBS[selectedClub];
-            const lineLen = (aimPower / club.maxPower) * club.maxYds * YDS_TO_WORLD;
 
-            // Dotted aim line
-            ctx.strokeStyle = 'rgba(255,255,100,0.7)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([4, 6]);
-            ctx.beginPath();
-            ctx.moveTo(ball.x, ball.y);
-            ctx.lineTo(ball.x + nx * lineLen, ball.y + ny * lineLen);
-            ctx.stroke();
-            ctx.setLineDash([]);
+            if (putting) {
+                // ---- PUTT GUIDE ----
+                // Solid guide line from ball to target
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(ball.x, ball.y);
+                ctx.lineTo(puttTargetX, puttTargetY);
+                ctx.stroke();
 
-            // Arrow head
-            const ax = ball.x + nx * lineLen, ay = ball.y + ny * lineLen;
-            ctx.fillStyle = 'rgba(255,255,100,0.8)';
-            ctx.beginPath();
-            ctx.moveTo(ax + nx * 6, ay + ny * 6);
-            ctx.lineTo(ax - ny * 4, ay + nx * 4);
-            ctx.lineTo(ax + ny * 4, ay - nx * 4);
-            ctx.fill();
+                // Distance dots along the line
+                const puttDist = Math.sqrt((puttTargetX - ball.x) ** 2 + (puttTargetY - ball.y) ** 2);
+                const dotSpacing = 12;
+                const numDots = Math.floor(puttDist / dotSpacing);
+                for (let i = 1; i <= numDots; i++) {
+                    const t = i / numDots;
+                    const dx = ball.x + (puttTargetX - ball.x) * t;
+                    const dy = ball.y + (puttTargetY - ball.y) * t;
+                    ctx.fillStyle = `rgba(255,255,255,${0.3 + t * 0.4})`;
+                    ctx.beginPath();
+                    ctx.arc(dx, dy, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Target circle
+                ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(puttTargetX, puttTargetY, 6, 0, Math.PI * 2);
+                ctx.stroke();
+                // Target cross
+                ctx.beginPath();
+                ctx.moveTo(puttTargetX - 4, puttTargetY);
+                ctx.lineTo(puttTargetX + 4, puttTargetY);
+                ctx.moveTo(puttTargetX, puttTargetY - 4);
+                ctx.lineTo(puttTargetX, puttTargetY + 4);
+                ctx.stroke();
+
+                // Putt distance in feet (shorter scale for putting)
+                const puttFeet = Math.round(puttDist / 1.5);
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                ctx.font = 'bold 8px -apple-system,sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(puttFeet + ' ft', puttTargetX, puttTargetY - 12);
+            } else {
+                // ---- NORMAL AIM LINE ----
+                const lineLen = (aimPower / club.maxPower) * club.maxYds * YDS_TO_WORLD;
+
+                // Dotted aim line
+                ctx.strokeStyle = 'rgba(255,255,100,0.7)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 6]);
+                ctx.beginPath();
+                ctx.moveTo(ball.x, ball.y);
+                ctx.lineTo(ball.x + nx * lineLen, ball.y + ny * lineLen);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Arrow head
+                const ax = ball.x + nx * lineLen, ay = ball.y + ny * lineLen;
+                ctx.fillStyle = 'rgba(255,255,100,0.8)';
+                ctx.beginPath();
+                ctx.moveTo(ax + nx * 6, ay + ny * 6);
+                ctx.lineTo(ax - ny * 4, ay + nx * 4);
+                ctx.lineTo(ax + ny * 4, ay - nx * 4);
+                ctx.fill();
+            }
         }
     }
 
@@ -963,8 +1042,8 @@ function drawPlaying() {
         }
     }
 
-    // Power meter (when aiming)
-    if (aiming && aimPower > 10) {
+    // Power meter (when aiming, NOT putting — putts use the guide line instead)
+    if (aiming && !putting && aimPower > 10) {
         const club = CLUBS[selectedClub];
         const meterW = W() - 40;
         const meterH = 12;
@@ -1007,7 +1086,12 @@ function drawPlaying() {
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.font = '12px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Arrows: change club \u2022 Drag ball: aim \u2022 Drag elsewhere: scout', W() / 2, H() - 24);
+        const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
+        if (onGreen) {
+            ctx.fillText('Drag to set putt target \u2022 Release to putt', W() / 2, H() - 24);
+        } else {
+            ctx.fillText('Arrows: change club \u2022 Drag ball: aim \u2022 Drag elsewhere: scout', W() / 2, H() - 24);
+        }
     }
 
     // Back button (small)
