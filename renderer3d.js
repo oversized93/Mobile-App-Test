@@ -305,9 +305,8 @@ function panCamera3D(dx, dy) {
     forward.crossVectors(new THREE.Vector3(0, 1, 0), right).normalize();
 
     const scale = camera3d.position.y * 0.004;
-    // Flip: dragging right moves camera left (natural pan)
-    const mx = (dx * right.x + dy * forward.x) * scale;
-    const mz = (dx * right.z + dy * forward.z) * scale;
+    const mx = (-dx * right.x + dy * forward.x) * scale;
+    const mz = (-dx * right.z + dy * forward.z) * scale;
     cam3dTarget.x += mx;
     cam3dTarget.z += mz;
     cam3dLookAt.x += mx;
