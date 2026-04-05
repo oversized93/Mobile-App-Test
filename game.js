@@ -807,6 +807,10 @@ function careerTouchStart(sx, sy) {
 
 // ---- Gameplay Drawing ----
 function drawPlaying() {
+    // Reset transform to prevent accumulation bugs
+    const d = window.devicePixelRatio || 1;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+
     ctx.fillStyle = '#1a472a';
     ctx.fillRect(0, 0, W(), H());
 
@@ -1036,6 +1040,9 @@ function drawPlaying() {
     }
 
     camRestore();
+    // Reset transform for HUD (screen space)
+    const dp = window.devicePixelRatio || 1;
+    ctx.setTransform(dp, 0, 0, dp, 0, 0);
 
     // ---- HUD overlay ----
     // Top bar
