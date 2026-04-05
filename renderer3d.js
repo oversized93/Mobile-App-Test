@@ -306,7 +306,7 @@ function getTerrainHeight(t) {
 // Three.js: x = horizontal, y = up, z = depth (into screen)
 function updateBall3D(wx, wy, wz, color) {
     if (!ballMesh) return;
-    ballMesh.position.set(wx, (wz || 0) * 0.15 + 1.2, wy);
+    ballMesh.position.set(wx, (wz || 0) * 0.25 + 1.2, wy);
     if (color) ballMesh.material.color.set(color);
 }
 

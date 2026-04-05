@@ -32,11 +32,11 @@ const SCORE_NAMES = {
 const YDS_TO_WORLD = 3;
 
 const CLUBS = [
-    { name: 'Driver',  maxPower: 500, launch: 320, airMin: 0.15, maxYds: 230 },
-    { name: '3 Wood',  maxPower: 420, launch: 280, airMin: 0.18, maxYds: 195 },
-    { name: '5 Iron',  maxPower: 340, launch: 240, airMin: 0.20, maxYds: 160 },
-    { name: '7 Iron',  maxPower: 260, launch: 210, airMin: 0.22, maxYds: 120 },
-    { name: 'P Wedge', maxPower: 180, launch: 260, airMin: 0.15, maxYds: 80  },
+    { name: 'Driver',  maxPower: 500, launch: 550, airMin: 0.15, maxYds: 230 },
+    { name: '3 Wood',  maxPower: 420, launch: 480, airMin: 0.18, maxYds: 195 },
+    { name: '5 Iron',  maxPower: 340, launch: 420, airMin: 0.20, maxYds: 160 },
+    { name: '7 Iron',  maxPower: 260, launch: 380, airMin: 0.22, maxYds: 120 },
+    { name: 'P Wedge', maxPower: 180, launch: 500, airMin: 0.15, maxYds: 80  },
     { name: 'Putter',  maxPower: 120, launch: 0,   airMin: 999,  maxYds: 40  }
 ];
 let selectedClub = 0;
