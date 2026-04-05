@@ -54,13 +54,58 @@ function init3D() {
     dirLight.shadow.camera.bottom = -300;
     scene3d.add(dirLight);
 
-    // Skybox (simple gradient)
-    const skyGeo = new THREE.SphereGeometry(2500, 32, 16);
+    // Skybox — gradient sky using vertex colors
+    const skyGeo = new THREE.SphereGeometry(2500, 32, 32);
+    const skyColors = [];
+    const posAttr = skyGeo.getAttribute('position');
+    for (let i = 0; i < posAttr.count; i++) {
+        const y = posAttr.getY(i);
+        const t = (y / 2500 + 1) / 2; // 0 = bottom, 1 = top
+        if (t > 0.55) {
+            // Upper sky: deep blue to light blue
+            const p = (t - 0.55) / 0.45;
+            skyColors.push(0.35 + p * 0.2, 0.55 + p * 0.25, 0.85 + p * 0.1);
+        } else if (t > 0.45) {
+            // Horizon: warm white/light yellow
+            const p = (t - 0.45) / 0.1;
+            skyColors.push(0.95 - p * 0.6, 0.92 - p * 0.37, 0.85 - p * 0.0);
+        } else {
+            // Below horizon: hazy green (matches ground fog)
+            const p = t / 0.45;
+            skyColors.push(0.1 + p * 0.85, 0.28 + p * 0.64, 0.17 + p * 0.68);
+        }
+    }
+    skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyColors, 3));
     const skyMat = new THREE.MeshBasicMaterial({
-        color: 0x87ceeb,
+        vertexColors: true,
         side: THREE.BackSide
     });
     scene3d.add(new THREE.Mesh(skyGeo, skyMat));
+
+    // Add some clouds (flat planes in the sky)
+    for (let i = 0; i < 12; i++) {
+        const cloudGeo = new THREE.PlaneGeometry(
+            120 + Math.random() * 200,
+            40 + Math.random() * 60
+        );
+        const cloudMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.3 + Math.random() * 0.3,
+            side: THREE.DoubleSide
+        });
+        const cloud = new THREE.Mesh(cloudGeo, cloudMat);
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 600 + Math.random() * 1200;
+        cloud.position.set(
+            Math.cos(angle) * dist,
+            200 + Math.random() * 300,
+            Math.sin(angle) * dist
+        );
+        cloud.rotation.x = -Math.PI / 2;
+        cloud.rotation.z = Math.random() * Math.PI;
+        scene3d.add(cloud);
+    }
 
     // Groups
     terrainGroup = new THREE.Group();
@@ -167,7 +212,7 @@ function buildTerrain3D(hole) {
             // Trees — sparse placement (skip some for natural look)
             if (t === T.TREE) {
                 const treeHash = (c * 7 + r * 13) % 5;
-                if (treeHash < 2) { // only ~40% of tree cells get actual trees
+                if (treeHash < 4) { // ~80% of tree cells get trees
                     const sizeVar = 0.8 + ((c * 31 + r * 17) % 10) / 20; // 0.8 to 1.3
                     const trunkH = 12 * sizeVar;
                     const canopyR = 10 * sizeVar;
