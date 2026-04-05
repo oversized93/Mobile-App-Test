@@ -556,9 +556,9 @@ function onTouchStart(sx, sy) {
 
         // ---- Putting: drag back from ball ----
         if (onGreen) {
-            const bs = worldToScreen(ball.x, ball.y);
+            const bs = (scene3dReady && typeof worldToScreen3D === 'function') ? worldToScreen3D(ball.x, ball.y) : worldToScreen(ball.x, ball.y);
             const bdx = sx - bs.x, bdy = sy - bs.y;
-            if (bdx * bdx + bdy * bdy < 80 * 80) {
+            if (bdx * bdx + bdy * bdy < 90 * 90) {
                 aiming = true;
                 putting = true;
                 aimStartX = sx; aimStartY = sy;
@@ -571,15 +571,15 @@ function onTouchStart(sx, sy) {
             return;
         }
 
-        // ---- Target grab: check FIRST before buttons ----
+        // ---- Target grab: check if touch is near the target crosshair ----
         if (sy < H() - 140) {
             const ts = (scene3dReady && typeof worldToScreen3D === 'function') ? worldToScreen3D(targetX, targetY) : worldToScreen(targetX, targetY);
             const tdx = sx - ts.x, tdy = sy - ts.y;
-            const grabRadius = Math.max(60, 40 / Math.min(cam.zoom, 1));
+            const grabRadius = 45; // fixed screen-space radius
             if (tdx * tdx + tdy * tdy < grabRadius * grabRadius) {
                 draggingTarget = true;
                 aiming = true;
-                shotLocked = false; // unlock so we can re-aim freely
+                shotLocked = false;
                 return;
             }
         }
