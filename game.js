@@ -8,7 +8,7 @@ let player = loadData('player', { name: 'Golfer', ballColor: '#fff', unlocked: [
 let currentCourse = null;
 let currentHoleIdx = 0;
 let currentHole = null;
-let ball = { x: 0, y: 0, vx: 0, vy: 0, moving: false };
+let ball = { x: 0, y: 0, vx: 0, vy: 0, z: 0, vz: 0, moving: false, airborne: false };
 let strokes = 0;
 let holeStrokes = [];
 let aiming = false;
@@ -35,7 +35,7 @@ function startHole(hole) {
     currentHole = hole;
     ball.x = (hole.tee.x + 0.5) * CELL;
     ball.y = (hole.tee.y + 0.5) * CELL;
-    ball.vx = 0; ball.vy = 0; ball.moving = false;
+    ball.vx = 0; ball.vy = 0; ball.z = 0; ball.vz = 0; ball.moving = false; ball.airborne = false;
     strokes = 0;
     aiming = false;
     holeComplete = false;
@@ -77,11 +77,16 @@ function terrainAt(wx, wy) {
 }
 
 // ---- Ball physics update ----
+const GRAVITY = 400; // how fast ball comes back down
+
 function updateBall(dt) {
     if (!ball.moving) return;
     const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-    if (speed < 2) {
-        ball.vx = 0; ball.vy = 0; ball.moving = false;
+
+    // Ball has stopped rolling on ground
+    if (speed < 2 && !ball.airborne) {
+        ball.vx = 0; ball.vy = 0; ball.z = 0; ball.vz = 0;
+        ball.moving = false; ball.airborne = false;
         onBallStopped();
         return;
     }
@@ -93,14 +98,60 @@ function updateBall(dt) {
         if (shotTrail.length > 200) shotTrail.shift();
     }
 
-    // Move
+    // Move (sub-stepping for accuracy)
     const steps = Math.max(1, Math.ceil(speed * dt / 2));
     const stepDt = dt / steps;
     for (let i = 0; i < steps; i++) {
         ball.x += ball.vx * stepDt;
         ball.y += ball.vy * stepDt;
 
-        // Check terrain
+        // Airborne physics
+        if (ball.airborne) {
+            ball.z += ball.vz * stepDt;
+            ball.vz -= GRAVITY * stepDt;
+
+            // Light air drag
+            ball.vx *= Math.pow(0.998, stepDt * 60);
+            ball.vy *= Math.pow(0.998, stepDt * 60);
+
+            // Ball has landed
+            if (ball.z <= 0) {
+                ball.z = 0;
+                ball.vz = 0;
+                ball.airborne = false;
+
+                // Check what we landed on
+                const ter = terrainAt(ball.x, ball.y);
+                if (ter === T.WATER) {
+                    ball.vx = 0; ball.vy = 0; ball.moving = false;
+                    notify('Splash! +1 stroke');
+                    strokes++;
+                    resetBallToLastSafe();
+                    return;
+                }
+                if (ter === T.OOB) {
+                    ball.vx = 0; ball.vy = 0; ball.moving = false;
+                    notify('Out of bounds! +1 stroke');
+                    strokes++;
+                    resetBallToLastSafe();
+                    return;
+                }
+                if (ter === T.TREE) {
+                    // Hit tree canopy — drops straight down with heavy speed loss
+                    ball.vx *= 0.15;
+                    ball.vy *= 0.15;
+                    notify('Landed in trees!');
+                }
+
+                // Bounce: lose most speed on landing, keep some roll
+                ball.vx *= 0.55;
+                ball.vy *= 0.55;
+                // Don't check hole while landing — need to roll in
+            }
+            continue; // Skip ground checks while airborne
+        }
+
+        // ---- Ground physics ----
         const ter = terrainAt(ball.x, ball.y);
         const fric = TERRAIN_FRICTION[ter];
 
@@ -119,7 +170,6 @@ function updateBall(dt) {
             return;
         }
         if (ter === T.TREE) {
-            // Bounce back
             ball.vx *= -0.4;
             ball.vy *= -0.4;
             ball.x += ball.vx * stepDt * 3;
@@ -127,18 +177,19 @@ function updateBall(dt) {
             notify('Hit a tree!');
         }
 
-        // Apply friction
+        // Apply terrain friction
         ball.vx *= Math.pow(fric, stepDt * 60);
         ball.vy *= Math.pow(fric, stepDt * 60);
 
-        // Check if ball is in the hole
+        // Check if ball rolls into hole (only on ground)
         const hx = (currentHole.hole.x + 0.5) * CELL;
         const hy = (currentHole.hole.y + 0.5) * CELL;
         const dx = ball.x - hx, dy = ball.y - hy;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < 6 && speed < 200) {
             ball.x = hx; ball.y = hy;
-            ball.vx = 0; ball.vy = 0; ball.moving = false;
+            ball.vx = 0; ball.vy = 0; ball.z = 0; ball.vz = 0;
+            ball.moving = false; ball.airborne = false;
             onHoleComplete();
             return;
         }
@@ -189,6 +240,20 @@ function takeShot(power, dirX, dirY) {
     ball.vx = (dirX / len) * p;
     ball.vy = (dirY / len) * p;
     ball.moving = true;
+    ball.z = 0;
+    ball.vz = 0;
+    ball.airborne = false;
+
+    // Launch into air if NOT on the green and power > 30%
+    // On the green, shots are always putts (rolling only)
+    const ter = terrainAt(ball.x, ball.y);
+    const powerPct = p / maxPower;
+    if (ter !== T.GREEN && powerPct > 0.30) {
+        ball.airborne = true;
+        // Higher power = higher launch. Scales from 80 to 200
+        ball.vz = 80 + powerPct * 120;
+    }
+
     strokes++;
     lastSafePos = { x: ball.x, y: ball.y };
     shotTrail = [];
@@ -627,8 +692,21 @@ function drawPlaying() {
         }
     }
 
-    // Draw ball
-    drawBall(ball.x, ball.y, 4, player.ballColor);
+    // Draw ball (with air height visual)
+    if (ball.airborne && ball.z > 0) {
+        // Shadow on ground (gets smaller/fainter as ball goes higher)
+        const shadowAlpha = Math.max(0.08, 0.3 - ball.z / 400);
+        const shadowScale = Math.max(0.4, 1 - ball.z / 300);
+        ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
+        ctx.beginPath();
+        ctx.ellipse(ball.x, ball.y, 4 * shadowScale, 2.5 * shadowScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Ball drawn above its ground position
+        const visualHeight = ball.z * 0.15; // scale z to visual offset
+        drawBall(ball.x, ball.y - visualHeight, 4, player.ballColor);
+    } else {
+        drawBall(ball.x, ball.y, 4, player.ballColor);
+    }
 
     camRestore();
 
@@ -687,7 +765,11 @@ function drawPlaying() {
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 12px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.round(pct * 100) + '%', W() / 2, my - 8);
+        const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
+        const willFly = !onGreen && pct > 0.30;
+        const shotLabel = onGreen ? 'PUTT ' + Math.round(pct * 100) + '%' :
+            (willFly ? '\u2708\uFE0F AIR ' + Math.round(pct * 100) + '%' : 'ROLL ' + Math.round(pct * 100) + '%');
+        ctx.fillText(shotLabel, W() / 2, my - 8);
     }
 
     // Hint text when not moving
