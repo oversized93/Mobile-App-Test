@@ -70,7 +70,7 @@ function init3D() {
     scene3d.add(flagGroup);
 
     // Ball
-    const ballGeo = new THREE.SphereGeometry(3.5, 16, 16);
+    const ballGeo = new THREE.SphereGeometry(1.2, 16, 16);
     const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.1 });
     ballMesh = new THREE.Mesh(ballGeo, ballMat);
     ballMesh.castShadow = true;
@@ -86,13 +86,31 @@ function init3D() {
     targetMesh.visible = false;
     scene3d.add(targetMesh);
 
-    // Hole (dark circle on ground)
-    const holeGeo = new THREE.CircleGeometry(3, 32);
-    const holeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    // Hole — dark recessed circle with white rim
+    const holeGroup = new THREE.Group();
+    // White rim ring
+    const rimGeo = new THREE.RingGeometry(3.5, 4.5, 32);
+    const rimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+    rimMesh.rotation.x = -Math.PI / 2;
+    rimMesh.position.y = 0.25;
+    holeGroup.add(rimMesh);
+    // Dark hole interior
+    const holeGeo = new THREE.CircleGeometry(3.5, 32);
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
     holeMesh = new THREE.Mesh(holeGeo, holeMat);
     holeMesh.rotation.x = -Math.PI / 2;
-    holeMesh.position.y = 0.15;
-    scene3d.add(holeMesh);
+    holeMesh.position.y = 0.2;
+    holeGroup.add(holeMesh);
+    // Recessed cylinder for depth
+    const cupGeo = new THREE.CylinderGeometry(3.5, 3.5, 3, 32, 1, true);
+    const cupMat = new THREE.MeshStandardMaterial({ color: 0x111111, side: THREE.DoubleSide });
+    const cupMesh = new THREE.Mesh(cupGeo, cupMat);
+    cupMesh.position.y = -1.3;
+    holeGroup.add(cupMesh);
+    scene3d.add(holeGroup);
+    // Store ref for repositioning
+    holeMesh = holeGroup;
 
     window.addEventListener('resize', onResize3D);
     scene3dReady = true;
@@ -213,7 +231,7 @@ function buildTerrain3D(hole) {
     flagGroup.add(flag);
 
     // Position hole
-    holeMesh.position.set(flagX, 0.15, flagZ);
+    holeMesh.position.set(flagX, 0, flagZ);
 }
 
 function getTerrainHeight(t) {
@@ -232,7 +250,7 @@ function getTerrainHeight(t) {
 // Three.js: x = horizontal, y = up, z = depth (into screen)
 function updateBall3D(wx, wy, wz, color) {
     if (!ballMesh) return;
-    ballMesh.position.set(wx, (wz || 0) * 0.15 + 3.5, wy);
+    ballMesh.position.set(wx, (wz || 0) * 0.15 + 1.2, wy);
     if (color) ballMesh.material.color.set(color);
 }
 
