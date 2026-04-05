@@ -302,8 +302,22 @@ function initGame() {
     spawnInterval = 1.2;
     asteroidSpeed = 120;
     scoreAccum = 0;
+    asteroidAccum = 0;
+    starAccum = 0;
+    powerupAccum = 0;
     lastTime = null;
     state = 'playing';
+}
+
+function clearGameObjects() {
+    asteroids = [];
+    stars = [];
+    powerups = [];
+    particles = [];
+    floatingTexts = [];
+    asteroidAccum = 0;
+    starAccum = 0;
+    powerupAccum = 0;
 }
 
 // ---- Touch handling ----
@@ -311,18 +325,19 @@ canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     const t = e.touches[0];
     if (state === 'menu') {
-        // Check play button hit
+        // Tap anywhere on the play button area (generous hit zone)
         const bx = W() / 2, by = H() * 0.58;
-        if (Math.abs(t.clientX - bx) < 100 && Math.abs(t.clientY - by) < 30) {
+        if (Math.abs(t.clientX - bx) < 120 && Math.abs(t.clientY - by) < 40) {
             initGame();
             return;
         }
     } else if (state === 'over') {
         const bx = W() / 2;
-        if (Math.abs(t.clientX - bx) < 110 && Math.abs(t.clientY - H() * 0.55) < 28) {
+        if (Math.abs(t.clientX - bx) < 120 && Math.abs(t.clientY - H() * 0.55) < 40) {
             initGame(); return;
         }
-        if (Math.abs(t.clientX - bx) < 110 && Math.abs(t.clientY - H() * 0.65) < 28) {
+        if (Math.abs(t.clientX - bx) < 120 && Math.abs(t.clientY - H() * 0.65) < 40) {
+            clearGameObjects();
             state = 'menu'; return;
         }
     } else if (state === 'playing') {
