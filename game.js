@@ -2250,7 +2250,7 @@ function gameLoop(time) {
             }
         } else if (ball.moving) {
             manualZoom = false; // reset when ball moves
-            setCameraOverhead(ball.x, ball.y, 1.5);
+            setCameraOverhead(ball.x, ball.y, 0.5);
         } else if (!scouting && !manualZoom) {
             const zoomFactor = cam.targetZoom || 1;
             setCameraOverhead(ball.x, ball.y, zoomFactor * 0.5);
