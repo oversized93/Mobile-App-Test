@@ -204,7 +204,25 @@ function buildTerrain3D(hole) {
             const color = TERRAIN_COLORS[t] || '#1a3d1a';
             const height = getTerrainHeight(t);
 
-            const geo = new THREE.PlaneGeometry(cellSize + 0.5, cellSize + 0.5); // slight overlap to hide seams
+            // Water: only render the water surface, skip base terrain
+            if (t === T.WATER) {
+                const waterGeo = new THREE.PlaneGeometry(cellSize + 0.1, cellSize + 0.1);
+                const waterMat = new THREE.MeshStandardMaterial({
+                    color: 0x2288bb,
+                    transparent: true,
+                    opacity: 0.8,
+                    roughness: 0.1,
+                    metalness: 0.4
+                });
+                const waterMesh = new THREE.Mesh(waterGeo, waterMat);
+                waterMesh.rotation.x = -Math.PI / 2;
+                waterMesh.position.set((c + 0.5) * cellSize, -0.3, (r + 0.5) * cellSize);
+                waterMesh.receiveShadow = true;
+                terrainGroup.add(waterMesh);
+                continue; // skip normal terrain plane for water
+            }
+
+            const geo = new THREE.PlaneGeometry(cellSize + 0.1, cellSize + 0.1);
             const mat = new THREE.MeshStandardMaterial({
                 color: new THREE.Color(color),
                 roughness: 0.9,
@@ -246,22 +264,6 @@ function buildTerrain3D(hole) {
                 }
             }
 
-            // Water shimmer plane (slightly above water)
-            if (t === T.WATER) {
-                const waterGeo = new THREE.PlaneGeometry(cellSize, cellSize);
-                const waterMat = new THREE.MeshStandardMaterial({
-                    color: 0x3399cc,
-                    transparent: true,
-                    opacity: 0.7,
-                    roughness: 0.1,
-                    metalness: 0.3
-                });
-                const waterMesh = new THREE.Mesh(waterGeo, waterMat);
-                waterMesh.rotation.x = -Math.PI / 2;
-                waterMesh.position.set((c + 0.5) * cellSize, height + 0.3, (r + 0.5) * cellSize);
-                terrainGroup.add(waterMesh);
-            }
-
             // Sand: slightly raised bumpy look
             if (t === T.SAND) {
                 mesh.position.y = height - 0.3;
@@ -291,12 +293,13 @@ function buildTerrain3D(hole) {
 }
 
 function getTerrainHeight(t) {
+    // Flatten most terrain to avoid overlap glitches between adjacent cells
     switch (t) {
-        case T.WATER: return -1.5;
-        case T.SAND: return -0.3;
-        case T.GREEN: return 0.2;
-        case T.TEE: return 0.3;
-        case T.OOB: return -0.5;
+        case T.WATER: return -0.3; // handled separately, this is fallback
+        case T.SAND: return -0.1;
+        case T.GREEN: return 0.05;
+        case T.TEE: return 0.05;
+        case T.OOB: return -0.2;
         default: return 0;
     }
 }
