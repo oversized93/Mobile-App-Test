@@ -442,8 +442,10 @@ function takeShot(power, dirX, dirY) {
         ball.vz = club.launch * powerPct;
         // airTime = 2 * vz / GRAVITY
         const airTime = 2 * ball.vz / GRAVITY;
-        // velocity needed to cover 85% of target distance in that air time
-        velocity = (targetDist * 0.85) / Math.max(airTime, 0.1);
+        // Compensate for air drag: drag = 0.998^(t*60), average over flight ≈ (1 + dragEnd) / 2
+        const dragEnd = Math.pow(0.998, airTime * 60);
+        const avgDragFactor = (1 + dragEnd) / 2; // average velocity retention
+        velocity = (targetDist * 0.85) / Math.max(airTime * avgDragFactor, 0.1);
     } else {
         // Ground shot (putt or low power) — velocity for rolling the full distance
         velocity = targetDist * 2.5; // friction will eat most of this
