@@ -376,13 +376,17 @@ let dragStartWorldX = 0, dragStartWorldY = 0;
 let putting = false;
 let puttTargetX = 0, puttTargetY = 0;
 
-// ---- Shot needle system ----
+// ---- Two-step shot system ----
+// Step 1: aiming (drag to set direction + power)
+// Step 2: shotLocked (aim is saved, adjust spin, tap SHOOT)
+// Step 3: needleActive (drag back to swing needle, release to fire)
+let shotLocked = false;
+let lockedPower = 0, lockedDirX = 0, lockedDirY = 0;
+
 let needleActive = false;
 let needlePos = 0;       // -1 to 1, 0 = perfect center
-let needleSpeed = 3.5;   // swings per second (higher = harder)
+let needleSpeed = 3.5;
 let needleDir = 1;
-let pendingPower = 0;
-let pendingDirX = 0, pendingDirY = 0;
 
 // ---- Ball spin system ----
 let spin = { top: 0, side: 0 }; // -1 to 1 each. top: -1=backspin, 1=topspin. side: -1=left, 1=right
@@ -421,15 +425,57 @@ function onTouchStart(sx, sy) {
             return;
         }
         if (ball.moving || holeComplete) return;
-        // Club switching arrows (tap left/right side of club bar)
+        const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
+
+        // ---- Step 3: Needle mode — drag back to swing, release to fire ----
+        if (needleActive) {
+            // Touch starts the needle drag (needle already swinging)
+            aimStartX = sx; aimStartY = sy;
+            return;
+        }
+
+        // ---- Step 2: Shot locked — SHOOT button, spin, or cancel ----
+        if (shotLocked) {
+            // SHOOT button
+            const shootBtnW = 160, shootBtnH = 50;
+            const shootBtnX = (W() - shootBtnW) / 2, shootBtnY = H() - 185;
+            if (hitBtn(sx, sy, shootBtnX, shootBtnY, shootBtnW, shootBtnH)) {
+                needleActive = true;
+                needlePos = 0;
+                needleDir = 1;
+                needleSpeed = 2.5 + (CLUBS[selectedClub].maxPower / 500) * 2.0;
+                return;
+            }
+            // Cancel button
+            const cancelW = 80, cancelH = 36;
+            const cancelX = (W() - cancelW) / 2, cancelY = shootBtnY + shootBtnH + 10;
+            if (hitBtn(sx, sy, cancelX, cancelY, cancelW, cancelH)) {
+                shotLocked = false;
+                return;
+            }
+            // Spin control still works during locked
+            if (!onGreen) {
+                const spX = W() - 60, spY = H() - 290, spR = 28;
+                const sdx = sx - spX, sdy = sy - spY;
+                if (sdx * sdx + sdy * sdy < (spR + 10) * (spR + 10)) {
+                    spinAdjusting = true;
+                    spin.side = Math.max(-1, Math.min(1, sdx / (spR * 0.8)));
+                    spin.top = Math.max(-1, Math.min(1, -sdy / (spR * 0.8)));
+                    return;
+                }
+            }
+            return;
+        }
+
+        // ---- Step 1: Normal — aim, club select, spin, scout ----
+        // Club switching
         const clubY = H() - 120;
         if (sy >= clubY && sy <= clubY + 36) {
             if (sx < W() / 2 - 40) { cycleClub(-1); return; }
             if (sx > W() / 2 + 40) { cycleClub(1); return; }
         }
-        const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
-        // Spin control touch
-        if (!onGreen && !ball.moving && !holeComplete && !flyoverActive) {
+        // Spin control
+        if (!onGreen && !flyoverActive) {
             const spX = W() - 60, spY = H() - 190, spR = 28;
             const sdx = sx - spX, sdy = sy - spY;
             if (sdx * sdx + sdy * sdy < (spR + 10) * (spR + 10)) {
@@ -439,7 +485,7 @@ function onTouchStart(sx, sy) {
                 return;
             }
         }
-        // Check if touching near the ball (screen coords) — start aiming
+        // Drag near ball to aim
         const bs = worldToScreen(ball.x, ball.y);
         const dx = sx - bs.x, dy = sy - bs.y;
         if (dx * dx + dy * dy < 80 * 80) {
@@ -448,15 +494,7 @@ function onTouchStart(sx, sy) {
             scouting = false;
             aimStartX = sx; aimStartY = sy;
             dragStartWorldX = ball.x; dragStartWorldY = ball.y;
-            // Start needle swinging for non-putt shots
-            if (!onGreen) {
-                needleActive = true;
-                needlePos = 0;
-                needleDir = 1;
-                needleSpeed = 2.5 + (CLUBS[selectedClub].maxPower / 500) * 2.0;
-            }
         } else if (sy < H() - 140) {
-            // Touch away from ball and UI — start scouting (pan camera)
             scouting = true;
             scoutCamX = cam.x;
             scoutCamY = cam.y;
@@ -467,7 +505,7 @@ function onTouchStart(sx, sy) {
 function onTouchMove(sx, sy) {
     if (state === 'builder' && builderState.painting) { builderPaint(sx, sy); return; }
     if (state === 'playing' && spinAdjusting) {
-        const spX = W() - 60, spY = H() - 190, spR = 28;
+        const spX = W() - 60, spY = shotLocked ? H() - 290 : H() - 190, spR = 28;
         spin.side = Math.max(-1, Math.min(1, (sx - spX) / (spR * 0.8)));
         spin.top = Math.max(-1, Math.min(1, -(sy - spY) / (spR * 0.8)));
         return;
@@ -510,19 +548,28 @@ function onTouchEnd(sx, sy) {
         scouting = false;
         return;
     }
+    if (state === 'playing' && needleActive) {
+        // Step 3: release during needle → fire with accuracy
+        const accuracy = needlePos;
+        fireWithNeedle(lockedPower, lockedDirX, lockedDirY, accuracy);
+        needleActive = false;
+        shotLocked = false;
+        return;
+    }
     if (state === 'playing' && aiming) {
         if (aimPower > 8) {
             if (putting) {
-                // Putts skip the needle — just shoot
+                // Putts skip everything — just shoot
                 takeShot(aimPower, aimDirX, aimDirY);
             } else {
-                // Release fires with needle accuracy applied
-                const accuracy = needlePos; // -1 to 1, 0 = perfect
-                fireWithNeedle(aimPower, aimDirX, aimDirY, accuracy);
+                // Step 1 → Step 2: lock the aim, show SHOOT button
+                lockedPower = aimPower;
+                lockedDirX = aimDirX;
+                lockedDirY = aimDirY;
+                shotLocked = true;
             }
         }
         aiming = false;
-        needleActive = false;
         putting = false;
         aimPower = 0;
     }
@@ -873,15 +920,16 @@ function drawPlaying() {
         ctx.setLineDash([]);
     }
 
-    // Landing zone indicator (when aiming)
-    if (aiming && aimPower > 10) {
+    // Landing zone indicator (when aiming, shot locked, or needle)
+    const showAimPower = (aiming && aimPower > 10) ? aimPower : (shotLocked || needleActive) ? lockedPower : 0;
+    const showAimDirX = (aiming && aimPower > 10) ? aimDirX : lockedDirX;
+    const showAimDirY = (aiming && aimPower > 10) ? aimDirY : lockedDirY;
+    if (showAimPower > 10) {
         const club = CLUBS[selectedClub];
-        const len = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
+        const len = Math.sqrt(showAimDirX * showAimDirX + showAimDirY * showAimDirY);
         if (len > 0) {
-            const nx = aimDirX / len, ny = aimDirY / len;
-            // Estimate landing spot — scale power to match the distance ring
-            const landDist = (aimPower / club.maxPower) * club.maxYds * YDS_TO_WORLD;
-            // Landing zone does NOT account for wind — player must adjust aim manually
+            const nx = showAimDirX / len, ny = showAimDirY / len;
+            const landDist = (showAimPower / club.maxPower) * club.maxYds * YDS_TO_WORLD;
             const landX = ball.x + nx * landDist;
             const landY = ball.y + ny * landDist;
 
@@ -901,13 +949,11 @@ function drawPlaying() {
             ctx.fill();
 
             // ---- Ball guide: simulate roll after landing ----
-            const club = CLUBS[selectedClub];
-            const pct = Math.min(aimPower / club.maxPower, 1);
-            // Simulate: ball lands at landX/landY with reduced velocity
+            const pct = Math.min(showAimPower / club.maxPower, 1);
             const topSpinMult = spin.top || 0;
             const simRollFactor = 0.3 + topSpinMult * 0.2;
-            let simVx = nx * aimPower * simRollFactor;
-            let simVy = ny * aimPower * simRollFactor;
+            let simVx = nx * showAimPower * simRollFactor;
+            let simVy = ny * showAimPower * simRollFactor;
             let simX = landX, simY = landY;
             const guidePoints = [{ x: simX, y: simY }];
             const simDt = 0.03;
@@ -946,11 +992,15 @@ function drawPlaying() {
         ctx.setLineDash([]);
     }
 
-    // Aim line / Putt guide
-    if (aiming && aimPower > 5) {
-        const len = Math.sqrt(aimDirX * aimDirX + aimDirY * aimDirY);
+    // Aim line / Putt guide (visible during aim, locked, or needle)
+    const aimVis = (aiming && aimPower > 5) || shotLocked || needleActive;
+    const visAimDirX = (aiming && aimPower > 5) ? aimDirX : lockedDirX;
+    const visAimDirY = (aiming && aimPower > 5) ? aimDirY : lockedDirY;
+    const visAimPower = (aiming && aimPower > 5) ? aimPower : lockedPower;
+    if (aimVis && (visAimPower > 5 || putting)) {
+        const len = Math.sqrt(visAimDirX * visAimDirX + visAimDirY * visAimDirY);
         if (len > 0) {
-            const nx = aimDirX / len, ny = aimDirY / len;
+            const nx = visAimDirX / len, ny = visAimDirY / len;
             const club = CLUBS[selectedClub];
 
             if (putting) {
@@ -999,7 +1049,7 @@ function drawPlaying() {
                 ctx.fillText(puttFeet + ' ft', puttTargetX, puttTargetY - 12);
             } else {
                 // ---- NORMAL AIM LINE ----
-                const lineLen = (aimPower / club.maxPower) * club.maxYds * YDS_TO_WORLD;
+                const lineLen = (visAimPower / club.maxPower) * club.maxYds * YDS_TO_WORLD;
 
                 // Dotted aim line
                 ctx.strokeStyle = 'rgba(255,255,100,0.7)';
@@ -1110,8 +1160,8 @@ function drawPlaying() {
     ctx.textAlign = 'center';
     ctx.fillText(Math.round(wind.speed) + ' mph', wcx, wcy + wcr + 16);
 
-    // Club selector (always visible when ball is stopped)
-    if (!ball.moving && !holeComplete) {
+    // Club selector (visible when ball is stopped and NOT in locked/needle mode)
+    if (!ball.moving && !holeComplete && !shotLocked && !needleActive) {
         const club = CLUBS[selectedClub];
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
         const clubY = H() - 120;
@@ -1151,8 +1201,8 @@ function drawPlaying() {
         }
     }
 
-    // Power meter (when aiming, NOT putting — putts use the guide line instead)
-    if (aiming && !putting && aimPower > 10) {
+    // Power meter (when dragging to aim in Step 1)
+    if (aiming && !putting && aimPower > 10 && !needleActive) {
         const club = CLUBS[selectedClub];
         const meterW = W() - 40;
         const meterH = 12;
@@ -1184,65 +1234,84 @@ function drawPlaying() {
         const shotLabel = club.name + ' \u2022 ' + (willFly ? 'AIR' : 'ROLL') + ' ' + Math.round(pct * 100) + '%';
         ctx.fillText(shotLabel, W() / 2, my - 8);
 
-        // ---- Needle meter (swings while aiming) ----
-        if (needleActive) {
-            const ny = my + 26;
-            const nw = W() - 60;
-            const nx = 30;
-            const nh = 18;
-
-            // Track background
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            roundRect(nx - 6, ny - 6, nw + 12, nh + 12, 10);
-            ctx.fill();
-
-            // Color zones: red → yellow → green → yellow → red
-            const fifth = nw / 5;
-            ctx.fillStyle = '#c33';
-            roundRect(nx, ny, nw, nh, 6);
-            ctx.fill();
-            ctx.fillStyle = '#cc8800';
-            roundRect(nx + fifth * 0.7, ny, nw - fifth * 1.4, nh, 6);
-            ctx.fill();
-            ctx.fillStyle = '#2a7d2a';
-            roundRect(nx + fifth * 1.5, ny, nw - fifth * 3, nh, 6);
-            ctx.fill();
-
-            // Center line (target)
-            ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(nx + nw / 2, ny - 4);
-            ctx.lineTo(nx + nw / 2, ny + nh + 4);
-            ctx.stroke();
-
-            // Needle indicator (white triangle + line)
-            const needleX = nx + (needlePos + 1) / 2 * nw;
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.moveTo(needleX, ny - 8);
-            ctx.lineTo(needleX - 6, ny - 1);
-            ctx.lineTo(needleX + 6, ny - 1);
-            ctx.fill();
-            ctx.fillRect(needleX - 2, ny, 4, nh);
-            // Bottom triangle
-            ctx.beginPath();
-            ctx.moveTo(needleX, ny + nh + 8);
-            ctx.lineTo(needleX - 6, ny + nh + 1);
-            ctx.lineTo(needleX + 6, ny + nh + 1);
-            ctx.fill();
-
-            // Label
-            ctx.fillStyle = '#ccc';
-            ctx.font = 'bold 11px -apple-system,sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('RELEASE TIMING', W() / 2, ny + nh + 22);
-        }
     }
 
-    // ---- Spin control (shown when not aiming, not moving, not putting) ----
-    if (!ball.moving && !aiming && !holeComplete && !flyoverActive && terrainAt(ball.x, ball.y) !== T.GREEN) {
-        const spX = W() - 60, spY = H() - 190, spR = 28;
+    // ---- Step 2: Shot locked — show SHOOT + Cancel buttons ----
+    if (shotLocked && !needleActive) {
+        const shootBtnW = 160, shootBtnH = 50;
+        const shootBtnX = (W() - shootBtnW) / 2, shootBtnY = H() - 185;
+        drawBtn(shootBtnX, shootBtnY, shootBtnW, shootBtnH, 'SHOOT', '#e65100');
+
+        const cancelW = 80, cancelH = 36;
+        const cancelX = (W() - cancelW) / 2, cancelY = shootBtnY + shootBtnH + 10;
+        drawBtn(cancelX, cancelY, cancelW, cancelH, 'Cancel', '#555');
+
+        // Show locked aim info
+        const club = CLUBS[selectedClub];
+        const pct = Math.min(lockedPower / club.maxPower, 1);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(club.name + ' \u2022 ' + Math.round(pct * 100) + '% power', W() / 2, shootBtnY - 12);
+    }
+
+    // ---- Step 3: Needle meter (shown during needle mode) ----
+    if (needleActive) {
+        const ny = H() - 150;
+        const nw = W() - 60;
+        const nx = 30;
+        const nh = 18;
+
+        // Track background
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        roundRect(nx - 6, ny - 6, nw + 12, nh + 12, 10);
+        ctx.fill();
+
+        // Color zones
+        const fifth = nw / 5;
+        ctx.fillStyle = '#c33';
+        roundRect(nx, ny, nw, nh, 6);
+        ctx.fill();
+        ctx.fillStyle = '#cc8800';
+        roundRect(nx + fifth * 0.7, ny, nw - fifth * 1.4, nh, 6);
+        ctx.fill();
+        ctx.fillStyle = '#2a7d2a';
+        roundRect(nx + fifth * 1.5, ny, nw - fifth * 3, nh, 6);
+        ctx.fill();
+
+        // Center line
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(nx + nw / 2, ny - 4);
+        ctx.lineTo(nx + nw / 2, ny + nh + 4);
+        ctx.stroke();
+
+        // Needle indicator
+        const needleX = nx + (needlePos + 1) / 2 * nw;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(needleX, ny - 8);
+        ctx.lineTo(needleX - 6, ny - 1);
+        ctx.lineTo(needleX + 6, ny - 1);
+        ctx.fill();
+        ctx.fillRect(needleX - 2, ny, 4, nh);
+        ctx.beginPath();
+        ctx.moveTo(needleX, ny + nh + 8);
+        ctx.lineTo(needleX - 6, ny + nh + 1);
+        ctx.lineTo(needleX + 6, ny + nh + 1);
+        ctx.fill();
+
+        ctx.fillStyle = '#ccc';
+        ctx.font = 'bold 12px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('RELEASE TO SHOOT', W() / 2, ny + nh + 24);
+    }
+
+    // ---- Spin control (shown when not moving, not in needle mode) ----
+    const showSpin = !ball.moving && !holeComplete && !flyoverActive && !needleActive && terrainAt(ball.x, ball.y) !== T.GREEN;
+    if (showSpin) {
+        const spX = W() - 60, spY = shotLocked ? H() - 290 : H() - 190, spR = 28;
 
         // Background circle
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -1299,15 +1368,19 @@ function drawPlaying() {
         ctx.font = '14px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('Tap to skip', W() / 2, H() - 30);
-    } else if (!ball.moving && !aiming && !holeComplete) {
+    } else if (!ball.moving && !holeComplete) {
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.font = '12px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
-        if (onGreen) {
+        if (needleActive) {
+            // shown above needle meter already
+        } else if (shotLocked) {
+            ctx.fillText('Adjust spin \u2022 Tap SHOOT when ready', W() / 2, H() - 24);
+        } else if (onGreen) {
             ctx.fillText('Drag back from ball to putt \u2022 Release to putt', W() / 2, H() - 24);
-        } else {
-            ctx.fillText('Arrows: change club \u2022 Drag ball: aim \u2022 Drag elsewhere: scout', W() / 2, H() - 24);
+        } else if (!aiming) {
+            ctx.fillText('Drag ball: aim \u2022 Arrows: club \u2022 Drag elsewhere: scout', W() / 2, H() - 24);
         }
     }
 
