@@ -771,57 +771,114 @@ function onTouchEnd(sx, sy) {
 
 // ---- Menu Screen ----
 function drawMenu() {
-    ctx.fillStyle = '#1a472a';
+    // Rich gradient background
+    const bg = ctx.createLinearGradient(0, 0, 0, H());
+    bg.addColorStop(0, '#0d2818');
+    bg.addColorStop(0.5, '#1a472a');
+    bg.addColorStop(1, '#0a1f10');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W(), H());
 
-    // Decorative background
-    ctx.fillStyle = '#1e5230';
-    for (let i = 0; i < 6; i++) {
+    // Decorative pattern — subtle golf-themed circles
+    for (let i = 0; i < 20; i++) {
+        const px = ((i * 97 + 33) % W());
+        const py = ((i * 149 + 77) % (H() * 0.4));
+        const size = 15 + (i % 5) * 12;
+        ctx.strokeStyle = `rgba(255,255,255,${0.02 + (i % 3) * 0.01})`;
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(W() * (0.15 + i * 0.18), H() * 0.15, 30 + i * 5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(px, py + 40, size, 0, Math.PI * 2);
+        ctx.stroke();
     }
 
+    // Title area — large elegant text
+    ctx.textAlign = 'center';
+    // Title shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.font = '800 44px -apple-system,sans-serif';
+    ctx.fillText('GOLF TYCOON', W() / 2 + 2, H() * 0.16 + 2);
     // Title
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 38px -apple-system,sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('GOLF TYCOON', W() / 2, H() * 0.18);
+    ctx.fillText('GOLF TYCOON', W() / 2, H() * 0.16);
+    // Accent line under title
+    const lineW = 120;
+    const lineGrad = ctx.createLinearGradient(W() / 2 - lineW / 2, 0, W() / 2 + lineW / 2, 0);
+    lineGrad.addColorStop(0, 'rgba(76,175,80,0)');
+    lineGrad.addColorStop(0.5, 'rgba(76,175,80,0.8)');
+    lineGrad.addColorStop(1, 'rgba(76,175,80,0)');
+    ctx.strokeStyle = lineGrad;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W() / 2 - lineW / 2, H() * 0.16 + 12);
+    ctx.lineTo(W() / 2 + lineW / 2, H() * 0.16 + 12);
+    ctx.stroke();
 
-    ctx.fillStyle = '#8fbc8f';
-    ctx.font = '15px -apple-system,sans-serif';
-    ctx.fillText('Build courses. Play career. Be a legend.', W() / 2, H() * 0.18 + 30);
+    // Subtitle
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '300 15px -apple-system,sans-serif';
+    ctx.fillText('Build courses. Play career. Be a legend.', W() / 2, H() * 0.16 + 36);
 
-    // Golf ball icon
-    drawBall(W() / 2, H() * 0.32, 20, player.ballColor);
+    // Player card — glass panel
+    const pcW = 160, pcH = 80;
+    const pcX = (W() - pcW) / 2, pcY = H() * 0.26;
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    roundRect(pcX, pcY, pcW, pcH, 20);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    roundRect(pcX, pcY, pcW, pcH, 20);
+    ctx.stroke();
+    // Ball
+    drawBall(W() / 2, pcY + 30, 16, player.ballColor);
+    // Name
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '14px -apple-system,sans-serif';
+    ctx.fillText(player.name, W() / 2, pcY + 65);
 
-    // Player name
-    ctx.fillStyle = '#cde6cd';
-    ctx.font = '16px -apple-system,sans-serif';
-    ctx.fillText(player.name, W() / 2, H() * 0.32 + 36);
-
-    // Buttons
-    const bw = Math.min(W() - 60, 280);
+    // Menu buttons — modern gradient pills
+    const bw = Math.min(W() - 48, 300);
     const bx = (W() - bw) / 2;
-    const bh = 52;
-    const gap = 14;
+    const bh = 56;
+    const gap = 12;
     let by = H() * 0.44;
 
-    drawBtn(bx, by, bw, bh, 'Play Career', '#2e7d32'); by += bh + gap;
-    drawBtn(bx, by, bw, bh, 'Course Builder', '#1565c0'); by += bh + gap;
-    drawBtn(bx, by, bw, bh, 'Custom Courses', '#6a1b9a'); by += bh + gap;
-    drawBtn(bx, by, bw, bh, 'Character', '#e65100');
+    const menuBtns = [
+        { label: 'Play Career', icon: '\u26F3', colors: ['#2e7d32', '#1b5e20'] },
+        { label: 'Course Builder', icon: '\u{1F3D7}\uFE0F', colors: ['#1565c0', '#0d47a1'] },
+        { label: 'Custom Courses', icon: '\u{1F3CC}\uFE0F', colors: ['#6a1b9a', '#4a148c'] },
+        { label: 'Character', icon: '\u{1F464}', colors: ['#e65100', '#bf360c'] },
+    ];
 
-    // Version
-    ctx.fillStyle = '#4a6a4a';
+    for (const btn of menuBtns) {
+        const btnGrad = ctx.createLinearGradient(bx, by, bx + bw, by);
+        btnGrad.addColorStop(0, btn.colors[0]);
+        btnGrad.addColorStop(1, btn.colors[1]);
+        ctx.fillStyle = btnGrad;
+        roundRect(bx, by, bw, bh, bh / 2);
+        ctx.fill();
+        // Subtle top highlight
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.lineWidth = 1;
+        roundRect(bx, by, bw, bh, bh / 2);
+        ctx.stroke();
+        // Icon + label
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 18px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(btn.icon + '  ' + btn.label, W() / 2, by + bh / 2 + 6);
+        by += bh + gap;
+    }
+
+    // Version — subtle
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.font = '11px -apple-system,sans-serif';
-    ctx.fillText('v0.1 \u2022 WIP', W() / 2, H() - 20);
+    ctx.fillText('v0.1', W() / 2, H() - 20);
 }
 
 function menuTouchStart(sx, sy) {
-    const bw = Math.min(W() - 60, 280);
+    const bw = Math.min(W() - 48, 300);
     const bx = (W() - bw) / 2;
-    const bh = 52, gap = 14;
+    const bh = 56, gap = 12;
     let by = H() * 0.44;
 
     if (hitBtn(sx, sy, bx, by, bw, bh)) { state = 'career'; return; } by += bh + gap;
