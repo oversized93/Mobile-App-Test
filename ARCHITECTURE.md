@@ -1,144 +1,134 @@
 # Golf Tycoon — Architecture
 
 ## Overview
-A mobile-first browser golf game combining Golf Clash-style gameplay with RollerCoaster Tycoon-style course building. Hybrid rendering: **Three.js 3D** for gameplay, **2D Canvas** for menus, builder, and HUD overlays.
+A mobile-first browser golf game combining Golf Clash-style gameplay with RollerCoaster Tycoon-style course building. **Hybrid rendering**: Three.js 3D for gameplay, 2D Canvas for menus/builder/HUD overlays.
 
 ## File Structure
 
 ```
-index.html      — Entry point. Dual canvas setup, loads Three.js CDN + all scripts.
-engine.js       — Core engine: 2D canvas, touch/mouse input, terrain constants, drawing helpers.
+index.html      — Dual canvas setup, loads Three.js CDN + all scripts.
+engine.js       — 2D canvas, touch/mouse input, terrain constants, drawing helpers.
 courses.js      — Pre-built career course data (9 holes across 3 courses).
-builder.js      — Course builder UI and logic (2D canvas — paint terrain, place tee/hole, save/load).
-renderer3d.js   — NEW: Three.js scene, 3D terrain/ball/flag, camera system, raycasting.
-game.js         — Game state, ball physics, shot mechanics, screens, and main loop.
+builder.js      — Course builder (2D canvas — paint terrain, place tee/hole, save/load).
+renderer3d.js   — Three.js scene, 3D terrain/ball/flag/trees, camera system, raycasting.
+game.js         — Game state, ball physics, shot mechanics, all screens, main loop.
 ```
 
 ## Rendering Architecture
 
 ### Dual Canvas System
-- **Three.js canvas** (`#three-canvas`): 3D gameplay rendering (terrain, ball, flag, trees, sky)
-- **2D Canvas** (`#c`): HUD overlay on top of 3D during gameplay; full rendering for menus/builder
-- Three.js canvas sits behind, 2D canvas is transparent during gameplay
-- `show3D()` / `hide3D()` toggle the 3D canvas visibility per state
+- **Three.js canvas** (`#three-canvas`): 3D gameplay (terrain, ball, flag, trees, water, sky)
+- **2D Canvas** (`#c`): transparent HUD overlay during gameplay; full render for menus/builder
+- Three.js loaded from CDN (r128)
 
-### What renders in 3D (renderer3d.js)
-- Terrain mesh: colored planes per grid cell with height variation per terrain type
-- Trees: cone (canopy) + cylinder (trunk) with shadows
-- Water: semi-transparent reflective planes
-- Ball: sphere with standard material, shadows
-- Flag: pole (cylinder) + flag (plane)
-- Hole: dark circle on ground
-- Target: ring mesh on ground (yellow)
-- Skybox: large sphere with sky blue color
-- Lighting: ambient + directional with shadow maps
+### 3D Scene (renderer3d.js)
+- **Terrain**: colored PlaneGeometry per grid cell with slight height variation
+- **Water**: teal reflective ground plane (0x1a7a8a) extending beyond course — course appears surrounded by ocean
+- **Trees**: cone canopy + cylinder trunk, ~80% density on TREE cells, size variation
+- **Ball**: small sphere (1.2 radius) with shadows
+- **Flag**: tall pole (35u) + red flag plane
+- **Hole**: white rim ring + dark interior + recessed cylinder for depth, depthWrite disabled to prevent z-fighting
+- **Skybox**: vertex-colored sphere — blue-grey top, bright horizon haze, teal bottom matching water
+- **Clouds**: 12 scattered white planes at varying heights
+- **Lighting**: ambient (0.6) + directional (0.8) with shadow maps (1024x1024)
+- **Fog**: teal (1500-3000) blending terrain into water/sky
 
-### What renders in 2D (game.js HUD overlay)
-- Aim line (cyan, projected via `worldToScreen3D`)
-- Target crosshair + accuracy rings (projected)
-- Distance ring (projected)
-- Putt guide line (glowing cyan with arrow, projected)
-- Top bar (hole name, par, strokes, terrain)
-- Club selector bar
-- Wind compass
-- Spin control ball
-- TAKE SHOT / Cancel buttons
-- Accuracy fan arc
-- Zoom/rotate/recenter buttons
-- Notifications
+### Camera System (renderer3d.js)
+PerspectiveCamera (FOV 60°, near 1, far 5000):
+- **Overhead**: for aiming/planning. Height based on zoom level.
+- **Behind-ball** (low angle): for accuracy meter and putting. Camera at ground level (height = dist * 0.22) looking past ball toward target. Creates dramatic over-the-shoulder feel.
+- **Follow**: tracks ball during flight at moderate height.
+- **Scouting**: auto-positioning skipped when `scouting=true` or `manualZoom=true`, allowing free pan. `cam3dSkipLerp` prevents lerp from fighting user input.
 
-## Script Load Order
-1. `three.min.js` (CDN r128) — Three.js library
-2. `engine.js` — 2D canvas, input, terrain constants
-3. `courses.js` — terrain grid data
-4. `builder.js` — course builder (2D only)
-5. `renderer3d.js` — Three.js scene setup, camera, raycasting
-6. `game.js` — game logic, calls into renderer3d for 3D, engine for 2D
+### 3D ↔ 2D Coordinate Conversion
+- `screenToWorld3D(sx, sy)`: raycast to ground plane (y=0). Returns `{x, y, behind}`.
+- `worldToScreen3D(wx, wy)`: project world to screen. Returns `{x, y, behind}` — behind flag prevents inverted rendering when point is behind camera.
+- `panCamera3D(dx, dy)`: immediate camera movement using camera's right/forward vectors.
+- `orbitCamera3D(angle, cx, cz)`: rotate camera around a point.
 
-## Key Systems
+## Game Systems
 
-### Terrain (engine.js + renderer3d.js)
-Grid-based terrain with 10 types. Each cell is `CELL` (16px) in world space.
-- 2D: flat colored rectangles with friction values
-- 3D: `PlaneGeometry` per cell, positioned at terrain-specific heights:
-  - Water: -1.5, Sand: -0.3, Green: +0.2, Tee: +0.3, OOB: -0.5, default: 0
-- Trees rendered as 3D cone+cylinder on TREE cells
-- Water gets extra semi-transparent plane for reflective look
-
-### 3D Camera System (renderer3d.js)
-`PerspectiveCamera` with smooth lerp transitions between modes:
-
-**Overhead** (`setCameraOverhead`): looks down at an angle for aiming/planning. Height based on zoom level. Used when ball is stopped and not on green.
-
-**Behind-ball** (`setCameraBehindBall`): positioned behind the ball looking toward the target/hole. Used for:
-- Accuracy meter (full shots)
-- Putting (on green, looking toward hole)
-
-**Follow** (`setCameraOverhead` with ball tracking): follows ball during flight.
-
-**Scouting override**: when `scouting=true`, auto-positioning is skipped so `panCamera3D` can move the camera freely. `cam3dSkipLerp` prevents the lerp from fighting user panning.
-
-Camera properties: FOV 60°, near 1, far 5000. Fog 1500-3000. Skybox radius 2500.
-
-### 3D ↔ 2D Coordinate Conversion (renderer3d.js)
-- `screenToWorld3D(sx, sy)`: raycast from screen point to ground plane (y=0), returns world {x, y}
-- `worldToScreen3D(wx, wy)`: project world point to screen via camera, returns screen {x, y}
-- `panCamera3D(dx, dy)`: translate screen drag delta to 3D camera movement using camera's right/forward vectors. Moves both target and position immediately to prevent shakiness.
-- `zoomCamera3D(factor)`: adjust camera height
-
-### Ball Physics (game.js)
-- Position + velocity model with per-terrain friction
-- **Airborne system**: velocity calculated from physics so flight distance matches displayed club range
-- **Gravity**: constant `GRAVITY = 400`
-- **Curl**: continuous lateral force perpendicular to velocity during airborne flight
-- **Spin**: sidespin curves trajectory; topspin/backspin affects landing roll factor
-- Ball position synced to 3D via `updateBall3D(wx, wy, wz, color)` each frame
-
-### Shot Flow (game.js) — Golf Clash Style
+### Shot Flow (Golf Clash Style)
 
 **Step 1 — Aim (overhead view):**
-- Target auto-placed toward hole at club max range
-- Drag target to re-aim (clamped to club range)
-- Drag elsewhere to pan 3D camera
-- Aim line, accuracy rings, distance ring shown as 2D overlay projected from 3D
-- Switch clubs, adjust spin
+- Target (animated concentric rings) auto-placed toward hole at club max range
+- Drag target to re-aim — clamped within club range
+- Drag anywhere else to pan 3D camera (persists after release)
+- Floating yardage pill ("257 YDS") above target
+- Aim line, ball guide dots visible
+- Switch clubs (left-side stack with up/down arrows)
+- Adjust spin (right-side control)
+- Release target → locks aim → TAKE SHOT bar appears
 
-**Step 2 — Confirm:**
-- TAKE SHOT + Cancel buttons
-- Can re-drag target or adjust spin
+**Step 2 — Confirm (overhead view):**
+- Slim bottom bar: TAKE SHOT (orange gradient) + Cancel (ghost)
+- Distance ring, accuracy rings hidden for clean view
+- Can re-drag target to adjust
 
 **Step 3 — Accuracy (behind-ball view):**
-- Camera auto-rotates behind ball looking toward target
-- Colored fan arc at bottom of screen (green center → yellow → red edges)
+- Camera auto-rotates behind ball at low dramatic angle
+- Colored fan arc at bottom: green center (33%) → yellow → red
 - Arrow sweeps across arc, tap to stop
-- Drag left/right for curl during sweep
+- Green zone = 0° deviation (perfect). Yellow = 0-5°. Red = 5-12°.
+- Drag left/right for curl (15px dead zone prevents accidental curl)
 - Camera restores after shot
 
 **Putts (behind-ball view):**
 - Camera auto-positions behind ball facing hole
 - Drag back from ball to aim + set power
-- Glowing cyan putt guide line (wide glow + thin core + arrow + distance in feet)
-- Direction converted from screen to world space via `screenToWorld3D` raycasting
+- Glowing cyan putt guide curves based on green slope simulation
 - Release to putt (no accuracy meter)
 
-### Club System (game.js)
-6 clubs: Driver (230 yds), 3 Wood (195), 5 Iron (160), 7 Iron (120), P Wedge (80), Putter (40).
+### Ball Physics (game.js)
+- Position + velocity with per-terrain friction
+- **Airborne**: velocity = `(targetDist * 0.85) / airTime` — no air drag, clean physics. A 230 yd driver with no wind travels exactly 230 yds.
+- **Gravity**: constant 400. Launch values: Driver 550, 3Wood 480, 5Iron 420, 7Iron 380, PWedge 500 (high arc).
+- **Landing**: roll factor = `0.3 + topSpin * 0.2` (backspin = 0.1, topspin = 0.5)
+- **Green slopes**: per-cell slope force with seeded variation pushes ball during ground rolling. Same forces used in putt guide simulation.
+- **Curl**: continuous lateral force perpendicular to velocity during flight
+- **Sidespin**: initial velocity offset perpendicular to aim direction
+- **Wind**: applied to initial velocity. Air shots affected 1.8x, ground 0.4x. NOT shown in aim guides.
 
-### Wind System (game.js)
-Random 1-13 mph per hole. Compass HUD. Affects ball physics but NOT shown in aim guides.
+### Club System
+| Club | Max Yds | Launch | Behavior |
+|------|---------|--------|----------|
+| Driver | 230 | 550 | Longest, high launch |
+| 3 Wood | 195 | 480 | Long fairway |
+| 5 Iron | 160 | 420 | Medium approach |
+| 7 Iron | 120 | 380 | Short, controlled |
+| P Wedge | 80 | 500 | Highest arc (lob) |
+| Putter | 40 | 0 | Ground only |
+
+Distance: `YDS_TO_WORLD = 3` (1 yard = 3 world units).
+
+### HUD (2D Canvas Overlay)
+Compact game-style layout:
+- **Top bar** (44px): dark pills — SHOTS counter (blue), HOLE + PAR boxes
+- **Wind** (left): compact pill with orange directional arrow + speed
+- **Club** (left): vertical stack with up/down arrows, club name + max yards
+- **Spin** (right): glass circle with glowing red draggable dot
+- **TAKE SHOT bar** (bottom): orange gradient button + ghost Cancel
+- **Camera controls** (left): circular glass buttons (+/−/↻/↺/◎)
+- **Aim guides**: cyan aim line, animated target rings, floating yardage pill, ball guide dots — all projected via `worldToScreen3D`
+- **Putt guide**: glowing cyan curved line with arrow + distance in feet
+
+### Screens
+All use dark gradient backgrounds with glassmorphism panels:
+- **Main Menu**: gradient bg, decorative circles, glass player card, gradient pill buttons with icons
+- **Character**: circle color swatches, pill name buttons, large ball preview with glow
+- **Career Select**: glass course cards with colored left accent, emoji icons, gold best-score pills, lock overlays
+- **Hole Complete**: vignette overlay, glass card, large colored score name, gradient button
+- **Round Complete**: glass scorecard panel, refined rows, gold/green unlock pills, gradient + ghost buttons
+- **Accuracy Arc**: 40-segment fan with outer glow, inner ring, glowing center line
 
 ### Course Builder (builder.js)
-Pure 2D canvas. Paint terrain, place tee/hole, save to localStorage, test-play.
+Pure 2D canvas. Paint terrain types, place tee/hole, adjustable brush size, save to localStorage, test-play directly.
 
 ### Persistence
-localStorage with `gt_` prefix: player data, custom courses, best scores.
+localStorage with `gt_` prefix: player data, custom courses, best scores per career course.
 
-## Current Status
-- [x] Three.js 3D rendering for gameplay (terrain, ball, flag, trees, water, sky, shadows)
-- [x] Dual canvas: 3D behind, 2D HUD overlay on top
-- [x] 3D camera: overhead, behind-ball, follow, scouting pan
-- [x] 3D raycasting for target drag and putt direction
-- [x] Projected aim guides (aim line, crosshair, rings, distance ring, putt guide)
-- [x] Behind-ball accuracy fan arc
-- [x] Behind-ball putting with glowing guide line
-- [x] All previous features (clubs, spin, curl, wind, career, builder, etc.)
+### Input System (engine.js)
+- **One-finger**: dispatched to game.js — target drag, camera pan, putt drag, button taps
+- **Two-finger**: handled in engine.js — pinch zoom (camera height), twist rotate (orbit), drag pan
+- Pinch also drives 3D camera via `zoomCamera3D`/`panCamera3D`
+- `cam3dSkipLerp` flag prevents lerp from fighting manual pan
