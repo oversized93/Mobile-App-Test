@@ -22,8 +22,8 @@ function hexToThreeColor(hex) {
 function init3D() {
     threeCanvas = document.getElementById('three-canvas');
     scene3d = new THREE.Scene();
-    scene3d.background = new THREE.Color('#1a472a');
-    scene3d.fog = new THREE.Fog('#1a472a', 1500, 3000);
+    scene3d.background = new THREE.Color('#1a7a8a');
+    scene3d.fog = new THREE.Fog('#1a7a8a', 1500, 3000);
 
     // Camera
     camera3d = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 5000);
@@ -61,18 +61,18 @@ function init3D() {
     for (let i = 0; i < posAttr.count; i++) {
         const y = posAttr.getY(i);
         const t = (y / 2500 + 1) / 2; // 0 = bottom, 1 = top
-        if (t > 0.55) {
-            // Upper sky: deep blue to light blue
-            const p = (t - 0.55) / 0.45;
-            skyColors.push(0.35 + p * 0.2, 0.55 + p * 0.25, 0.85 + p * 0.1);
-        } else if (t > 0.45) {
-            // Horizon: warm white/light yellow
-            const p = (t - 0.45) / 0.1;
-            skyColors.push(0.95 - p * 0.6, 0.92 - p * 0.37, 0.85 - p * 0.0);
+        if (t > 0.58) {
+            // Upper sky: soft blue-grey
+            const p = (t - 0.58) / 0.42;
+            skyColors.push(0.45 + p * 0.15, 0.58 + p * 0.18, 0.75 + p * 0.1);
+        } else if (t > 0.48) {
+            // Horizon: bright haze
+            const p = (t - 0.48) / 0.1;
+            skyColors.push(0.85 - p * 0.4, 0.88 - p * 0.3, 0.9 - p * 0.15);
         } else {
-            // Below horizon: hazy green (matches ground fog)
-            const p = t / 0.45;
-            skyColors.push(0.1 + p * 0.85, 0.28 + p * 0.64, 0.17 + p * 0.68);
+            // Below horizon: teal matching water
+            const p = t / 0.48;
+            skyColors.push(0.08 + p * 0.77, 0.35 + p * 0.53, 0.42 + p * 0.48);
         }
     }
     skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyColors, 3));
@@ -107,12 +107,18 @@ function init3D() {
         scene3d.add(cloud);
     }
 
-    // Ground plane extending beyond the course
+    // Water plane extending beyond the course (teal ocean)
     const groundGeo = new THREE.PlaneGeometry(5000, 5000);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e5230, roughness: 1 });
+    const groundMat = new THREE.MeshStandardMaterial({
+        color: 0x1a7a8a,
+        roughness: 0.2,
+        metalness: 0.3,
+        transparent: true,
+        opacity: 0.92
+    });
     const groundMesh = new THREE.Mesh(groundGeo, groundMat);
     groundMesh.rotation.x = -Math.PI / 2;
-    groundMesh.position.y = -0.5;
+    groundMesh.position.y = -1.0;
     groundMesh.receiveShadow = true;
     scene3d.add(groundMesh);
 
@@ -336,14 +342,16 @@ function setCameraBehindBall(bx, bz, targetX, targetZ, distance) {
     const len = Math.sqrt(dx * dx + dz * dz) || 1;
     const nx = dx / len, nz = dz / len;
     const dist = distance || 60;
-    const height = dist * 0.45;
+    // Low angle — closer to the ground for dramatic view
+    const height = Math.max(8, dist * 0.22);
 
     cam3dTarget.x = bx - nx * dist;
     cam3dTarget.y = height;
     cam3dTarget.z = bz - nz * dist;
-    cam3dLookAt.x = bx + nx * 60;
-    cam3dLookAt.y = 0;
-    cam3dLookAt.z = bz + nz * 60;
+    // Look past the ball toward the target
+    cam3dLookAt.x = bx + nx * 80;
+    cam3dLookAt.y = 2;
+    cam3dLookAt.z = bz + nz * 80;
 }
 
 let cam3dSkipLerp = false; // set true during panning to prevent fights

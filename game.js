@@ -633,11 +633,11 @@ function onTouchStart(sx, sy) {
                 return;
             }
         }
-        // Club switching (not when locked)
-        const clubY = H() - 120;
-        if (!shotLocked && sy >= clubY && sy <= clubY + 36) {
-            if (sx < W() / 2 - 40) { cycleClub(-1); updateTargetFromClub(); return; }
-            if (sx > W() / 2 + 40) { cycleClub(1); updateTargetFromClub(); return; }
+        // Club switching — left side stack (up/down arrows)
+        const csX = 6, csY = H() - 140;
+        if (!shotLocked && sx < 70) {
+            if (sy >= csY && sy <= csY + 28) { cycleClub(-1); updateTargetFromClub(); return; }
+            if (sy >= csY + 88 && sy <= csY + 116) { cycleClub(1); updateTargetFromClub(); return; }
         }
         // Spin control
         const spinY = shotLocked ? H() - 290 : H() - 190;
@@ -1529,24 +1529,57 @@ function drawPlaying() {
                     ctx.stroke();
                 }
 
-                // Target crosshair
-                ctx.strokeStyle = 'rgba(255,255,100,0.9)';
+                // Target — animated concentric rings (Golf Clash style)
+                const pulse = Math.sin(Date.now() / 300) * 0.15 + 1;
+                const pulse2 = Math.sin(Date.now() / 400 + 1) * 0.12 + 1;
+                // Outer rotating ring
+                ctx.save();
+                ctx.translate(ls.x, ls.y);
+                ctx.rotate(Date.now() / 2000);
+                ctx.strokeStyle = 'rgba(255,255,255,0.35)';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.arc(ls.x, ls.y, 16, 0, Math.PI * 2);
+                ctx.arc(0, 0, 24 * pulse, 0, Math.PI * 1.5);
                 ctx.stroke();
-                // Crosshair lines
+                ctx.restore();
+                // Middle ring
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.moveTo(ls.x - 22, ls.y); ctx.lineTo(ls.x - 8, ls.y);
-                ctx.moveTo(ls.x + 8, ls.y); ctx.lineTo(ls.x + 22, ls.y);
-                ctx.moveTo(ls.x, ls.y - 22); ctx.lineTo(ls.x, ls.y - 8);
-                ctx.moveTo(ls.x, ls.y + 8); ctx.lineTo(ls.x, ls.y + 22);
+                ctx.arc(ls.x, ls.y, 14 * pulse2, 0, Math.PI * 2);
+                ctx.stroke();
+                // Inner ring — bright
+                ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(ls.x, ls.y, 6, 0, Math.PI * 2);
                 ctx.stroke();
                 // Center dot
-                ctx.fillStyle = 'rgba(255,255,100,0.9)';
+                ctx.fillStyle = '#fff';
                 ctx.beginPath();
-                ctx.arc(ls.x, ls.y, 3, 0, Math.PI * 2);
+                ctx.arc(ls.x, ls.y, 2.5, 0, Math.PI * 2);
                 ctx.fill();
+                // Crosshair spokes (subtle, not touching center)
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(ls.x - 28, ls.y); ctx.lineTo(ls.x - 10, ls.y);
+                ctx.moveTo(ls.x + 10, ls.y); ctx.lineTo(ls.x + 28, ls.y);
+                ctx.moveTo(ls.x, ls.y - 28); ctx.lineTo(ls.x, ls.y - 10);
+                ctx.moveTo(ls.x, ls.y + 10); ctx.lineTo(ls.x, ls.y + 28);
+                ctx.stroke();
+
+                // Floating yardage pill near target
+                const ydsToTarget = Math.round(landDist / YDS_TO_WORLD);
+                const ydStr = ydsToTarget + ' YDS';
+                ctx.font = 'bold 12px -apple-system,sans-serif';
+                const ydW = ctx.measureText(ydStr).width + 16;
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                roundRect(ls.x - ydW / 2, ls.y - 46, ydW, 22, 11);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = 'center';
+                ctx.fillText(ydStr, ls.x, ls.y - 30);
 
                 // Accuracy rings + distance ring (only during aiming, not when locked)
                 if (!shotLocked && !meterActive) {
@@ -1724,165 +1757,121 @@ function drawPlaying() {
         }
     }
 
-    // ---- HUD overlay (modern glassmorphism style) ----
+    // ---- HUD overlay (compact, game-like) ----
 
-    // Top bar — frosted glass effect
-    const grad1 = ctx.createLinearGradient(0, 0, 0, 58);
-    grad1.addColorStop(0, 'rgba(0,0,0,0.75)');
-    grad1.addColorStop(1, 'rgba(0,0,0,0.4)');
-    ctx.fillStyle = grad1;
-    ctx.fillRect(0, 0, W(), 58);
-    // Subtle bottom border
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    // Top bar — compact dark strip
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W(), 44);
+
+    // Shots pill (left-center)
+    ctx.fillStyle = 'rgba(10,30,60,0.9)';
+    roundRect(W() / 2 - 70, 6, 80, 32, 6);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(100,160,255,0.4)';
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, 58); ctx.lineTo(W(), 58);
+    roundRect(W() / 2 - 70, 6, 80, 32, 6);
     ctx.stroke();
-
-    // Hole name (left)
     ctx.fillStyle = '#fff';
-    ctx.font = '600 16px -apple-system,sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(currentHole.name || ('Hole ' + (currentHoleIdx + 1)), 14, 24);
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = '12px -apple-system,sans-serif';
-    ctx.fillText('Par ' + currentHole.par, 14, 44);
-
-    // Stroke count (center) — pill badge
-    const strokeText = strokes === 0 ? 'TEE' : strokes.toString();
-    ctx.font = 'bold 22px -apple-system,sans-serif';
+    ctx.font = 'bold 14px -apple-system,sans-serif';
     ctx.textAlign = 'center';
-    const stW = ctx.measureText(strokeText).width + 28;
-    const stX = W() / 2 - stW / 2, stY = 10;
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    roundRect(stX, stY, stW, 34, 17);
+    ctx.fillText(strokes + ' SHOTS', W() / 2 - 30, 27);
+
+    // Hole + Par (right of shots)
+    ctx.fillStyle = 'rgba(40,40,40,0.9)';
+    roundRect(W() / 2 + 16, 6, 44, 32, 6);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 1;
-    roundRect(stX, stY, stW, 34, 17);
-    ctx.stroke();
+    ctx.fillStyle = 'rgba(40,40,40,0.9)';
+    roundRect(W() / 2 + 64, 6, 44, 32, 6);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '9px -apple-system,sans-serif';
+    ctx.fillText('HOLE', W() / 2 + 38, 17);
+    ctx.fillText('PAR', W() / 2 + 86, 17);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 20px -apple-system,sans-serif';
-    ctx.fillText(strokeText, W() / 2, 33);
+    ctx.font = 'bold 15px -apple-system,sans-serif';
+    ctx.fillText(String(currentHoleIdx + 1), W() / 2 + 38, 34);
+    ctx.fillText(String(currentHole.par), W() / 2 + 86, 34);
 
-    // Hole counter (right)
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = '12px -apple-system,sans-serif';
-    ctx.fillText('Hole ' + (currentHoleIdx + 1) + '/' + currentCourse.holes.length, W() - 14, 24);
-    const ter = terrainAt(ball.x, ball.y);
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.fillText(TERRAIN_NAMES[ter] || '', W() - 14, 44);
-
-    // ---- Wind compass (refined) ----
-    const wcx = W() - 38, wcy = 92, wcr = 22;
-    // Glass background
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.beginPath();
-    ctx.arc(wcx, wcy, wcr + 6, 0, Math.PI * 2);
+    // Wind (compact left side — arrow + number)
+    const wcx = 36, wcy = 76;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    roundRect(6, 58, 60, 38, 10);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(wcx, wcy, wcr + 6, 0, Math.PI * 2);
-    ctx.stroke();
-    // Inner ring
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.beginPath();
-    ctx.arc(wcx, wcy, wcr, 0, Math.PI * 2);
-    ctx.stroke();
-    // Cardinal dots
-    for (let i = 0; i < 4; i++) {
-        const ca = i * Math.PI / 2;
-        ctx.fillStyle = 'rgba(255,255,255,0.25)';
-        ctx.beginPath();
-        ctx.arc(wcx + Math.cos(ca) * (wcr - 2), wcy + Math.sin(ca) * (wcr - 2), 1.5, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    // Wind arrow — gradient from white to cyan
-    const arrowLen = Math.min(wind.speed / 13, 1) * (wcr - 4);
+    // Arrow
+    const arrowLen = 12;
     const wax = Math.cos(wind.angle) * arrowLen;
     const way = Math.sin(wind.angle) * arrowLen;
-    ctx.strokeStyle = '#4cf';
+    ctx.strokeStyle = '#ff8c00';
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(wcx - wax * 0.2, wcy - way * 0.2);
-    ctx.lineTo(wcx + wax, wcy + way);
+    ctx.moveTo(wcx - wax * 0.4, wcy - way * 0.4 - 4);
+    ctx.lineTo(wcx + wax * 0.8, wcy + way * 0.8 - 4);
     ctx.stroke();
     ctx.lineCap = 'butt';
-    // Arrow head
     const aAngle = Math.atan2(way, wax);
-    ctx.fillStyle = '#4cf';
+    ctx.fillStyle = '#ff8c00';
     ctx.beginPath();
-    ctx.moveTo(wcx + wax, wcy + way);
-    ctx.lineTo(wcx + wax - Math.cos(aAngle - 0.5) * 6, wcy + way - Math.sin(aAngle - 0.5) * 6);
-    ctx.lineTo(wcx + wax - Math.cos(aAngle + 0.5) * 6, wcy + way - Math.sin(aAngle + 0.5) * 6);
+    ctx.moveTo(wcx + wax * 0.8, wcy + way * 0.8 - 4);
+    ctx.lineTo(wcx + wax * 0.8 - Math.cos(aAngle - 0.6) * 5, wcy + way * 0.8 - 4 - Math.sin(aAngle - 0.6) * 5);
+    ctx.lineTo(wcx + wax * 0.8 - Math.cos(aAngle + 0.6) * 5, wcy + way * 0.8 - 4 - Math.sin(aAngle + 0.6) * 5);
     ctx.fill();
-    // Wind speed pill
-    const windStr = Math.round(wind.speed) + '';
+    // Speed
+    ctx.fillStyle = '#fff';
     ctx.font = 'bold 11px -apple-system,sans-serif';
-    const windW = ctx.measureText(windStr + ' mph').width + 12;
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    roundRect(wcx - windW / 2, wcy + wcr + 8, windW, 18, 9);
-    ctx.fill();
-    ctx.fillStyle = '#4cf';
     ctx.textAlign = 'center';
-    ctx.fillText(windStr + ' mph', wcx, wcy + wcr + 21);
+    ctx.fillText(Math.round(wind.speed * 10) / 10, wcx, wcy + 14);
 
-    // Club selector (visible when ball is stopped and NOT in locked/needle mode)
+    // Terrain (top left)
+    const ter = terrainAt(ball.x, ball.y);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(TERRAIN_NAMES[ter] || '', 10, 34);
+
+    // Club selector — compact left-side stack
     if (!ball.moving && !holeComplete && !shotLocked && !meterActive) {
         const club = CLUBS[selectedClub];
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
-        const clubY = H() - 120;
+        const csX = 6, csY = H() - 140;
 
-        // Club selector — modern glass bar
-        const cbW = W() - 24, cbH = 52, cbX = 12;
-        const cbGrad = ctx.createLinearGradient(0, clubY, 0, clubY + cbH);
-        cbGrad.addColorStop(0, 'rgba(0,0,0,0.65)');
-        cbGrad.addColorStop(1, 'rgba(0,0,0,0.45)');
-        ctx.fillStyle = cbGrad;
-        roundRect(cbX, clubY, cbW, cbH, 16);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 1;
-        roundRect(cbX, clubY, cbW, cbH, 16);
-        ctx.stroke();
-
-        // Left arrow (circle button)
+        // Up arrow
         if (!onGreen) {
-            ctx.fillStyle = 'rgba(255,255,255,0.1)';
-            ctx.beginPath();
-            ctx.arc(cbX + 28, clubY + cbH / 2, 16, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            roundRect(csX, csY, 58, 28, 8);
             ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.7)';
-            ctx.font = '16px -apple-system,sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = '14px -apple-system,sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('\u25C0', cbX + 28, clubY + cbH / 2 + 5);
+            ctx.fillText('\u25B2', csX + 29, csY + 19);
         }
 
-        // Club info (center)
-        const dist = distToHole();
-        const distYds = Math.round(dist / YDS_TO_WORLD);
-        const canReach = club.maxYds >= distYds;
+        // Club icon + name
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        roundRect(csX, csY + 32, 58, 52, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(100,160,255,0.3)';
+        ctx.lineWidth = 1;
+        roundRect(csX, csY + 32, 58, 52, 10);
+        ctx.stroke();
+        // Club icon placeholder
         ctx.fillStyle = '#fff';
-        ctx.font = '600 16px -apple-system,sans-serif';
+        ctx.font = 'bold 14px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(club.name, W() / 2, clubY + 22);
-        ctx.font = '12px -apple-system,sans-serif';
-        ctx.fillStyle = canReach ? 'rgba(130,220,130,0.9)' : 'rgba(255,100,100,0.9)';
-        ctx.fillText(distYds + ' / ' + club.maxYds + ' yds' + (canReach ? ' \u2713' : ' \u2717'), W() / 2, clubY + 40);
+        ctx.fillText(club.name.split(' ')[0], csX + 29, csY + 55);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '10px -apple-system,sans-serif';
+        ctx.fillText(club.maxYds + 'y', csX + 29, csY + 72);
 
-        // Right arrow (circle button)
+        // Down arrow
         if (!onGreen) {
-            ctx.fillStyle = 'rgba(255,255,255,0.1)';
-            ctx.beginPath();
-            ctx.arc(W() - cbX - 28, clubY + cbH / 2, 16, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            roundRect(csX, csY + 88, 58, 28, 8);
             ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.7)';
-            ctx.font = '16px -apple-system,sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = '14px -apple-system,sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('\u25B6', W() - cbX - 28, clubY + cbH / 2 + 5);
+            ctx.fillText('\u25BC', csX + 29, csY + 107);
         }
     }
 
