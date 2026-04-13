@@ -342,16 +342,37 @@ function setCameraBehindBall(bx, bz, targetX, targetZ, distance) {
     const len = Math.sqrt(dx * dx + dz * dz) || 1;
     const nx = dx / len, nz = dz / len;
     const dist = distance || 60;
-    // Low angle — closer to the ground for dramatic view
-    const height = Math.max(8, dist * 0.22);
+    // Very low angle — dramatic ground-level view like a real golfer behind the ball
+    const height = Math.max(4, dist * 0.14);
 
     cam3dTarget.x = bx - nx * dist;
     cam3dTarget.y = height;
     cam3dTarget.z = bz - nz * dist;
-    // Look past the ball toward the target
-    cam3dLookAt.x = bx + nx * 80;
-    cam3dLookAt.y = 2;
-    cam3dLookAt.z = bz + nz * 80;
+    // Look UP slightly past the ball toward the target/horizon
+    cam3dLookAt.x = bx + nx * 120;
+    cam3dLookAt.y = 8;
+    cam3dLookAt.z = bz + nz * 120;
+}
+
+// Follow-ball camera — low angle chase cam
+function setCameraFollowBall(bx, bz, ballVx, ballVy, ballZ) {
+    // Use ball velocity direction to position camera behind it
+    const speed = Math.sqrt(ballVx * ballVx + ballVy * ballVy);
+    if (speed < 10) {
+        // Ball barely moving — use a fixed behind-ball view
+        setCameraBehindBall(bx, bz, bx, bz + 1, 50);
+        return;
+    }
+    const nx = ballVx / speed, nz = ballVy / speed;
+    const dist = 55;
+    const height = 14 + (ballZ || 0) * 0.15; // rise with ball
+
+    cam3dTarget.x = bx - nx * dist;
+    cam3dTarget.y = height;
+    cam3dTarget.z = bz - nz * dist;
+    cam3dLookAt.x = bx + nx * 60;
+    cam3dLookAt.y = Math.max(4, (ballZ || 0) * 0.12);
+    cam3dLookAt.z = bz + nz * 60;
 }
 
 let cam3dSkipLerp = false; // set true during panning to prevent fights

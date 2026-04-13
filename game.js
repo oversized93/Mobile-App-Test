@@ -2618,8 +2618,9 @@ function gameLoop(time) {
                 setCameraBehindBall(ball.x, ball.y, hx, hy, 45);
             }
         } else if (ball.moving) {
-            manualZoom = false; // reset when ball moves
-            setCameraOverhead(ball.x, ball.y, 0.5);
+            manualZoom = false;
+            // Low-angle chase cam that follows the ball's trajectory
+            setCameraFollowBall(ball.x, ball.y, ball.vx, ball.vy, ball.z);
         } else if (!scouting && !manualZoom) {
             const zoomFactor = cam.targetZoom || 1;
             setCameraOverhead(ball.x, ball.y, zoomFactor * 0.5);
