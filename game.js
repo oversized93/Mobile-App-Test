@@ -704,24 +704,40 @@ function onTouchStart(sx, sy) {
                 meterActive = false;
                 return;
             }
-            // Cancel button while in drag-back mode
-            const cancelW = W() * 0.3, cancelH = 42;
-            const cancelX = W() - cancelW - 12, cancelY = H() - 52;
-            if (hitBtn(sx, sy, cancelX, cancelY, cancelW, cancelH)) {
+            // Re-Aim button: back out of drag-back mode to the overhead aim view
+            const reAimW = W() * 0.32, reAimH = 44;
+            const reAimX = W() - reAimW - 14, reAimY = H() - 56;
+            if (hitBtn(sx, sy, reAimX, reAimY, reAimW, reAimH)) {
                 dragBackMode = false;
-                shotLocked = true; // Return to TAKE SHOT bar
+                dragBackActive = false;
+                dragBackY = 0;
+                shotLocked = false; // Free aim again
+                meterActive = false;
                 cam.targetRot = preMeterCam.rot;
                 cam.targetZoom = preMeterCam.zoom;
+                cam.targetX = preMeterCam.x;
+                cam.targetY = preMeterCam.y;
                 return;
             }
         }
 
         // ---- UI buttons ----
-        // SHOOT / Cancel buttons (slim bottom bar when locked)
-        if (shotLocked && !dragBackMode) {
-            const shootBtnW = W() * 0.55, shootBtnH = 42;
-            const shootBtnX = 12, shootBtnY = H() - 52;
+        // SHOOT bar: shown either after the player has locked a drag, OR as a shortcut
+        // to accept the auto-placed aim without any drag at all.
+        const canTakeShot = !dragBackMode && !ball.moving && !holeComplete && !flyoverActive && terrainAt(ball.x, ball.y) !== T.GREEN;
+        if (canTakeShot) {
+            const shootBtnW = shotLocked ? W() * 0.55 : W() - 28;
+            const shootBtnH = 44;
+            const shootBtnX = 14, shootBtnY = H() - 56;
             if (hitBtn(sx, sy, shootBtnX, shootBtnY, shootBtnW, shootBtnH)) {
+                // Lock from current aim if not already locked
+                if (!shotLocked) {
+                    if (aimPower <= 5) return; // nothing to fire
+                    lockedPower = aimPower;
+                    lockedDirX = aimDirX;
+                    lockedDirY = aimDirY;
+                    shotLocked = true;
+                }
                 // Enter drag-back mode — camera swings behind, waiting for player to pull the ball back
                 preMeterCam = { x: cam.targetX, y: cam.targetY, zoom: cam.targetZoom, rot: cam.targetRot };
                 const aDx = lockedDirX, aDy = lockedDirY;
@@ -739,11 +755,14 @@ function onTouchStart(sx, sy) {
                 meterSpeed = (0.75 + (CLUBS[selectedClub].maxPower / 500) * 0.75);
                 return;
             }
-            const cancelW = W() * 0.3, cancelH = 42;
-            const cancelX = W() - cancelW - 12, cancelY = H() - 52;
-            if (hitBtn(sx, sy, cancelX, cancelY, cancelW, cancelH)) {
-                shotLocked = false;
-                return;
+            // Cancel button — only when the player has manually locked an aim
+            if (shotLocked) {
+                const cancelW = W() * 0.28, cancelH = 44;
+                const cancelX = W() - cancelW - 14, cancelY = H() - 56;
+                if (hitBtn(sx, sy, cancelX, cancelY, cancelW, cancelH)) {
+                    shotLocked = false;
+                    return;
+                }
             }
         }
         // Club switching — left side stack (up/down arrows)
@@ -2069,7 +2088,9 @@ function drawPlaying() {
     }
 
     // ---- Step 2: Shot locked — sleek bottom bar ----
-    if (shotLocked && !meterActive) {
+    // TAKE SHOT bar: show whenever the player can fire (locked OR free-aim with auto-target)
+    const showTakeShot = !meterActive && !dragBackMode && !draggingTarget && !ball.moving && !holeComplete && !flyoverActive && terrainAt(ball.x, ball.y) !== T.GREEN && (shotLocked || (aimPower > 5));
+    if (showTakeShot) {
         // Frosted glass bottom bar
         const barGrad = ctx.createLinearGradient(0, H() - 65, 0, H());
         barGrad.addColorStop(0, 'rgba(0,0,0,0.6)');
@@ -2080,8 +2101,9 @@ function drawPlaying() {
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(0, H() - 65); ctx.lineTo(W(), H() - 65); ctx.stroke();
 
-        // TAKE SHOT — vibrant gradient button
-        const shootBtnW = W() * 0.55, shootBtnH = 44;
+        // TAKE SHOT — vibrant gradient button (full-width when not locked, narrower when locked to leave room for Cancel)
+        const shootBtnW = shotLocked ? W() * 0.55 : W() - 28;
+        const shootBtnH = 44;
         const shootBtnX = 14, shootBtnY = H() - 56;
         const shootGrad = ctx.createLinearGradient(shootBtnX, shootBtnY, shootBtnX + shootBtnW, shootBtnY);
         shootGrad.addColorStop(0, '#ff6d00');
@@ -2089,7 +2111,6 @@ function drawPlaying() {
         ctx.fillStyle = shootGrad;
         roundRect(shootBtnX, shootBtnY, shootBtnW, shootBtnH, 22);
         ctx.fill();
-        // Subtle inner highlight
         ctx.strokeStyle = 'rgba(255,255,255,0.15)';
         ctx.lineWidth = 1;
         roundRect(shootBtnX, shootBtnY, shootBtnW, shootBtnH, 22);
@@ -2099,18 +2120,20 @@ function drawPlaying() {
         ctx.textAlign = 'center';
         ctx.fillText('TAKE SHOT', shootBtnX + shootBtnW / 2, shootBtnY + shootBtnH / 2 + 6);
 
-        // Cancel — subtle ghost button
-        const cancelW = W() * 0.28, cancelH = 44;
-        const cancelX = W() - cancelW - 14, cancelY = H() - 56;
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        roundRect(cancelX, cancelY, cancelW, cancelH, 22);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-        roundRect(cancelX, cancelY, cancelW, cancelH, 22);
-        ctx.stroke();
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.font = '15px -apple-system,sans-serif';
-        ctx.fillText('Cancel', cancelX + cancelW / 2, cancelY + cancelH / 2 + 5);
+        // Cancel — only after the player has made a manual aim
+        if (shotLocked) {
+            const cancelW = W() * 0.28, cancelH = 44;
+            const cancelX = W() - cancelW - 14, cancelY = H() - 56;
+            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+            roundRect(cancelX, cancelY, cancelW, cancelH, 22);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+            roundRect(cancelX, cancelY, cancelW, cancelH, 22);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = '15px -apple-system,sans-serif';
+            ctx.fillText('Cancel', cancelX + cancelW / 2, cancelY + cancelH / 2 + 5);
+        }
     }
 
     // ---- Accuracy arc (polished behind-ball fan) ----
@@ -2227,21 +2250,21 @@ function drawPlaying() {
         ctx.fillText('RELEASE ON WHITE', W() / 2, arcCy - arcR - 55);
     }
 
-    // Cancel button during drag-back mode (to back out to TAKE SHOT bar)
+    // Re-Aim button during drag-back mode (back out to free overhead aim)
     if (dragBackMode) {
-        const cancelW = W() * 0.28, cancelH = 44;
-        const cancelX = W() - cancelW - 14, cancelY = H() - 56;
+        const reAimW = W() * 0.32, reAimH = 44;
+        const reAimX = W() - reAimW - 14, reAimY = H() - 56;
         ctx.fillStyle = 'rgba(0,0,0,0.55)';
-        roundRect(cancelX, cancelY, cancelW, cancelH, 22);
+        roundRect(reAimX, reAimY, reAimW, reAimH, 22);
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
         ctx.lineWidth = 1;
-        roundRect(cancelX, cancelY, cancelW, cancelH, 22);
+        roundRect(reAimX, reAimY, reAimW, reAimH, 22);
         ctx.stroke();
-        ctx.fillStyle = 'rgba(255,255,255,0.75)';
-        ctx.font = '15px -apple-system,sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = 'bold 15px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Cancel', cancelX + cancelW / 2, cancelY + cancelH / 2 + 5);
+        ctx.fillText('\u21BA Re-Aim', reAimX + reAimW / 2, reAimY + reAimH / 2 + 5);
     }
 
     // ---- Drag-back target circle (shown after TAKE SHOT, before the drag is engaged) ----
