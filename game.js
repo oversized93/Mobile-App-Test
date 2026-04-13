@@ -32,11 +32,11 @@ const SCORE_NAMES = {
 const YDS_TO_WORLD = 16;
 
 const CLUBS = [
-    { name: 'Driver',  maxPower: 500, launch: 561, airMin: 0.15, maxYds: 230 },
-    { name: '3 Wood',  maxPower: 420, launch: 490, airMin: 0.18, maxYds: 195 },
-    { name: '5 Iron',  maxPower: 340, launch: 428, airMin: 0.20, maxYds: 160 },
-    { name: '7 Iron',  maxPower: 260, launch: 388, airMin: 0.22, maxYds: 120 },
-    { name: 'P Wedge', maxPower: 180, launch: 510, airMin: 0.15, maxYds: 80  },
+    { name: 'Driver',  maxPower: 500, launch: 780, airMin: 0.15, maxYds: 230 },
+    { name: '3 Wood',  maxPower: 420, launch: 680, airMin: 0.18, maxYds: 195 },
+    { name: '5 Iron',  maxPower: 340, launch: 500, airMin: 0.20, maxYds: 160 },
+    { name: '7 Iron',  maxPower: 260, launch: 420, airMin: 0.22, maxYds: 120 },
+    { name: 'P Wedge', maxPower: 180, launch: 560, airMin: 0.15, maxYds: 80  },
     { name: 'Putter',  maxPower: 120, launch: 0,   airMin: 999,  maxYds: 40  }
 ];
 let selectedClub = 0;
@@ -448,10 +448,9 @@ function takeShot(power, dirX, dirY) {
 
     if (club.launch > 0 && powerPct > club.airMin) {
         ball.airborne = true;
-        ball.vz = club.launch * powerPct;
-        // airTime = 2 * vz / GRAVITY
+        // Non-linear launch: full swings produce way taller arcs than half swings
+        ball.vz = club.launch * Math.pow(powerPct, 1.4);
         const airTime = 2 * ball.vz / GRAVITY;
-        // velocity = distance / time (no air drag — clean physics)
         velocity = (targetDist * 0.85) / Math.max(airTime, 0.1);
     } else {
         // Ground shot (putt or low power) — velocity for rolling the full distance
