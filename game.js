@@ -243,7 +243,8 @@ function generateHeights(hole) {
             const t = hole.grid[r][c];
             if (t === T.TEE || t === T.GREEN) height *= 0.1;
             else if (t === T.FAIRWAY) height *= 0.5;
-            if (t === T.WATER) height = -3;
+            // Water vertices sit at 0 so they match surrounding terrain flat
+            if (t === T.WATER) height = 0;
             h[r][c] = height;
         }
     }

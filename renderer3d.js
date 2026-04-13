@@ -304,27 +304,7 @@ function buildTerrain3D(hole) {
     terrainMesh.receiveShadow = true;
     terrainGroup.add(terrainMesh);
 
-    // ---- Water as a separate semi-transparent plane over water cells ----
-    // Find water cell bounding boxes and merge into strips for fewer meshes
-    for (let r = 0; r < hole.rows; r++) {
-        for (let c = 0; c < hole.cols; c++) {
-            if (hole.grid[r][c] !== T.WATER) continue;
-            // Check if this is part of a rectangular water region — just render each cell for now
-            // but could optimize with region merging
-            const waterGeo2 = new THREE.PlaneGeometry(cellSize + 0.2, cellSize + 0.2);
-            waterGeo2.rotateX(-Math.PI / 2);
-            const waterMat2 = new THREE.MeshStandardMaterial({
-                color: 0x2288bb,
-                transparent: true,
-                opacity: 0.85,
-                roughness: 0.1,
-                metalness: 0.4
-            });
-            const waterMesh = new THREE.Mesh(waterGeo2, waterMat2);
-            waterMesh.position.set((c + 0.5) * cellSize, -0.5, (r + 0.5) * cellSize);
-            terrainGroup.add(waterMesh);
-        }
-    }
+    // Water is handled directly by vertex colors on the continuous mesh
 
     // ---- Trees as InstancedMeshes (trunks + canopies) ----
     const dummy = new THREE.Object3D();
