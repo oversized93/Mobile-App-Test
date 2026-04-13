@@ -299,9 +299,9 @@ function updateBall(dt) {
             }
 
             // Wind: continuous force while airborne (strongest when ball is high)
-            // Base force per unit time scaled by wind speed
-            const heightBoost = Math.min(1 + ball.z / 200, 2); // higher = more wind
-            const windForcePerSec = wind.speed * 2.5 * heightBoost;
+            // Tuned so 10 mph crosswind ≈ 10-15 yd drift on a 230 yd drive
+            const heightBoost = Math.min(1 + ball.z / 300, 1.8);
+            const windForcePerSec = wind.speed * 1.0 * heightBoost;
             ball.vx += Math.cos(wind.angle) * windForcePerSec * stepDt;
             ball.vy += Math.sin(wind.angle) * windForcePerSec * stepDt;
 
