@@ -3,6 +3,45 @@
 // ============================================================
 
 let scene3d, camera3d, renderer3d;
+let grassTexture = null;
+
+// Generate a procedural grass noise texture (call once)
+function makeGrassTexture() {
+    if (grassTexture) return grassTexture;
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const ctx = c.getContext('2d');
+    // Base fill
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, size, size);
+    // Speckled noise — pixels near white (so vertex color dominates)
+    const img = ctx.getImageData(0, 0, size, size);
+    for (let i = 0; i < img.data.length; i += 4) {
+        const n = 220 + Math.floor((Math.random() - 0.5) * 60);
+        img.data[i] = n;
+        img.data[i + 1] = n;
+        img.data[i + 2] = n;
+        img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    // Short grass blades — scatter dark specks
+    for (let i = 0; i < 1500; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const len = 1 + Math.random() * 2;
+        ctx.strokeStyle = `rgba(60,60,60,${0.3 + Math.random() * 0.3})`;
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (Math.random() - 0.5) * len, y + (Math.random() - 0.5) * len);
+        ctx.stroke();
+    }
+    grassTexture = new THREE.CanvasTexture(c);
+    grassTexture.wrapS = THREE.RepeatWrapping;
+    grassTexture.wrapT = THREE.RepeatWrapping;
+    return grassTexture;
+}
 let terrainGroup, ballMesh, flagGroup, holeMesh;
 let targetMesh, aimLineMesh, distRingMesh;
 let scene3dReady = false;
@@ -264,25 +303,58 @@ function buildTerrain3D(hole) {
         let waterCount = 0;
         let bestType = T.ROUGH;
         let bestPriority = -1;
+        let nearSand = false;
+        let nearTree = false;
         for (const n of neighbors) {
             const inBounds = n.c >= 0 && n.c < hole.cols && n.r >= 0 && n.r < hole.rows;
             const t = inBounds ? hole.grid[n.r][n.c] : T.ROUGH;
             const h = (inBounds && hole.heights) ? hole.heights[n.r][n.c] : 0;
             sumH += h;
             if (t === T.WATER) waterCount++;
+            // Check if sand/tree is within 2 cells for lip effect
+            if (inBounds) {
+                for (let dy = -2; dy <= 2; dy++) {
+                    for (let dx = -2; dx <= 2; dx++) {
+                        const nc = n.c + dx, nr = n.r + dy;
+                        if (nc >= 0 && nc < hole.cols && nr >= 0 && nr < hole.rows) {
+                            const nt = hole.grid[nr][nc];
+                            if (nt === T.SAND && Math.abs(dx) <= 1 && Math.abs(dy) <= 1) nearSand = true;
+                        }
+                    }
+                }
+            }
             const pri = typePriority[t] || 0;
             if (pri > bestPriority) {
                 bestPriority = pri;
                 bestType = t;
             }
+            if (t === T.TREE) nearTree = true;
         }
         const avgH = sumH / 4;
-        // Fully water → drop to lake bed
         const isAllWater = (waterCount === 4);
         const y = isAllWater ? -4 : avgH;
         posAttr.setY(i, y);
 
-        const rgb = terrainRGB[bestType] || [0.1, 0.3, 0.15];
+        let rgb = terrainRGB[bestType] || [0.1, 0.3, 0.15];
+
+        // ---- Fairway mowing stripes ----
+        if (bestType === T.FAIRWAY) {
+            // Alternate every 3 rows — light vs dark green
+            const stripe = Math.floor(vr / 3) % 2;
+            const stripeMult = stripe === 0 ? 1.15 : 0.85;
+            rgb = [rgb[0] * stripeMult, rgb[1] * stripeMult, rgb[2] * stripeMult];
+        }
+
+        // ---- Bunker sand lip — darken edges near sand ----
+        if (bestType !== T.SAND && nearSand) {
+            rgb = [rgb[0] * 0.75, rgb[1] * 0.75, rgb[2] * 0.7];
+        }
+
+        // ---- Tree shadow patch — darken rough under tree canopies ----
+        if (nearTree && bestType === T.ROUGH) {
+            rgb = [rgb[0] * 0.65, rgb[1] * 0.7, rgb[2] * 0.65];
+        }
+
         colors[i * 3]     = rgb[0];
         colors[i * 3 + 1] = rgb[1];
         colors[i * 3 + 2] = rgb[2];
@@ -291,9 +363,14 @@ function buildTerrain3D(hole) {
     terrainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     terrainGeo.computeVertexNormals();
 
+    // Procedural grass texture tiled over the terrain
+    const grassTex = makeGrassTexture();
+    grassTex.repeat.set(hole.cols / 4, hole.rows / 4);
+
     const terrainMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
-        roughness: 0.9,
+        map: grassTex,
+        roughness: 0.95,
         metalness: 0,
         flatShading: false
     });
@@ -306,38 +383,153 @@ function buildTerrain3D(hole) {
     // ---- Trees as InstancedMeshes (trunks + canopies) ----
     const dummy = new THREE.Object3D();
     if (treeCells.length > 0) {
-        const trunkGeo = new THREE.CylinderGeometry(2.4, 4, 24, 6);
-        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030 });
-        const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCells.length);
-        trunkInst.castShadow = true;
+        // Split trees into 3 variants based on hash: pine, oak, bush
+        const pines = [], oaks = [], bushes = [];
+        for (const tc of treeCells) {
+            const variant = (tc.c * 31 + tc.r * 17) % 4;
+            if (variant === 0) bushes.push(tc);
+            else if (variant === 1) oaks.push(tc);
+            else pines.push(tc);
+        }
 
-        const leafGeo = new THREE.ConeGeometry(20, 36, 8);
-        const leafMat = new THREE.MeshStandardMaterial({ color: 0x1e6830 });
-        const leafInst = new THREE.InstancedMesh(leafGeo, leafMat, treeCells.length);
-        leafInst.castShadow = true;
+        // ---- Pines: tall cone on thin cylinder ----
+        if (pines.length > 0) {
+            const pTrunkGeo = new THREE.CylinderGeometry(1.8, 3, 30, 6);
+            const pTrunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3020 });
+            const pTrunkInst = new THREE.InstancedMesh(pTrunkGeo, pTrunkMat, pines.length);
+            const pConeGeo = new THREE.ConeGeometry(16, 44, 8);
+            const pConeMat = new THREE.MeshStandardMaterial({ color: 0x1a5228 });
+            const pConeInst = new THREE.InstancedMesh(pConeGeo, pConeMat, pines.length);
+            for (let i = 0; i < pines.length; i++) {
+                const { c, r } = pines[i];
+                const sz = 0.9 + ((c * 11 + r * 23) % 10) / 25;
+                const cellH = (hole.heights && hole.heights[r]) ? (hole.heights[r][c] || 0) : 0;
+                dummy.position.set((c + 0.5) * cellSize, 15 * sz + cellH, (r + 0.5) * cellSize);
+                dummy.scale.set(sz, sz, sz);
+                dummy.rotation.set(0, 0, 0);
+                dummy.updateMatrix();
+                pTrunkInst.setMatrixAt(i, dummy.matrix);
+                dummy.position.set((c + 0.5) * cellSize, 30 * sz + 22 * sz + cellH, (r + 0.5) * cellSize);
+                dummy.updateMatrix();
+                pConeInst.setMatrixAt(i, dummy.matrix);
+            }
+            pTrunkInst.instanceMatrix.needsUpdate = true;
+            pConeInst.instanceMatrix.needsUpdate = true;
+            terrainGroup.add(pTrunkInst);
+            terrainGroup.add(pConeInst);
+        }
 
-        for (let i = 0; i < treeCells.length; i++) {
-            const { c, r } = treeCells[i];
-            const sizeVar = 0.8 + ((c * 31 + r * 17) % 10) / 20;
-            const cellH = (hole.heights && hole.heights[r]) ? (hole.heights[r][c] || 0) : 0;
+        // ---- Oaks: sphere canopy on thick trunk ----
+        if (oaks.length > 0) {
+            const oTrunkGeo = new THREE.CylinderGeometry(3, 4.5, 20, 6);
+            const oTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030 });
+            const oTrunkInst = new THREE.InstancedMesh(oTrunkGeo, oTrunkMat, oaks.length);
+            const oSphereGeo = new THREE.SphereGeometry(18, 8, 6);
+            const oSphereMat = new THREE.MeshStandardMaterial({ color: 0x267a3a });
+            const oSphereInst = new THREE.InstancedMesh(oSphereGeo, oSphereMat, oaks.length);
+            for (let i = 0; i < oaks.length; i++) {
+                const { c, r } = oaks[i];
+                const sz = 0.9 + ((c * 13 + r * 29) % 10) / 20;
+                const cellH = (hole.heights && hole.heights[r]) ? (hole.heights[r][c] || 0) : 0;
+                dummy.position.set((c + 0.5) * cellSize, 10 * sz + cellH, (r + 0.5) * cellSize);
+                dummy.scale.set(sz, sz, sz);
+                dummy.rotation.set(0, 0, 0);
+                dummy.updateMatrix();
+                oTrunkInst.setMatrixAt(i, dummy.matrix);
+                dummy.position.set((c + 0.5) * cellSize, 30 * sz + cellH, (r + 0.5) * cellSize);
+                dummy.updateMatrix();
+                oSphereInst.setMatrixAt(i, dummy.matrix);
+            }
+            oTrunkInst.instanceMatrix.needsUpdate = true;
+            oSphereInst.instanceMatrix.needsUpdate = true;
+            terrainGroup.add(oTrunkInst);
+            terrainGroup.add(oSphereInst);
+        }
 
-            // Trunk
-            dummy.position.set((c + 0.5) * cellSize, 12 * sizeVar + cellH, (r + 0.5) * cellSize);
-            dummy.scale.set(sizeVar, sizeVar, sizeVar);
-            dummy.rotation.set(0, 0, 0);
-            dummy.updateMatrix();
-            trunkInst.setMatrixAt(i, dummy.matrix);
-
-            // Leaf
-            dummy.position.set((c + 0.5) * cellSize, 24 * sizeVar + 16 * sizeVar + cellH, (r + 0.5) * cellSize);
-            dummy.updateMatrix();
-            leafInst.setMatrixAt(i, dummy.matrix);
+        // ---- Bushes: just a squashed sphere ----
+        if (bushes.length > 0) {
+            const bGeo = new THREE.SphereGeometry(10, 8, 6);
+            const bMat = new THREE.MeshStandardMaterial({ color: 0x2e7340 });
+            const bInst = new THREE.InstancedMesh(bGeo, bMat, bushes.length);
+            for (let i = 0; i < bushes.length; i++) {
+                const { c, r } = bushes[i];
+                const sz = 0.7 + ((c * 17 + r * 41) % 10) / 25;
+                const cellH = (hole.heights && hole.heights[r]) ? (hole.heights[r][c] || 0) : 0;
+                dummy.position.set((c + 0.5) * cellSize, 6 * sz + cellH, (r + 0.5) * cellSize);
+                dummy.scale.set(sz, sz * 0.7, sz);
+                dummy.rotation.set(0, 0, 0);
+                dummy.updateMatrix();
+                bInst.setMatrixAt(i, dummy.matrix);
+            }
+            bInst.instanceMatrix.needsUpdate = true;
+            terrainGroup.add(bInst);
         }
         dummy.scale.set(1, 1, 1);
-        trunkInst.instanceMatrix.needsUpdate = true;
-        leafInst.instanceMatrix.needsUpdate = true;
-        terrainGroup.add(trunkInst);
-        terrainGroup.add(leafInst);
+    }
+
+    // ---- Distant scenery — rings of background trees beyond the course ----
+    const holeCenterX = (hole.cols * cellSize) / 2;
+    const holeCenterZ = (hole.rows * cellSize) / 2;
+    const courseRadius = Math.max(hole.cols, hole.rows) * cellSize * 0.7;
+    const distantTrees = [];
+    // Two rings of fake trees around the perimeter
+    for (let ring = 0; ring < 2; ring++) {
+        const radius = courseRadius + 200 + ring * 400;
+        const count = 60 + ring * 40;
+        for (let i = 0; i < count; i++) {
+            const angle = (i / count) * Math.PI * 2 + ring * 0.3;
+            const jitter = (Math.sin(i * 12.9898 + ring) * 43758.5453) % 1 * 0.4 + 0.8;
+            const r = radius * jitter;
+            const x = holeCenterX + Math.cos(angle) * r;
+            const z = holeCenterZ + Math.sin(angle) * r;
+            distantTrees.push({ x, z, ring });
+        }
+    }
+    if (distantTrees.length > 0) {
+        const dtGeo = new THREE.ConeGeometry(25, 70, 7);
+        const dtMat = new THREE.MeshStandardMaterial({ color: 0x1a4828 });
+        const dtInst = new THREE.InstancedMesh(dtGeo, dtMat, distantTrees.length);
+        for (let i = 0; i < distantTrees.length; i++) {
+            const t = distantTrees[i];
+            const sz = 1.2 + (i % 5) * 0.3;
+            dummy.position.set(t.x, 35 * sz, t.z);
+            dummy.scale.set(sz, sz, sz);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            dtInst.setMatrixAt(i, dummy.matrix);
+        }
+        dtInst.instanceMatrix.needsUpdate = true;
+        terrainGroup.add(dtInst);
+        dummy.scale.set(1, 1, 1);
+    }
+
+    // ---- Distant rolling hills — a few large background shapes ----
+    const distantHills = [];
+    for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        const r = courseRadius + 1200;
+        const x = holeCenterX + Math.cos(angle) * r;
+        const z = holeCenterZ + Math.sin(angle) * r;
+        distantHills.push({ x, z });
+    }
+    if (distantHills.length > 0) {
+        const hillGeo = new THREE.SphereGeometry(500, 10, 6);
+        const hillMat = new THREE.MeshStandardMaterial({ color: 0x2e5e32 });
+        const hillInst = new THREE.InstancedMesh(hillGeo, hillMat, distantHills.length);
+        for (let i = 0; i < distantHills.length; i++) {
+            const h = distantHills[i];
+            const sx = 1.5 + (i % 3) * 0.5;
+            const sz = 1.5 + ((i + 1) % 3) * 0.5;
+            const sy = 0.3 + (i % 2) * 0.1;
+            dummy.position.set(h.x, -100, h.z);
+            dummy.scale.set(sx, sy, sz);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            hillInst.setMatrixAt(i, dummy.matrix);
+        }
+        hillInst.instanceMatrix.needsUpdate = true;
+        terrainGroup.add(hillInst);
+        dummy.scale.set(1, 1, 1);
     }
 
     // Flag pole + flag — sits on terrain elevation
