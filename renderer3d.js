@@ -138,7 +138,7 @@ function init3D() {
     scene3d.add(ballMesh);
 
     // Target marker (ring on ground)
-    const ringGeo = new THREE.RingGeometry(8, 12, 32);
+    const ringGeo = new THREE.RingGeometry(4, 6, 32);
     const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff44, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
     targetMesh = new THREE.Mesh(ringGeo, ringMat);
     targetMesh.rotation.x = -Math.PI / 2;
@@ -149,7 +149,7 @@ function init3D() {
     // Hole — dark recessed circle with white rim
     const holeGroup = new THREE.Group();
     // White rim ring
-    const rimGeo = new THREE.RingGeometry(3.6, 4.6, 32);
+    const rimGeo = new THREE.RingGeometry(1.2, 1.6, 32);
     const rimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, depthWrite: false });
     const rimMesh = new THREE.Mesh(rimGeo, rimMat);
     rimMesh.rotation.x = -Math.PI / 2;
@@ -157,7 +157,7 @@ function init3D() {
     rimMesh.renderOrder = 1;
     holeGroup.add(rimMesh);
     // Dark hole interior
-    const holeGeo = new THREE.CircleGeometry(3.6, 32);
+    const holeGeo = new THREE.CircleGeometry(1.2, 32);
     const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505, depthWrite: false });
     holeMesh = new THREE.Mesh(holeGeo, holeMat);
     holeMesh.rotation.x = -Math.PI / 2;
@@ -165,7 +165,7 @@ function init3D() {
     holeMesh.renderOrder = 1;
     holeGroup.add(holeMesh);
     // Recessed cylinder for depth
-    const cupGeo = new THREE.CylinderGeometry(3.6, 3.6, 4, 32, 1, true);
+    const cupGeo = new THREE.CylinderGeometry(1.2, 1.2, 2, 32, 1, true);
     const cupMat = new THREE.MeshStandardMaterial({ color: 0x111111, side: THREE.DoubleSide });
     const cupMesh = new THREE.Mesh(cupGeo, cupMat);
     cupMesh.position.y = -0.8;
@@ -281,17 +281,17 @@ function buildTerrain3D(hole) {
     const flagX = (hole.hole.x + 0.5) * cellSize;
     const flagZ = (hole.hole.y + 0.5) * cellSize;
 
-    const poleGeo = new THREE.CylinderGeometry(0.8, 0.8, 70, 8);
+    const poleGeo = new THREE.CylinderGeometry(0.3, 0.3, 28, 8);
     const poleMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
     const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(flagX, 35, flagZ);
+    pole.position.set(flagX, 14, flagZ);
     pole.castShadow = true;
     flagGroup.add(pole);
 
-    const flagGeo = new THREE.PlaneGeometry(24, 14);
+    const flagGeo = new THREE.PlaneGeometry(8, 5);
     const flagMat = new THREE.MeshStandardMaterial({ color: 0xee2222, side: THREE.DoubleSide });
     const flag = new THREE.Mesh(flagGeo, flagMat);
-    flag.position.set(flagX + 12, 62, flagZ);
+    flag.position.set(flagX + 4, 25, flagZ);
     flagGroup.add(flag);
 
     // Position hole

@@ -165,15 +165,9 @@ function startHole(hole) {
 }
 
 function calcZoom() {
-    // Returns a zoom factor — higher = closer to ground
-    // For 3D: setCameraOverhead uses height = 800 / (zoom * 0.5)
-    // We want height roughly equal to hole length so the whole hole fits
-    if (!currentHole) return 1;
-    const holeH = currentHole.rows * CELL;
-    // Target height = half the hole length (so the full hole fits vertically in a 60° FOV)
-    const targetHeight = holeH * 0.6;
-    // height = 800 / (zoom * 0.5) => zoom = 1600 / height
-    return 1600 / targetHeight;
+    // For gameplay overhead — focused on the ball area, not the whole hole.
+    // Fixed comfortable height regardless of hole length.
+    return 1.0;
 }
 
 function centerCamOnBall() {
@@ -198,7 +192,7 @@ function terrainAt(wx, wy) {
 }
 
 // ---- Ball physics update ----
-const GRAVITY = 200; // halved to match 2x world scale
+const GRAVITY = 350; // tuned for ~5s air time on a driver
 
 function updateBall(dt) {
     if (!ball.moving) return;
@@ -2610,7 +2604,12 @@ function gameLoop(time) {
         const onGreenNow = terrainAt(ball.x, ball.y) === T.GREEN;
         updateTarget3D(targetX, targetY, !onGreenNow && !ball.moving && !holeComplete);
         // Update 3D camera
-        if (meterActive) {
+        if (flyoverActive) {
+            // Flyover: behind-ball view looking toward the hole — show the whole hole stretched out
+            const hx = (currentHole.hole.x + 0.5) * CELL;
+            const hy = (currentHole.hole.y + 0.5) * CELL;
+            setCameraBehindBall(ball.x, ball.y, hx, hy, 60);
+        } else if (meterActive) {
             const tdx = lockedDirX, tdy = lockedDirY;
             const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
             setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 80, ball.y + tdy / tlen * 80, 28);
