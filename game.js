@@ -600,6 +600,11 @@ let meterDir = 1;      // sweep direction
 let curl = 0;
 let curlDragStartX = 0;
 
+// Putt accuracy mini-game (runs during drag-back on the green)
+let puttMeterAngle = 0;
+let puttMeterDir = 1;
+let puttMeterSpeed = 1.3;
+
 // Camera state saved before entering meter mode
 let preMeterCam = { x: 0, y: 0, zoom: 1, rot: 0 };
 
@@ -665,6 +670,9 @@ function onTouchStart(sx, sy) {
                 aiming = true;
                 putting = true;
                 aimStartX = sx; aimStartY = sy;
+                // Start putt accuracy sweep fresh
+                puttMeterAngle = -1;
+                puttMeterDir = 1;
                 return;
             }
             // On green but didn't touch ball — pan camera
@@ -843,7 +851,30 @@ function onTouchEnd(sx, sy) {
     }
     if (state === 'playing' && putting) {
         if (aimPower > 8) {
-            takeShot(aimPower, aimDirX, aimDirY);
+            // Apply putt accuracy deviation based on where the sweep was stopped
+            let dirX = aimDirX, dirY = aimDirY;
+            const absAcc = Math.abs(puttMeterAngle);
+            let devRad = 0;
+            // Green zone (0-0.33): near-perfect, up to 0.6°
+            // Yellow zone (0.33-0.66): slight miss, up to 2.5°
+            // Red zone (0.66-1.0): big miss, up to 7°
+            if (absAcc < 0.33) {
+                devRad = (absAcc / 0.33) * 0.01;
+            } else if (absAcc < 0.66) {
+                devRad = 0.01 + ((absAcc - 0.33) / 0.33) * 0.033;
+            } else {
+                devRad = 0.043 + ((absAcc - 0.66) / 0.34) * 0.079;
+            }
+            devRad *= Math.sign(puttMeterAngle);
+            const cosD = Math.cos(devRad), sinD = Math.sin(devRad);
+            dirX = aimDirX * cosD - aimDirY * sinD;
+            dirY = aimDirX * sinD + aimDirY * cosD;
+
+            // Feedback notify
+            if (absAcc > 0.66) notify(puttMeterAngle < 0 ? 'Pulled Left!' : 'Pushed Right!');
+            else if (absAcc < 0.15) notify('Pure Strike!');
+
+            takeShot(aimPower, dirX, dirY);
         }
         aiming = false;
         putting = false;
@@ -2163,6 +2194,101 @@ function drawPlaying() {
         }
     }
 
+    // ---- Putt accuracy arc (runs during drag-back on the green) ----
+    if (putting && aimPower > 10 && !meterActive) {
+        const arcCx = W() / 2;
+        const arcCy = H() - 15;
+        const arcR = Math.min(W() * 0.22, 95);
+        const arcSpread = Math.PI * 0.5;
+        const arcStart = -Math.PI / 2 - arcSpread / 2;
+        const arcEnd = -Math.PI / 2 + arcSpread / 2;
+
+        // Backdrop
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath();
+        ctx.moveTo(arcCx, arcCy);
+        ctx.arc(arcCx, arcCy, arcR + 8, arcStart - 0.05, arcEnd + 0.05);
+        ctx.closePath();
+        ctx.fill();
+
+        // Colored fan segments
+        const segments = 36;
+        for (let i = 0; i < segments; i++) {
+            const t = i / segments;
+            const a1 = arcStart + t * arcSpread;
+            const a2 = arcStart + (t + 1) / segments * arcSpread;
+            const fromCenter = Math.abs(t - 0.5) * 2;
+            let r, g, b;
+            if (fromCenter < 0.33) {
+                r = 56; g = 195; b = 90;
+            } else if (fromCenter < 0.66) {
+                const p = (fromCenter - 0.33) / 0.33;
+                r = 56 + (255 - 56) * p; g = 195 + (220 - 195) * p; b = 90 * (1 - p);
+            } else {
+                const p = (fromCenter - 0.66) / 0.34;
+                r = 255; g = 220 - 160 * p; b = 0;
+            }
+            ctx.fillStyle = `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.9)`;
+            ctx.beginPath();
+            ctx.moveTo(arcCx, arcCy);
+            ctx.arc(arcCx, arcCy, arcR, a1, a2);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Outer arc ring
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(arcCx, arcCy, arcR, arcStart, arcEnd);
+        ctx.stroke();
+
+        // White outline center target line
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(arcCx, arcCy - arcR * 0.3);
+        ctx.lineTo(arcCx, arcCy - arcR - 6);
+        ctx.stroke();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(arcCx, arcCy - arcR * 0.3);
+        ctx.lineTo(arcCx, arcCy - arcR - 6);
+        ctx.stroke();
+
+        // Sweeping blue arrow
+        const arrowAngle = -Math.PI / 2 + puttMeterAngle * (arcSpread / 2);
+        const arrowLen = arcR + 12;
+        const arrowX = arcCx + Math.cos(arrowAngle) * arrowLen;
+        const arrowY = arcCy + Math.sin(arrowAngle) * arrowLen;
+        const arrowBaseX = arcCx + Math.cos(arrowAngle) * (arcR * 0.3);
+        const arrowBaseY = arcCy + Math.sin(arrowAngle) * (arcR * 0.3);
+
+        ctx.strokeStyle = '#4cf';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(arrowBaseX, arrowBaseY);
+        ctx.lineTo(arrowX, arrowY);
+        ctx.stroke();
+        const headLen = 9;
+        ctx.fillStyle = '#4cf';
+        ctx.beginPath();
+        ctx.moveTo(arrowX, arrowY);
+        ctx.lineTo(arrowX - Math.cos(arrowAngle - 0.4) * headLen, arrowY - Math.sin(arrowAngle - 0.4) * headLen);
+        ctx.lineTo(arrowX - Math.cos(arrowAngle + 0.4) * headLen, arrowY - Math.sin(arrowAngle + 0.4) * headLen);
+        ctx.fill();
+
+        // Ball at arc pivot
+        drawBall(arcCx, arcCy, 8, player.ballColor);
+
+        // Hint
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = 'bold 12px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('RELEASE ON WHITE', W() / 2, arcCy - arcR - 20);
+    }
+
     // ---- Spin control (shown when not moving, not in meter mode) ----
     const showSpin = !ball.moving && !holeComplete && !flyoverActive && !meterActive && !shotLocked && terrainAt(ball.x, ball.y) !== T.GREEN;
     if (showSpin) {
@@ -2244,7 +2370,9 @@ function drawPlaying() {
         } else if (shotLocked) {
             // hint is in the bottom bar now
         } else if (onGreen) {
-            ctx.fillText('Drag back from ball to putt \u2022 Release to putt', W() / 2, H() - 24);
+            if (!putting) {
+                ctx.fillText('Drag back from ball to putt \u2022 Release on white', W() / 2, H() - 24);
+            }
         } else if (!aiming) {
             ctx.fillText('Drag target to aim \u2022 Drag elsewhere to pan \u2022 Arrows: club', W() / 2, H() - 24);
         }
@@ -2671,6 +2799,15 @@ function gameLoop(time) {
                 meterAngle += meterDir * meterSpeed * dt * 2;
                 if (meterAngle > 1) { meterAngle = 1; meterDir = -1; }
                 if (meterAngle < -1) { meterAngle = -1; meterDir = 1; }
+            }
+            // Update putt accuracy sweep (runs while dragging back on the green)
+            if (putting && aimPower > 10) {
+                // Sweep faster on longer putts — harder to time
+                const pwrPct = aimPower / CLUBS[selectedClub].maxPower;
+                puttMeterSpeed = 1.1 + pwrPct * 1.4;
+                puttMeterAngle += puttMeterDir * puttMeterSpeed * dt * 2;
+                if (puttMeterAngle > 1) { puttMeterAngle = 1; puttMeterDir = -1; }
+                if (puttMeterAngle < -1) { puttMeterAngle = -1; puttMeterDir = 1; }
             }
             updateBall(dt);
             camLerp(dt);
