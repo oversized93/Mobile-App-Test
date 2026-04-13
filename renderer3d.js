@@ -196,57 +196,135 @@ function buildTerrain3D(hole) {
 
     const cellSize = CELL;
 
-    // ---- Bucket cells by terrain type ----
-    const buckets = {};
+    // ---- Collect tree cells for instancing ----
     const treeCells = [];
     for (let r = 0; r < hole.rows; r++) {
         for (let c = 0; c < hole.cols; c++) {
-            const t = hole.grid[r][c];
-            if (!buckets[t]) buckets[t] = [];
-            buckets[t].push({ c, r });
-            if (t === T.TREE) {
+            if (hole.grid[r][c] === T.TREE) {
                 const treeHash = (c * 7 + r * 13) % 5;
                 if (treeHash < 4) treeCells.push({ c, r, treeHash });
             }
         }
     }
 
-    // ---- Build one InstancedMesh per terrain type ----
-    const cellGeo = new THREE.PlaneGeometry(cellSize + 0.1, cellSize + 0.1);
-    cellGeo.rotateX(-Math.PI / 2);
-    const dummy = new THREE.Object3D();
+    // ---- Build ONE continuous terrain mesh with per-vertex colors ----
+    // PlaneGeometry(w, h, segX, segY) has (segX+1) * (segY+1) vertices
+    const holeW = hole.cols * cellSize;
+    const holeH = hole.rows * cellSize;
+    const terrainGeo = new THREE.PlaneGeometry(holeW, holeH, hole.cols, hole.rows);
+    terrainGeo.rotateX(-Math.PI / 2);
+    // Translate so cell (0,0) starts at world origin
+    terrainGeo.translate(holeW / 2, 0, holeH / 2);
 
-    for (const tStr in buckets) {
-        const t = parseInt(tStr);
-        const cells = buckets[tStr];
-        if (cells.length === 0) continue;
+    // Helper: convert hex string color to RGB 0-1
+    function hexToRGB(hex) {
+        const c = new THREE.Color(hex);
+        return [c.r, c.g, c.b];
+    }
+    // Pre-compute RGB for each terrain type
+    const terrainRGB = {};
+    for (const key in TERRAIN_COLORS) {
+        terrainRGB[key] = hexToRGB(TERRAIN_COLORS[key]);
+    }
+    // TREE cells get grass color underneath so the land looks continuous where trees are
+    terrainRGB[T.TREE] = hexToRGB(TERRAIN_COLORS[T.ROUGH]);
 
-        const color = TERRAIN_COLORS[t] || '#1a3d1a';
-        const height = getTerrainHeight(t);
-        const isWater = (t === T.WATER);
-
-        const mat = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(isWater ? 0x2288bb : color),
-            roughness: isWater ? 0.1 : 0.9,
-            metalness: isWater ? 0.4 : 0,
-            transparent: isWater,
-            opacity: isWater ? 0.85 : 1
-        });
-
-        const inst = new THREE.InstancedMesh(cellGeo, mat, cells.length);
-        inst.receiveShadow = true;
-        const baseY = isWater ? -0.3 : (t === T.SAND ? height - 0.3 : height);
-        for (let i = 0; i < cells.length; i++) {
-            const cellH = (hole.heights && hole.heights[cells[i].r]) ? (hole.heights[cells[i].r][cells[i].c] || 0) : 0;
-            dummy.position.set((cells[i].c + 0.5) * cellSize, baseY + cellH, (cells[i].r + 0.5) * cellSize);
-            dummy.updateMatrix();
-            inst.setMatrixAt(i, dummy.matrix);
-        }
-        inst.instanceMatrix.needsUpdate = true;
-        terrainGroup.add(inst);
+    // Sample terrain at a vertex — take the 4 neighboring cells (or clamp at edges)
+    function sampleCell(c, r, field) {
+        const cc = Math.max(0, Math.min(hole.cols - 1, c));
+        const rr = Math.max(0, Math.min(hole.rows - 1, r));
+        return field[rr][cc];
     }
 
-    // ---- Trees as two InstancedMeshes (trunks + canopies) ----
+    const posAttr = terrainGeo.getAttribute('position');
+    const colors = new Float32Array(posAttr.count * 3);
+    const vertCols = hole.cols + 1;
+    const vertRows = hole.rows + 1;
+
+    // Heights map so water vertices drop (lake bed)
+    for (let i = 0; i < posAttr.count; i++) {
+        // i maps to (vc, vr) where vc = 0..cols, vr = 0..rows
+        const vr = Math.floor(i / vertCols);
+        const vc = i - vr * vertCols;
+
+        // Sample 4 neighbor cells around this vertex
+        // Vertex (vc, vr) is the top-left corner of cell (vc, vr)
+        // so neighbors are cells (vc-1, vr-1), (vc, vr-1), (vc-1, vr), (vc, vr)
+        const c0 = vc - 1, r0 = vr - 1;
+        const c1 = vc,     r1 = vr;
+        const neighbors = [
+            { c: c0, r: r0 }, { c: c1, r: r0 },
+            { c: c0, r: r1 }, { c: c1, r: r1 }
+        ];
+        let sumH = 0, sumR = 0, sumG = 0, sumB = 0;
+        let waterCount = 0, landCount = 0;
+        for (const n of neighbors) {
+            const t = (n.c < 0 || n.c >= hole.cols || n.r < 0 || n.r >= hole.rows)
+                ? T.ROUGH
+                : hole.grid[n.r][n.c];
+            const h = (n.c < 0 || n.c >= hole.cols || n.r < 0 || n.r >= hole.rows)
+                ? 0
+                : (hole.heights ? hole.heights[n.r][n.c] : 0);
+            sumH += h;
+            if (t === T.WATER) {
+                waterCount++;
+                // Water bed — sample rough color dimmed
+                const rgb = terrainRGB[T.WATER] || [0.2, 0.4, 0.5];
+                sumR += rgb[0]; sumG += rgb[1]; sumB += rgb[2];
+            } else {
+                landCount++;
+                const rgb = terrainRGB[t] || [0.1, 0.3, 0.15];
+                sumR += rgb[0]; sumG += rgb[1]; sumB += rgb[2];
+            }
+        }
+        const avgH = sumH / 4;
+        // If vertex is fully water, drop it to form the lake bed
+        const isAllWater = (waterCount === 4);
+        const y = isAllWater ? -4 : avgH;
+        posAttr.setY(i, y);
+
+        colors[i * 3]     = sumR / 4;
+        colors[i * 3 + 1] = sumG / 4;
+        colors[i * 3 + 2] = sumB / 4;
+    }
+    posAttr.needsUpdate = true;
+    terrainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    terrainGeo.computeVertexNormals();
+
+    const terrainMat = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.9,
+        metalness: 0,
+        flatShading: false
+    });
+    const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+    terrainMesh.receiveShadow = true;
+    terrainGroup.add(terrainMesh);
+
+    // ---- Water as a separate semi-transparent plane over water cells ----
+    // Find water cell bounding boxes and merge into strips for fewer meshes
+    for (let r = 0; r < hole.rows; r++) {
+        for (let c = 0; c < hole.cols; c++) {
+            if (hole.grid[r][c] !== T.WATER) continue;
+            // Check if this is part of a rectangular water region — just render each cell for now
+            // but could optimize with region merging
+            const waterGeo2 = new THREE.PlaneGeometry(cellSize + 0.2, cellSize + 0.2);
+            waterGeo2.rotateX(-Math.PI / 2);
+            const waterMat2 = new THREE.MeshStandardMaterial({
+                color: 0x2288bb,
+                transparent: true,
+                opacity: 0.85,
+                roughness: 0.1,
+                metalness: 0.4
+            });
+            const waterMesh = new THREE.Mesh(waterGeo2, waterMat2);
+            waterMesh.position.set((c + 0.5) * cellSize, -0.5, (r + 0.5) * cellSize);
+            terrainGroup.add(waterMesh);
+        }
+    }
+
+    // ---- Trees as InstancedMeshes (trunks + canopies) ----
+    const dummy = new THREE.Object3D();
     if (treeCells.length > 0) {
         const trunkGeo = new THREE.CylinderGeometry(2.4, 4, 24, 6);
         const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030 });
