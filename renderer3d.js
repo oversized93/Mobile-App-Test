@@ -23,10 +23,10 @@ function init3D() {
     threeCanvas = document.getElementById('three-canvas');
     scene3d = new THREE.Scene();
     scene3d.background = new THREE.Color('#1a7a8a');
-    scene3d.fog = new THREE.Fog('#1a7a8a', 1500, 3000);
+    scene3d.fog = new THREE.Fog('#1a7a8a', 3000, 6000);
 
     // Camera
-    camera3d = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 5000);
+    camera3d = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 5000);
     camera3d.position.set(0, 300, 0);
     camera3d.lookAt(0, 0, 0);
 
@@ -55,7 +55,7 @@ function init3D() {
     scene3d.add(dirLight);
 
     // Skybox — gradient sky using vertex colors
-    const skyGeo = new THREE.SphereGeometry(2500, 32, 32);
+    const skyGeo = new THREE.SphereGeometry(4500, 32, 32);
     const skyColors = [];
     const posAttr = skyGeo.getAttribute('position');
     for (let i = 0; i < posAttr.count; i++) {
@@ -108,7 +108,7 @@ function init3D() {
     }
 
     // Water plane extending beyond the course (teal ocean)
-    const groundGeo = new THREE.PlaneGeometry(5000, 5000);
+    const groundGeo = new THREE.PlaneGeometry(9000, 9000);
     const groundMat = new THREE.MeshStandardMaterial({
         color: 0x1a7a8a,
         roughness: 0.2,
@@ -130,7 +130,7 @@ function init3D() {
     scene3d.add(flagGroup);
 
     // Ball
-    const ballGeo = new THREE.SphereGeometry(1.2, 16, 16);
+    const ballGeo = new THREE.SphereGeometry(2.4, 16, 16);
     const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.1 });
     ballMesh = new THREE.Mesh(ballGeo, ballMat);
     ballMesh.castShadow = true;
@@ -138,7 +138,7 @@ function init3D() {
     scene3d.add(ballMesh);
 
     // Target marker (ring on ground)
-    const ringGeo = new THREE.RingGeometry(4, 6, 32);
+    const ringGeo = new THREE.RingGeometry(8, 12, 32);
     const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff44, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
     targetMesh = new THREE.Mesh(ringGeo, ringMat);
     targetMesh.rotation.x = -Math.PI / 2;
@@ -149,7 +149,7 @@ function init3D() {
     // Hole — dark recessed circle with white rim
     const holeGroup = new THREE.Group();
     // White rim ring
-    const rimGeo = new THREE.RingGeometry(1.8, 2.3, 32);
+    const rimGeo = new THREE.RingGeometry(3.6, 4.6, 32);
     const rimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, depthWrite: false });
     const rimMesh = new THREE.Mesh(rimGeo, rimMat);
     rimMesh.rotation.x = -Math.PI / 2;
@@ -157,7 +157,7 @@ function init3D() {
     rimMesh.renderOrder = 1;
     holeGroup.add(rimMesh);
     // Dark hole interior
-    const holeGeo = new THREE.CircleGeometry(1.8, 32);
+    const holeGeo = new THREE.CircleGeometry(3.6, 32);
     const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505, depthWrite: false });
     holeMesh = new THREE.Mesh(holeGeo, holeMat);
     holeMesh.rotation.x = -Math.PI / 2;
@@ -165,7 +165,7 @@ function init3D() {
     holeMesh.renderOrder = 1;
     holeGroup.add(holeMesh);
     // Recessed cylinder for depth
-    const cupGeo = new THREE.CylinderGeometry(1.8, 1.8, 2, 32, 1, true);
+    const cupGeo = new THREE.CylinderGeometry(3.6, 3.6, 4, 32, 1, true);
     const cupMat = new THREE.MeshStandardMaterial({ color: 0x111111, side: THREE.DoubleSide });
     const cupMesh = new THREE.Mesh(cupGeo, cupMat);
     cupMesh.position.y = -0.8;
@@ -249,11 +249,11 @@ function buildTerrain3D(hole) {
                 const treeHash = (c * 7 + r * 13) % 5;
                 if (treeHash < 4) { // ~80% of tree cells get trees
                     const sizeVar = 0.8 + ((c * 31 + r * 17) % 10) / 20; // 0.8 to 1.3
-                    const trunkH = 12 * sizeVar;
-                    const canopyR = 10 * sizeVar;
-                    const canopyH = 18 * sizeVar;
+                    const trunkH = 24 * sizeVar;
+                    const canopyR = 20 * sizeVar;
+                    const canopyH = 36 * sizeVar;
 
-                    const trunkGeo = new THREE.CylinderGeometry(1.2, 2, trunkH, 6);
+                    const trunkGeo = new THREE.CylinderGeometry(2.4, 4, trunkH, 6);
                     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030 });
                     const trunk = new THREE.Mesh(trunkGeo, trunkMat);
                     trunk.position.set((c + 0.5) * cellSize, trunkH / 2 + height, (r + 0.5) * cellSize);
@@ -281,17 +281,17 @@ function buildTerrain3D(hole) {
     const flagX = (hole.hole.x + 0.5) * cellSize;
     const flagZ = (hole.hole.y + 0.5) * cellSize;
 
-    const poleGeo = new THREE.CylinderGeometry(0.4, 0.4, 35, 8);
+    const poleGeo = new THREE.CylinderGeometry(0.8, 0.8, 70, 8);
     const poleMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
     const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(flagX, 17.5, flagZ);
+    pole.position.set(flagX, 35, flagZ);
     pole.castShadow = true;
     flagGroup.add(pole);
 
-    const flagGeo = new THREE.PlaneGeometry(12, 7);
+    const flagGeo = new THREE.PlaneGeometry(24, 14);
     const flagMat = new THREE.MeshStandardMaterial({ color: 0xee2222, side: THREE.DoubleSide });
     const flag = new THREE.Mesh(flagGeo, flagMat);
-    flag.position.set(flagX + 6, 31, flagZ);
+    flag.position.set(flagX + 12, 62, flagZ);
     flagGroup.add(flag);
 
     // Position hole
@@ -315,7 +315,7 @@ function getTerrainHeight(t) {
 // Three.js: x = horizontal, y = up, z = depth (into screen)
 function updateBall3D(wx, wy, wz, color) {
     if (!ballMesh) return;
-    ballMesh.position.set(wx, (wz || 0) * 0.25 + 1.2, wy);
+    ballMesh.position.set(wx, (wz || 0) * 0.25 + 2.4, wy);
     if (color) ballMesh.material.color.set(color);
 }
 
@@ -327,11 +327,11 @@ function updateTarget3D(wx, wy, visible) {
 
 // ---- Camera control ----
 function setCameraOverhead(cx, cz, zoom) {
-    // Overhead: camera looks straight down (or slightly angled)
-    const height = 150 / (zoom || 1);
+    // Overhead: camera looks down from high, slightly angled forward
+    const height = 300 / (zoom || 1);
     cam3dTarget.x = cx;
     cam3dTarget.y = height;
-    cam3dTarget.z = cz + height * 0.3; // slight offset so we see "ahead"
+    cam3dTarget.z = cz + height * 0.3;
     cam3dLookAt.x = cx;
     cam3dLookAt.y = 0;
     cam3dLookAt.z = cz;
@@ -341,38 +341,38 @@ function setCameraBehindBall(bx, bz, targetX, targetZ, distance) {
     const dx = targetX - bx, dz = targetZ - bz;
     const len = Math.sqrt(dx * dx + dz * dz) || 1;
     const nx = dx / len, nz = dz / len;
-    const dist = distance || 60;
-    // Very low angle — dramatic ground-level view like a real golfer behind the ball
-    const height = Math.max(4, dist * 0.14);
+    // Much closer to the ball — immersive first-person feel
+    const dist = distance || 24;
+    // Very low — eye-level of someone standing behind the ball
+    const height = 10;
 
     cam3dTarget.x = bx - nx * dist;
     cam3dTarget.y = height;
     cam3dTarget.z = bz - nz * dist;
-    // Look UP slightly past the ball toward the target/horizon
-    cam3dLookAt.x = bx + nx * 120;
-    cam3dLookAt.y = 8;
-    cam3dLookAt.z = bz + nz * 120;
+    // Look at a point high and far — horizon sits at upper third of screen
+    cam3dLookAt.x = bx + nx * 300;
+    cam3dLookAt.y = 40;
+    cam3dLookAt.z = bz + nz * 300;
 }
 
 // Follow-ball camera — low angle chase cam
 function setCameraFollowBall(bx, bz, ballVx, ballVy, ballZ) {
-    // Use ball velocity direction to position camera behind it
     const speed = Math.sqrt(ballVx * ballVx + ballVy * ballVy);
     if (speed < 10) {
-        // Ball barely moving — use a fixed behind-ball view
-        setCameraBehindBall(bx, bz, bx, bz + 1, 50);
+        setCameraBehindBall(bx, bz, bx, bz + 1, 30);
         return;
     }
     const nx = ballVx / speed, nz = ballVy / speed;
-    const dist = 55;
-    const height = 14 + (ballZ || 0) * 0.15; // rise with ball
+    const dist = 40;
+    const height = 15 + (ballZ || 0) * 0.2;
 
     cam3dTarget.x = bx - nx * dist;
     cam3dTarget.y = height;
     cam3dTarget.z = bz - nz * dist;
-    cam3dLookAt.x = bx + nx * 60;
-    cam3dLookAt.y = Math.max(4, (ballZ || 0) * 0.12);
-    cam3dLookAt.z = bz + nz * 60;
+    // Look far ahead and up
+    cam3dLookAt.x = bx + nx * 200;
+    cam3dLookAt.y = Math.max(20, (ballZ || 0) * 0.2 + 10);
+    cam3dLookAt.z = bz + nz * 200;
 }
 
 let cam3dSkipLerp = false; // set true during panning to prevent fights
@@ -433,7 +433,7 @@ function panCamera3D(dx, dy) {
 
 // ---- Zoom camera ----
 function zoomCamera3D(factor) {
-    cam3dTarget.y = Math.max(20, Math.min(1500, cam3dTarget.y * factor));
+    cam3dTarget.y = Math.max(30, Math.min(3000, cam3dTarget.y * factor));
 }
 
 // ---- Orbit camera around a point ----

@@ -57,7 +57,7 @@ const TERRAIN_FRICTION = {
 };
 
 // ---- Cell size for terrain grid ----
-const CELL = 16;
+const CELL = 32;
 
 // ---- Save/Load ----
 function saveData(key, val) { localStorage.setItem('gt_' + key, JSON.stringify(val)); }

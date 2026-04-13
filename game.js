@@ -29,7 +29,7 @@ const SCORE_NAMES = {
 
 // ---- Club system ----
 // Yard conversion: 1 yard = 3 world units (CELL = 16, so ~5 yards per cell)
-const YDS_TO_WORLD = 3;
+const YDS_TO_WORLD = 6;
 
 const CLUBS = [
     { name: 'Driver',  maxPower: 500, launch: 550, airMin: 0.15, maxYds: 230 },
@@ -195,7 +195,7 @@ function terrainAt(wx, wy) {
 }
 
 // ---- Ball physics update ----
-const GRAVITY = 400; // how fast ball comes back down
+const GRAVITY = 200; // halved to match 2x world scale
 
 function updateBall(dt) {
     if (!ball.moving) return;
@@ -2610,12 +2610,12 @@ function gameLoop(time) {
         if (meterActive) {
             const tdx = lockedDirX, tdy = lockedDirY;
             const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
-            setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 80, ball.y + tdy / tlen * 80, 60);
+            setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 80, ball.y + tdy / tlen * 80, 28);
         } else if (onGreenNow && !ball.moving) {
             if (!scouting && !manualZoom) {
                 const hx = (currentHole.hole.x + 0.5) * CELL;
                 const hy = (currentHole.hole.y + 0.5) * CELL;
-                setCameraBehindBall(ball.x, ball.y, hx, hy, 45);
+                setCameraBehindBall(ball.x, ball.y, hx, hy, 22);
             }
         } else if (ball.moving) {
             manualZoom = false;
