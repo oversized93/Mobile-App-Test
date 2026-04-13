@@ -23,10 +23,10 @@ function init3D() {
     threeCanvas = document.getElementById('three-canvas');
     scene3d = new THREE.Scene();
     scene3d.background = new THREE.Color('#1a7a8a');
-    scene3d.fog = new THREE.Fog('#1a7a8a', 3000, 6000);
+    scene3d.fog = new THREE.Fog('#1a7a8a', 5000, 12000);
 
     // Camera
-    camera3d = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 5000);
+    camera3d = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 15000);
     camera3d.position.set(0, 300, 0);
     camera3d.lookAt(0, 0, 0);
 
@@ -55,7 +55,7 @@ function init3D() {
     scene3d.add(dirLight);
 
     // Skybox — gradient sky using vertex colors
-    const skyGeo = new THREE.SphereGeometry(4500, 32, 32);
+    const skyGeo = new THREE.SphereGeometry(13000, 32, 32);
     const skyColors = [];
     const posAttr = skyGeo.getAttribute('position');
     for (let i = 0; i < posAttr.count; i++) {
@@ -108,7 +108,7 @@ function init3D() {
     }
 
     // Water plane extending beyond the course (teal ocean)
-    const groundGeo = new THREE.PlaneGeometry(9000, 9000);
+    const groundGeo = new THREE.PlaneGeometry(20000, 20000);
     const groundMat = new THREE.MeshStandardMaterial({
         color: 0x1a7a8a,
         roughness: 0.2,
@@ -130,7 +130,7 @@ function init3D() {
     scene3d.add(flagGroup);
 
     // Ball
-    const ballGeo = new THREE.SphereGeometry(2.4, 16, 16);
+    const ballGeo = new THREE.SphereGeometry(1.0, 16, 16);
     const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.1 });
     ballMesh = new THREE.Mesh(ballGeo, ballMat);
     ballMesh.castShadow = true;
@@ -315,7 +315,7 @@ function getTerrainHeight(t) {
 // Three.js: x = horizontal, y = up, z = depth (into screen)
 function updateBall3D(wx, wy, wz, color) {
     if (!ballMesh) return;
-    ballMesh.position.set(wx, (wz || 0) * 0.25 + 2.4, wy);
+    ballMesh.position.set(wx, (wz || 0) * 0.25 + 1.0, wy);
     if (color) ballMesh.material.color.set(color);
 }
 
@@ -328,7 +328,7 @@ function updateTarget3D(wx, wy, visible) {
 // ---- Camera control ----
 function setCameraOverhead(cx, cz, zoom) {
     // Overhead: camera looks down from high, slightly angled forward
-    const height = 300 / (zoom || 1);
+    const height = 800 / (zoom || 1);
     cam3dTarget.x = cx;
     cam3dTarget.y = height;
     cam3dTarget.z = cz + height * 0.3;

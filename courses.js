@@ -1,6 +1,6 @@
 // ============================================================
 //  COURSES — Pre-built career courses
-//  Each course has multiple holes, each hole is a terrain grid
+//  Each cell = 2 yards. Par 3 ~80 rows, Par 4 ~200 rows, Par 5 ~270 rows
 // ============================================================
 
 function makeGrid(cols, rows, fill) {
@@ -26,221 +26,235 @@ function fillCircle(grid, cx, cy, rad, t) {
         }
 }
 
-// ---- Course 1: Sunny Meadows (beginner) ----
+// Line of trees along an edge
+function treeLine(grid, x1, y1, x2, y2, width) {
+    for (let r = y1; r <= y2; r++) {
+        for (let c = x1; c <= x2; c++) {
+            if (r < 0 || r >= grid.length || c < 0 || c >= grid[0].length) continue;
+            grid[r][c] = T.TREE;
+        }
+    }
+}
+
+// ============================================================
+//  COURSE 1: Sunny Meadows (Beginner)
+// ============================================================
+
 function makeHole1_1() {
-    const cols = 20, rows = 40;
+    // Par 3 — 150 yds straight shot
+    const cols = 50, rows = 85;
     const g = makeGrid(cols, rows, T.ROUGH);
-    // Fairway straight up
-    fillRect(g, 7, 3, 12, 36, T.FAIRWAY);
-    // Tee box
-    fillRect(g, 8, 32, 11, 35, T.TEE);
+    // Fairway lane
+    fillRect(g, 18, 8, 31, 80, T.FAIRWAY);
+    // Tee
+    fillRect(g, 22, 75, 27, 80, T.TEE);
     // Green
-    fillCircle(g, 10, 6, 4, T.GREEN);
-    // Sand traps
-    fillCircle(g, 5, 15, 2, T.SAND);
-    fillCircle(g, 14, 20, 2, T.SAND);
-    return { grid: g, cols, rows, tee: { x: 10, y: 34 }, hole: { x: 10, y: 6 }, par: 3, name: 'Straight Shot' };
+    fillCircle(g, 25, 12, 8, T.GREEN);
+    // Sand bunkers near green
+    fillCircle(g, 14, 14, 3, T.SAND);
+    fillCircle(g, 36, 16, 3, T.SAND);
+    // Tree borders
+    treeLine(g, 0, 0, 10, rows - 1);
+    treeLine(g, 40, 0, cols - 1, rows - 1);
+    return { grid: g, cols, rows, tee: { x: 25, y: 77 }, hole: { x: 25, y: 12 }, par: 3, name: 'Straight Shot' };
 }
 
 function makeHole1_2() {
-    const cols = 26, rows = 64;
+    // Par 4 — 380 yds gentle dogleg right
+    const cols = 50, rows = 200;
     const g = makeGrid(cols, rows, T.ROUGH);
-    // Fairway with dogleg right — longer for par 4
-    fillRect(g, 8, 38, 14, 58, T.FAIRWAY);
-    fillRect(g, 11, 24, 19, 42, T.FAIRWAY);
-    fillRect(g, 14, 5, 20, 28, T.FAIRWAY);
+    // Fairway with subtle dogleg
+    fillRect(g, 14, 150, 26, 195, T.FAIRWAY); // tee section
+    fillRect(g, 16, 100, 30, 155, T.FAIRWAY); // middle
+    fillRect(g, 20, 50, 35, 110, T.FAIRWAY);  // approach curving right
+    fillRect(g, 22, 10, 34, 55, T.FAIRWAY);   // landing area
     // Tee
-    fillRect(g, 9, 55, 12, 58, T.TEE);
+    fillRect(g, 18, 190, 23, 195, T.TEE);
     // Green
-    fillCircle(g, 17, 8, 4, T.GREEN);
-    // Water hazard on the left
-    fillRect(g, 3, 18, 10, 26, T.WATER);
-    // Sand
-    fillCircle(g, 21, 10, 2, T.SAND);
-    fillCircle(g, 13, 8, 2, T.SAND);
-    // Trees
-    fillCircle(g, 5, 40, 2, T.TREE);
-    fillCircle(g, 21, 48, 2, T.TREE);
-    fillCircle(g, 4, 30, 2, T.TREE);
-    return { grid: g, cols, rows, tee: { x: 10, y: 56 }, hole: { x: 17, y: 8 }, par: 4, name: 'Dogleg Right' };
+    fillCircle(g, 28, 14, 7, T.GREEN);
+    // Bunkers
+    fillCircle(g, 20, 18, 3, T.SAND);
+    fillCircle(g, 36, 20, 3, T.SAND);
+    fillCircle(g, 12, 130, 3, T.SAND);
+    // Tree borders
+    treeLine(g, 0, 0, 10, rows - 1);
+    treeLine(g, 40, 0, cols - 1, rows - 1);
+    return { grid: g, cols, rows, tee: { x: 20, y: 192 }, hole: { x: 28, y: 14 }, par: 4, name: 'Dogleg Right' };
 }
 
 function makeHole1_3() {
-    const cols = 22, rows = 80;
+    // Par 5 — 540 yds with water hazard
+    const cols = 55, rows = 270;
     const g = makeGrid(cols, rows, T.ROUGH);
-    // Long straight fairway — true par 5
-    fillRect(g, 6, 3, 14, 74, T.FAIRWAY);
+    // Long fairway
+    fillRect(g, 18, 15, 35, 265, T.FAIRWAY);
     // Tee
-    fillRect(g, 8, 70, 12, 74, T.TEE);
+    fillRect(g, 24, 258, 29, 265, T.TEE);
     // Green
-    fillCircle(g, 10, 7, 4, T.GREEN);
-    // Water across middle
-    fillRect(g, 3, 36, 17, 40, T.WATER);
-    // Bridge/path over water
-    fillRect(g, 8, 36, 12, 40, T.FAIRWAY);
-    // Sand traps near green
-    fillCircle(g, 5, 9, 2, T.SAND);
-    fillCircle(g, 15, 6, 2, T.SAND);
-    // More sand mid-fairway
-    fillCircle(g, 16, 50, 2, T.SAND);
-    // Trees lining fairway
-    fillCircle(g, 2, 20, 2, T.TREE);
-    fillCircle(g, 18, 20, 2, T.TREE);
-    fillCircle(g, 2, 45, 2, T.TREE);
-    fillCircle(g, 18, 45, 2, T.TREE);
-    fillCircle(g, 2, 60, 2, T.TREE);
-    fillCircle(g, 18, 60, 2, T.TREE);
-    return { grid: g, cols, rows, tee: { x: 10, y: 72 }, hole: { x: 10, y: 7 }, par: 5, name: 'The Bridge' };
+    fillCircle(g, 26, 20, 8, T.GREEN);
+    // Water hazard mid-fairway
+    fillRect(g, 10, 110, 45, 135, T.WATER);
+    // Bridge
+    fillRect(g, 22, 110, 31, 135, T.FAIRWAY);
+    // Bunkers near green
+    fillCircle(g, 15, 22, 3, T.SAND);
+    fillCircle(g, 38, 22, 3, T.SAND);
+    // Mid-fairway bunker (force layup)
+    fillCircle(g, 20, 170, 4, T.SAND);
+    // Tree borders
+    treeLine(g, 0, 0, 10, rows - 1);
+    treeLine(g, 45, 0, cols - 1, rows - 1);
+    return { grid: g, cols, rows, tee: { x: 26, y: 261 }, hole: { x: 26, y: 20 }, par: 5, name: 'The Bridge' };
 }
 
-// ---- Course 2: Oceanside Links (intermediate) ----
+// ============================================================
+//  COURSE 2: Oceanside Links (Intermediate)
+// ============================================================
+
 function makeHole2_1() {
-    const cols = 24, rows = 60;
+    // Par 4 — 400 yds curving with ocean
+    const cols = 55, rows = 210;
     const g = makeGrid(cols, rows, T.ROUGH);
-    // Fairway curving left — stretched for par 4
-    fillRect(g, 12, 36, 17, 54, T.FAIRWAY);
-    fillRect(g, 8, 22, 16, 40, T.FAIRWAY);
-    fillRect(g, 4, 4, 12, 26, T.FAIRWAY);
+    // Fairway curving left
+    fillRect(g, 25, 150, 40, 205, T.FAIRWAY);
+    fillRect(g, 15, 90, 35, 160, T.FAIRWAY);
+    fillRect(g, 10, 15, 28, 100, T.FAIRWAY);
     // Tee
-    fillRect(g, 13, 50, 16, 54, T.TEE);
+    fillRect(g, 30, 200, 35, 205, T.TEE);
     // Green
-    fillCircle(g, 8, 8, 4, T.GREEN);
-    // Ocean (water) on right side
-    fillRect(g, 19, 0, 23, 59, T.WATER);
-    // Sand
-    fillCircle(g, 4, 18, 2, T.SAND);
-    fillCircle(g, 12, 8, 2, T.SAND);
-    // Trees
-    fillCircle(g, 3, 35, 2, T.TREE);
-    return { grid: g, cols, rows, tee: { x: 14, y: 52 }, hole: { x: 8, y: 8 }, par: 4, name: 'Coastal Curve' };
+    fillCircle(g, 18, 20, 7, T.GREEN);
+    // Ocean on right side
+    fillRect(g, 42, 0, 54, 210, T.WATER);
+    // Bunkers
+    fillCircle(g, 26, 22, 3, T.SAND);
+    fillCircle(g, 10, 25, 3, T.SAND);
+    fillCircle(g, 22, 120, 3, T.SAND);
+    // Tree border left
+    treeLine(g, 0, 0, 5, rows - 1);
+    return { grid: g, cols, rows, tee: { x: 32, y: 202 }, hole: { x: 18, y: 20 }, par: 4, name: 'Coastal Curve' };
 }
 
 function makeHole2_2() {
-    const cols = 20, rows = 36;
+    // Par 3 — 170 yds Island Green
+    const cols = 50, rows = 90;
     const g = makeGrid(cols, rows, T.ROUGH);
-    // Short par 3 over water
-    fillRect(g, 7, 24, 12, 32, T.FAIRWAY);
-    fillRect(g, 7, 3, 12, 14, T.FAIRWAY);
-    // Tee
-    fillRect(g, 8, 29, 11, 32, T.TEE);
-    // Green (island green!)
-    fillCircle(g, 10, 7, 4, T.GREEN);
-    // Water surrounding green
-    fillRect(g, 3, 14, 16, 24, T.WATER);
-    fillCircle(g, 4, 7, 3, T.WATER);
-    fillCircle(g, 16, 7, 3, T.WATER);
-    // Re-place green on top of water
-    fillCircle(g, 10, 7, 4, T.GREEN);
-    // Sand on green edges
-    fillCircle(g, 6, 5, 1, T.SAND);
-    fillCircle(g, 14, 9, 1, T.SAND);
-    return { grid: g, cols, rows, tee: { x: 10, y: 30 }, hole: { x: 10, y: 7 }, par: 3, name: 'Island Green' };
+    // Tee area
+    fillRect(g, 18, 72, 31, 85, T.FAIRWAY);
+    fillRect(g, 22, 80, 27, 85, T.TEE);
+    // Water lake
+    fillRect(g, 5, 10, 45, 65, T.WATER);
+    // Island green in the middle
+    fillCircle(g, 25, 25, 9, T.GREEN);
+    // Small approach landing
+    fillRect(g, 22, 35, 28, 40, T.ROUGH);
+    // Sand on island
+    fillCircle(g, 18, 28, 2, T.SAND);
+    fillCircle(g, 32, 22, 2, T.SAND);
+    return { grid: g, cols, rows, tee: { x: 25, y: 82 }, hole: { x: 25, y: 25 }, par: 3, name: 'Island Green' };
 }
 
 function makeHole2_3() {
-    const cols = 28, rows = 78;
+    // Par 5 — 560 yds S-curve
+    const cols = 60, rows = 280;
     const g = makeGrid(cols, rows, T.ROUGH);
-    // S-curve fairway — long par 5
-    fillRect(g, 6, 56, 14, 72, T.FAIRWAY);
-    fillRect(g, 12, 40, 20, 60, T.FAIRWAY);
-    fillRect(g, 6, 26, 16, 44, T.FAIRWAY);
-    fillRect(g, 14, 14, 22, 30, T.FAIRWAY);
-    fillRect(g, 8, 4, 18, 18, T.FAIRWAY);
+    // S-curve fairway
+    fillRect(g, 15, 215, 30, 275, T.FAIRWAY); // tee leg
+    fillRect(g, 20, 150, 40, 220, T.FAIRWAY); // first bend right
+    fillRect(g, 15, 80, 35, 160, T.FAIRWAY);  // middle back left
+    fillRect(g, 22, 15, 42, 90, T.FAIRWAY);   // approach
     // Tee
-    fillRect(g, 8, 68, 12, 72, T.TEE);
+    fillRect(g, 19, 268, 25, 275, T.TEE);
     // Green
-    fillCircle(g, 13, 8, 4, T.GREEN);
+    fillCircle(g, 32, 20, 8, T.GREEN);
     // Water hazards
-    fillRect(g, 2, 38, 8, 46, T.WATER);
-    fillCircle(g, 23, 24, 3, T.WATER);
-    // Sand
-    fillCircle(g, 9, 8, 2, T.SAND);
-    fillCircle(g, 18, 6, 2, T.SAND);
-    fillCircle(g, 16, 58, 2, T.SAND);
-    // Trees
-    fillCircle(g, 3, 60, 2, T.TREE);
-    fillCircle(g, 24, 14, 2, T.TREE);
-    fillCircle(g, 4, 20, 2, T.TREE);
-    fillCircle(g, 22, 50, 2, T.TREE);
-    return { grid: g, cols, rows, tee: { x: 10, y: 70 }, hole: { x: 13, y: 8 }, par: 5, name: 'The Serpent' };
+    fillRect(g, 5, 120, 15, 160, T.WATER);
+    fillRect(g, 44, 160, 55, 200, T.WATER);
+    // Bunkers
+    fillCircle(g, 24, 22, 3, T.SAND);
+    fillCircle(g, 40, 26, 3, T.SAND);
+    fillCircle(g, 30, 180, 3, T.SAND);
+    // Tree borders
+    treeLine(g, 0, 0, 6, rows - 1);
+    treeLine(g, 52, 0, cols - 1, rows - 1);
+    return { grid: g, cols, rows, tee: { x: 22, y: 271 }, hole: { x: 32, y: 20 }, par: 5, name: 'The Serpent' };
 }
 
-// ---- Course 3: Mountain Ridge (advanced) ----
+// ============================================================
+//  COURSE 3: Mountain Ridge (Advanced)
+// ============================================================
+
 function makeHole3_1() {
-    const cols = 24, rows = 66;
+    // Par 4 — 410 yds narrow fairway
+    const cols = 45, rows = 215;
     const g = makeGrid(cols, rows, T.ROUGH);
-    // Narrow fairway with trees on both sides — long par 4
-    fillRect(g, 9, 3, 14, 60, T.FAIRWAY);
+    // Narrow fairway
+    fillRect(g, 17, 10, 27, 205, T.FAIRWAY);
     // Tee
-    fillRect(g, 10, 56, 13, 60, T.TEE);
+    fillRect(g, 19, 198, 25, 205, T.TEE);
     // Green
-    fillCircle(g, 12, 6, 3, T.GREEN);
-    // Dense trees both sides
-    fillRect(g, 2, 5, 7, 55, T.TREE);
-    fillRect(g, 16, 5, 21, 55, T.TREE);
-    // Gaps in trees (bailout zones)
-    fillRect(g, 5, 28, 8, 32, T.ROUGH);
-    fillRect(g, 15, 40, 18, 44, T.ROUGH);
-    // Sand near green
-    fillCircle(g, 8, 5, 2, T.SAND);
-    fillCircle(g, 16, 7, 2, T.SAND);
-    // Mid-fairway sand
-    fillCircle(g, 11, 35, 1, T.SAND);
-    return { grid: g, cols, rows, tee: { x: 12, y: 58 }, hole: { x: 12, y: 6 }, par: 4, name: 'The Gauntlet' };
+    fillCircle(g, 22, 14, 6, T.GREEN);
+    // Dense tree walls
+    treeLine(g, 0, 0, 12, rows - 1);
+    treeLine(g, 32, 0, cols - 1, rows - 1);
+    // Bunkers near green
+    fillCircle(g, 14, 16, 3, T.SAND);
+    fillCircle(g, 30, 16, 3, T.SAND);
+    // Mid-fairway bunker
+    fillCircle(g, 18, 120, 3, T.SAND);
+    return { grid: g, cols, rows, tee: { x: 22, y: 201 }, hole: { x: 22, y: 14 }, par: 4, name: 'The Gauntlet' };
 }
 
 function makeHole3_2() {
-    const cols = 30, rows = 74;
+    // Par 5 — 580 yds sharp dogleg left
+    const cols = 65, rows = 290;
     const g = makeGrid(cols, rows, T.ROUGH);
-    // Sharp dogleg left — true par 5
-    fillRect(g, 16, 48, 22, 68, T.FAIRWAY);
-    fillRect(g, 10, 34, 20, 52, T.FAIRWAY);
-    fillRect(g, 6, 20, 14, 38, T.FAIRWAY);
-    fillRect(g, 4, 4, 12, 24, T.FAIRWAY);
+    // Sharp dogleg left
+    fillRect(g, 30, 220, 48, 285, T.FAIRWAY); // tee leg
+    fillRect(g, 22, 140, 50, 230, T.FAIRWAY); // turn area
+    fillRect(g, 12, 60, 35, 150, T.FAIRWAY);  // down the left
+    fillRect(g, 10, 10, 28, 70, T.FAIRWAY);   // approach
     // Tee
-    fillRect(g, 17, 64, 20, 68, T.TEE);
+    fillRect(g, 35, 278, 42, 285, T.TEE);
     // Green
-    fillCircle(g, 8, 8, 3, T.GREEN);
+    fillCircle(g, 18, 16, 7, T.GREEN);
     // Water cutting the corner
-    fillRect(g, 2, 30, 8, 40, T.WATER);
-    // More water near green
-    fillCircle(g, 14, 12, 2, T.WATER);
-    // Trees
-    fillCircle(g, 24, 38, 3, T.TREE);
-    fillCircle(g, 14, 16, 2, T.TREE);
-    fillCircle(g, 2, 18, 2, T.TREE);
-    fillCircle(g, 26, 56, 2, T.TREE);
-    // Sand
-    fillCircle(g, 5, 14, 2, T.SAND);
-    fillCircle(g, 11, 6, 1, T.SAND);
-    fillCircle(g, 18, 44, 2, T.SAND);
-    return { grid: g, cols, rows, tee: { x: 18, y: 66 }, hole: { x: 8, y: 8 }, par: 5, name: 'Devils Elbow' };
+    fillRect(g, 3, 180, 25, 230, T.WATER);
+    // Bunkers
+    fillCircle(g, 10, 18, 3, T.SAND);
+    fillCircle(g, 26, 20, 3, T.SAND);
+    fillCircle(g, 40, 160, 3, T.SAND);
+    // Tree borders
+    treeLine(g, 0, 0, 4, 175);
+    treeLine(g, 55, 0, cols - 1, rows - 1);
+    return { grid: g, cols, rows, tee: { x: 38, y: 281 }, hole: { x: 18, y: 16 }, par: 5, name: 'Devils Elbow' };
 }
 
 function makeHole3_3() {
-    const cols = 20, rows = 34;
+    // Par 3 — 195 yds over water
+    const cols = 50, rows = 105;
     const g = makeGrid(cols, rows, T.ROUGH);
-    // Short but treacherous par 3
-    fillRect(g, 6, 22, 13, 30, T.FAIRWAY);
-    fillRect(g, 6, 3, 13, 12, T.FAIRWAY);
-    // Tee
-    fillRect(g, 8, 27, 11, 30, T.TEE);
+    // Tee area
+    fillRect(g, 18, 88, 31, 100, T.FAIRWAY);
+    fillRect(g, 22, 95, 27, 100, T.TEE);
+    // Massive water hazard
+    fillRect(g, 3, 25, 46, 85, T.WATER);
+    // Approach area
+    fillRect(g, 20, 15, 30, 30, T.FAIRWAY);
     // Green
-    fillCircle(g, 10, 6, 3, T.GREEN);
-    // Massive water hazard in middle
-    fillRect(g, 3, 12, 16, 22, T.WATER);
-    // Sand everywhere near green
-    fillCircle(g, 6, 4, 2, T.SAND);
-    fillCircle(g, 14, 4, 2, T.SAND);
-    fillCircle(g, 6, 9, 1, T.SAND);
-    fillCircle(g, 14, 9, 1, T.SAND);
-    // Trees
-    fillCircle(g, 2, 6, 2, T.TREE);
-    fillCircle(g, 17, 6, 2, T.TREE);
-    return { grid: g, cols, rows, tee: { x: 10, y: 28 }, hole: { x: 10, y: 6 }, par: 3, name: 'Do or Die' };
+    fillCircle(g, 25, 12, 6, T.GREEN);
+    // Bunkers guarding green
+    fillCircle(g, 15, 16, 3, T.SAND);
+    fillCircle(g, 35, 16, 3, T.SAND);
+    // Tree borders
+    treeLine(g, 0, 0, 3, rows - 1);
+    treeLine(g, 47, 0, cols - 1, rows - 1);
+    return { grid: g, cols, rows, tee: { x: 25, y: 97 }, hole: { x: 25, y: 12 }, par: 3, name: 'Do or Die' };
 }
 
-// ---- Build all courses ----
+// ============================================================
+//  Career courses
+// ============================================================
+
 const CAREER_COURSES = [
     {
         name: 'Sunny Meadows',

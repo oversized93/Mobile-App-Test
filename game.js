@@ -29,7 +29,7 @@ const SCORE_NAMES = {
 
 // ---- Club system ----
 // Yard conversion: 1 yard = 3 world units (CELL = 16, so ~5 yards per cell)
-const YDS_TO_WORLD = 6;
+const YDS_TO_WORLD = 16;
 
 const CLUBS = [
     { name: 'Driver',  maxPower: 500, launch: 550, airMin: 0.15, maxYds: 230 },
@@ -165,12 +165,15 @@ function startHole(hole) {
 }
 
 function calcZoom() {
+    // Returns a zoom factor — higher = closer to ground
+    // For 3D: setCameraOverhead uses height = 800 / (zoom * 0.5)
+    // We want height roughly equal to hole length so the whole hole fits
     if (!currentHole) return 1;
-    const holeW = currentHole.cols * CELL;
     const holeH = currentHole.rows * CELL;
-    const zx = (W() - 20) / holeW;
-    const zy = (H() - 100) / holeH;
-    return Math.min(zx, zy, 3);
+    // Target height = half the hole length (so the full hole fits vertically in a 60° FOV)
+    const targetHeight = holeH * 0.6;
+    // height = 800 / (zoom * 0.5) => zoom = 1600 / height
+    return 1600 / targetHeight;
 }
 
 function centerCamOnBall() {
