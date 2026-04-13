@@ -235,9 +235,10 @@ function buildTerrain3D(hole) {
 
         const inst = new THREE.InstancedMesh(cellGeo, mat, cells.length);
         inst.receiveShadow = true;
-        const y = isWater ? -0.3 : (t === T.SAND ? height - 0.3 : height);
+        const baseY = isWater ? -0.3 : (t === T.SAND ? height - 0.3 : height);
         for (let i = 0; i < cells.length; i++) {
-            dummy.position.set((cells[i].c + 0.5) * cellSize, y, (cells[i].r + 0.5) * cellSize);
+            const cellH = (hole.heights && hole.heights[cells[i].r]) ? (hole.heights[cells[i].r][cells[i].c] || 0) : 0;
+            dummy.position.set((cells[i].c + 0.5) * cellSize, baseY + cellH, (cells[i].r + 0.5) * cellSize);
             dummy.updateMatrix();
             inst.setMatrixAt(i, dummy.matrix);
         }
@@ -260,16 +261,17 @@ function buildTerrain3D(hole) {
         for (let i = 0; i < treeCells.length; i++) {
             const { c, r } = treeCells[i];
             const sizeVar = 0.8 + ((c * 31 + r * 17) % 10) / 20;
+            const cellH = (hole.heights && hole.heights[r]) ? (hole.heights[r][c] || 0) : 0;
 
             // Trunk
-            dummy.position.set((c + 0.5) * cellSize, 12 * sizeVar, (r + 0.5) * cellSize);
+            dummy.position.set((c + 0.5) * cellSize, 12 * sizeVar + cellH, (r + 0.5) * cellSize);
             dummy.scale.set(sizeVar, sizeVar, sizeVar);
             dummy.rotation.set(0, 0, 0);
             dummy.updateMatrix();
             trunkInst.setMatrixAt(i, dummy.matrix);
 
             // Leaf
-            dummy.position.set((c + 0.5) * cellSize, 24 * sizeVar + 16 * sizeVar, (r + 0.5) * cellSize);
+            dummy.position.set((c + 0.5) * cellSize, 24 * sizeVar + 16 * sizeVar + cellH, (r + 0.5) * cellSize);
             dummy.updateMatrix();
             leafInst.setMatrixAt(i, dummy.matrix);
         }
@@ -280,25 +282,26 @@ function buildTerrain3D(hole) {
         terrainGroup.add(leafInst);
     }
 
-    // Flag pole + flag
+    // Flag pole + flag — sits on terrain elevation
     const flagX = (hole.hole.x + 0.5) * cellSize;
     const flagZ = (hole.hole.y + 0.5) * cellSize;
+    const flagH = (hole.heights && hole.heights[hole.hole.y]) ? (hole.heights[hole.hole.y][hole.hole.x] || 0) : 0;
 
     const poleGeo = new THREE.CylinderGeometry(0.3, 0.3, 28, 8);
     const poleMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
     const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(flagX, 14, flagZ);
+    pole.position.set(flagX, 14 + flagH, flagZ);
     pole.castShadow = true;
     flagGroup.add(pole);
 
     const flagGeo = new THREE.PlaneGeometry(8, 5);
     const flagMat = new THREE.MeshStandardMaterial({ color: 0xee2222, side: THREE.DoubleSide });
     const flag = new THREE.Mesh(flagGeo, flagMat);
-    flag.position.set(flagX + 4, 25, flagZ);
+    flag.position.set(flagX + 4, 25 + flagH, flagZ);
     flagGroup.add(flag);
 
-    // Position hole
-    holeMesh.position.set(flagX, 0, flagZ);
+    // Position hole (raised to terrain height)
+    holeMesh.position.set(flagX, flagH + 0.1, flagZ);
 }
 
 function getTerrainHeight(t) {
@@ -318,7 +321,7 @@ function getTerrainHeight(t) {
 // Three.js: x = horizontal, y = up, z = depth (into screen)
 function updateBall3D(wx, wy, wz, color) {
     if (!ballMesh) return;
-    ballMesh.position.set(wx, (wz || 0) * 0.25 + 1.0, wy);
+    ballMesh.position.set(wx, (wz || 0) + 1.0, wy);
     if (color) ballMesh.material.color.set(color);
 }
 

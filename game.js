@@ -113,9 +113,12 @@ function notify(text) { notification = { text, timer: 2.5 }; }
 // ---- Start a hole ----
 function startHole(hole) {
     currentHole = hole;
+    // Generate elevation heightmap if not already present
+    if (!hole.heights) hole.heights = generateHeights(hole);
     ball.x = (hole.tee.x + 0.5) * CELL;
     ball.y = (hole.tee.y + 0.5) * CELL;
-    ball.vx = 0; ball.vy = 0; ball.z = 0; ball.vz = 0; ball.moving = false; ball.airborne = false;
+    ball.vx = 0; ball.vy = 0; ball.vz = 0; ball.moving = false; ball.airborne = false;
+    ball.z = terrainHeightAt(ball.x, ball.y);
     strokes = 0;
     aiming = false;
     holeComplete = false;
@@ -191,6 +194,42 @@ function terrainAt(wx, wy) {
     return currentHole.grid[gr][gc];
 }
 
+// Terrain elevation at world position (in world units)
+function terrainHeightAt(wx, wy) {
+    if (!currentHole || !currentHole.heights) return 0;
+    const gc = Math.floor(wx / CELL);
+    const gr = Math.floor(wy / CELL);
+    if (gc < 0 || gc >= currentHole.cols || gr < 0 || gr >= currentHole.rows) return 0;
+    return currentHole.heights[gr][gc] || 0;
+}
+
+// Generate a heightmap for a hole using smooth noise
+function generateHeights(hole) {
+    const h = [];
+    // Simple seeded noise based on hole dimensions
+    const seed = hole.cols * 137 + hole.rows * 311;
+    function noise(x, y, freq) {
+        const a = Math.sin((x * freq + y * freq * 1.3 + seed) * 12.9898) * 43758.5453;
+        return (a - Math.floor(a)) * 2 - 1;
+    }
+    for (let r = 0; r < hole.rows; r++) {
+        h[r] = [];
+        for (let c = 0; c < hole.cols; c++) {
+            // Multi-octave noise for natural rolling terrain
+            let height = 0;
+            height += noise(c, r, 0.04) * 50;
+            height += noise(c, r, 0.12) * 15;
+            height += noise(c, r, 0.25) * 5;
+            // Flatten tees and greens
+            const t = hole.grid[r][c];
+            if (t === T.TEE || t === T.GREEN) height *= 0.1;
+            if (t === T.WATER) height = -8;
+            h[r][c] = height;
+        }
+    }
+    return h;
+}
+
 // ---- Ball physics update ----
 const GRAVITY = 304; // tuned for 15% slower flight, 20% higher arc
 
@@ -200,7 +239,8 @@ function updateBall(dt) {
 
     // Ball has stopped rolling on ground
     if (speed < 2 && !ball.airborne) {
-        ball.vx = 0; ball.vy = 0; ball.z = 0; ball.vz = 0;
+        ball.vx = 0; ball.vy = 0; ball.vz = 0;
+        ball.z = terrainHeightAt(ball.x, ball.y);
         ball.moving = false; ball.airborne = false;
         onBallStopped();
         return;
@@ -237,9 +277,17 @@ function updateBall(dt) {
                 }
             }
 
-            // Ball has landed
-            if (ball.z <= 0) {
-                ball.z = 0;
+            // Wind: continuous force while airborne (strongest when ball is high)
+            // Base force per unit time scaled by wind speed
+            const heightBoost = Math.min(1 + ball.z / 200, 2); // higher = more wind
+            const windForcePerSec = wind.speed * 2.5 * heightBoost;
+            ball.vx += Math.cos(wind.angle) * windForcePerSec * stepDt;
+            ball.vy += Math.sin(wind.angle) * windForcePerSec * stepDt;
+
+            // Ball has landed (z below the terrain at current position)
+            const groundHeight = terrainHeightAt(ball.x, ball.y);
+            if (ball.z <= groundHeight) {
+                ball.z = groundHeight;
                 ball.vz = 0;
                 ball.airborne = false;
 
@@ -428,55 +476,62 @@ function fireFromMeter(dirX, dirY, powerPct, accuracy, curlAmt) {
 }
 
 // ---- Shot mechanic (Golf Clash style) ----
+// Lie modifiers — how different terrains affect shot quality
+const LIE_MODIFIERS = {
+    [T.TEE]:     { power: 1.00, spin: 1.00, launchMult: 1.00, name: 'Tee' },
+    [T.FAIRWAY]: { power: 1.00, spin: 1.00, launchMult: 1.00, name: 'Fairway' },
+    [T.GREEN]:   { power: 1.00, spin: 1.00, launchMult: 1.00, name: 'Green' },
+    [T.ROUGH]:   { power: 0.80, spin: 0.40, launchMult: 0.85, name: 'Rough' },
+    [T.SAND]:    { power: 0.55, spin: 0.00, launchMult: 0.70, name: 'Sand' },
+    [T.PATH]:    { power: 0.95, spin: 0.80, launchMult: 0.95, name: 'Path' },
+};
+
+function getLieModifier(x, y) {
+    const t = terrainAt(x, y);
+    return LIE_MODIFIERS[t] || LIE_MODIFIERS[T.FAIRWAY];
+}
+
 function takeShot(power, dirX, dirY) {
     const club = CLUBS[selectedClub];
-    const p = Math.min(power, club.maxPower);
+    const lie = getLieModifier(ball.x, ball.y);
+    // Apply lie power cap — can't hit full shots from rough/sand
+    const p = Math.min(power, club.maxPower) * lie.power;
     const len = Math.sqrt(dirX * dirX + dirY * dirY);
     if (len === 0) return;
     const powerPct = p / club.maxPower;
 
-    // Calculate velocity so ball actually travels maxYds at full power
-    // For air shots: distance = velocity * airTime, airTime = 2*vz/gravity
-    // We want ~85% of maxYds covered in air, 15% roll
     const targetDist = club.maxYds * YDS_TO_WORLD * powerPct;
     let velocity;
 
     ball.moving = true;
-    ball.z = 0;
+    ball.z = terrainHeightAt(ball.x, ball.y);
     ball.vz = 0;
     ball.airborne = false;
 
     if (club.launch > 0 && powerPct > club.airMin) {
         ball.airborne = true;
-        // Non-linear launch: full swings produce way taller arcs than half swings
-        ball.vz = club.launch * Math.pow(powerPct, 1.4);
+        // Non-linear launch + lie reduces launch height (ball doesn't pop up as well from rough)
+        ball.vz = club.launch * Math.pow(powerPct, 1.4) * lie.launchMult;
         const airTime = 2 * ball.vz / GRAVITY;
         velocity = (targetDist * 0.85) / Math.max(airTime, 0.1);
     } else {
-        // Ground shot (putt or low power) — velocity for rolling the full distance
-        velocity = targetDist * 1.2; // slower for dramatic putting
+        velocity = targetDist * 1.2;
     }
 
     ball.vx = (dirX / len) * velocity;
     ball.vy = (dirY / len) * velocity;
 
-    // Apply sidespin — curves flight perpendicular to aim direction
+    // Apply sidespin — reduced by poor lies
     if (spin.side !== 0 && ball.airborne) {
         const nx = dirX / len, ny = dirY / len;
-        // Perpendicular vector
         const perpX = -ny, perpY = nx;
-        const sideForce = spin.side * p * 0.15;
+        const sideForce = spin.side * p * 0.15 * lie.spin;
         ball.vx += perpX * sideForce;
         ball.vy += perpY * sideForce;
     }
 
-    // Apply wind force to initial velocity (stronger effect on airborne shots)
-    const windForce = wind.speed * (ball.airborne ? 1.8 : 0.4);
-    ball.vx += Math.cos(wind.angle) * windForce;
-    ball.vy += Math.sin(wind.angle) * windForce;
-
-    // Store spin for landing roll adjustment
-    ball.topSpin = spin.top;
+    // Store topspin (reduced by lie) for landing roll
+    ball.topSpin = spin.top * lie.spin;
 
     strokes++;
     lastSafePos = { x: ball.x, y: ball.y };
