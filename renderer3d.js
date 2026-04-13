@@ -395,14 +395,14 @@ function updateTarget3D(wx, wy, visible) {
 
 // ---- Camera control ----
 function setCameraOverhead(cx, cz, zoom) {
-    // Overhead: camera looks down from high, slightly angled forward
-    const height = 800 / (zoom || 1);
+    // Tilted overhead — about 55° from horizontal so hills are visible
+    const height = 500 / (zoom || 1);
     cam3dTarget.x = cx;
     cam3dTarget.y = height;
-    cam3dTarget.z = cz + height * 0.3;
+    cam3dTarget.z = cz + height * 0.7; // back it up so we look forward into hills
     cam3dLookAt.x = cx;
     cam3dLookAt.y = 0;
-    cam3dLookAt.z = cz;
+    cam3dLookAt.z = cz - height * 0.15; // look slightly ahead of camera
 }
 
 function setCameraBehindBall(bx, bz, targetX, targetZ, distance) {

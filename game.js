@@ -410,6 +410,7 @@ function updateBall(dt) {
 }
 
 let lastSafePos = { x: 0, y: 0 };
+let shotStartPos = { x: 0, y: 0 };
 
 function resetBallToLastSafe() {
     ball.x = lastSafePos.x;
@@ -423,6 +424,15 @@ function onBallStopped() {
     if (ter !== T.WATER && ter !== T.OOB) {
         lastSafePos = { x: ball.x, y: ball.y };
     }
+
+    // Announce shot distance traveled
+    const dx = ball.x - shotStartPos.x, dy = ball.y - shotStartPos.y;
+    const shotYds = Math.round(Math.sqrt(dx * dx + dy * dy) / YDS_TO_WORLD);
+    if (shotYds > 1 && !holeComplete) {
+        const toHoleYds = Math.round(distToHole() / YDS_TO_WORLD);
+        notify(shotYds + ' yd shot \u2022 ' + toHoleYds + ' yds to hole');
+    }
+
     shotTrail = [];
     autoSelectClub();
     updateTargetFromClub(); // reposition target for new ball position
@@ -555,6 +565,7 @@ function takeShot(power, dirX, dirY) {
     ball.topSpin = spin.top * lie.spin;
 
     strokes++;
+    shotStartPos = { x: ball.x, y: ball.y };
     lastSafePos = { x: ball.x, y: ball.y };
     shotTrail = [];
     aiming = false;
