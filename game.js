@@ -573,6 +573,9 @@ function takeShot(power, dirX, dirY) {
     meterPhase = 0;
     shotLocked = false;
     putting = false;
+    dragBackMode = false;
+    dragBackActive = false;
+    dragBackY = 0;
     manualZoom = false;
     spin = { top: 0, side: 0 }; // reset spin after shot
 }
@@ -605,11 +608,12 @@ let puttMeterAngle = 0;
 let puttMeterDir = 1;
 let puttMeterSpeed = 1.3;
 
-// Aim accuracy sweep (runs during target drag on normal shots)
-let aimSweeping = false;
-let aimMeterAngle = 0;
-let aimMeterDir = 1;
-let aimMeterSpeed = 1.3;
+// Drag-back mini-game (TAKE SHOT → drag ball into the circle → accuracy arc)
+let dragBackMode = false;   // True once TAKE SHOT pressed, before shot fires
+let dragBackActive = false; // True while the player's finger is on the ball
+let dragBackY = 0;          // How far (in px) the drag has been pulled back
+let dragBackStartSY = 0;    // Screen Y where drag started
+const DRAG_BACK_THRESHOLD = 100; // Pixels to pull back before meter engages
 
 // Camera state saved before entering meter mode
 let preMeterCam = { x: 0, y: 0, zoom: 1, rot: 0 };
@@ -654,19 +658,7 @@ function onTouchStart(sx, sy) {
         if (ball.moving || holeComplete) return;
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
 
-        // ---- Shot meter active: tap to fire ----
-        if (meterActive) {
-            const accuracy = meterAngle; // -1 to 1, 0 = center = perfect
-            const powerPct = lockedPower / CLUBS[selectedClub].maxPower;
-            fireFromMeter(lockedDirX, lockedDirY, powerPct, accuracy, curl);
-            meterActive = false;
-            meterPhase = 0;
-            shotLocked = false;
-            // Restore camera
-            cam.targetRot = preMeterCam.rot;
-            cam.targetZoom = preMeterCam.zoom;
-            return;
-        }
+        // (Legacy tap-to-fire meter replaced by drag-back mini-game below)
 
         // ---- Putting: drag back from ball ----
         if (onGreen) {
@@ -697,20 +689,40 @@ function onTouchStart(sx, sy) {
                 draggingTarget = true;
                 aiming = true;
                 shotLocked = false;
-                // Start accuracy sweep
-                aimSweeping = true;
-                aimMeterAngle = -1;
-                aimMeterDir = 1;
+                return;
+            }
+        }
+
+        // ---- Drag-back mini-game: touching the ball begins the drag ----
+        if (dragBackMode && !dragBackActive) {
+            const bs = (scene3dReady && typeof worldToScreen3D === 'function') ? worldToScreen3D(ball.x, ball.y) : worldToScreen(ball.x, ball.y);
+            const bdx = sx - bs.x, bdy = sy - bs.y;
+            if (bdx * bdx + bdy * bdy < 110 * 110) {
+                dragBackActive = true;
+                dragBackStartSY = sy;
+                dragBackY = 0;
+                meterActive = false;
+                return;
+            }
+            // Cancel button while in drag-back mode
+            const cancelW = W() * 0.3, cancelH = 42;
+            const cancelX = W() - cancelW - 12, cancelY = H() - 52;
+            if (hitBtn(sx, sy, cancelX, cancelY, cancelW, cancelH)) {
+                dragBackMode = false;
+                shotLocked = true; // Return to TAKE SHOT bar
+                cam.targetRot = preMeterCam.rot;
+                cam.targetZoom = preMeterCam.zoom;
                 return;
             }
         }
 
         // ---- UI buttons ----
         // SHOOT / Cancel buttons (slim bottom bar when locked)
-        if (shotLocked) {
+        if (shotLocked && !dragBackMode) {
             const shootBtnW = W() * 0.55, shootBtnH = 42;
             const shootBtnX = 12, shootBtnY = H() - 52;
             if (hitBtn(sx, sy, shootBtnX, shootBtnY, shootBtnW, shootBtnH)) {
+                // Enter drag-back mode — camera swings behind, waiting for player to pull the ball back
                 preMeterCam = { x: cam.targetX, y: cam.targetY, zoom: cam.targetZoom, rot: cam.targetRot };
                 const aDx = lockedDirX, aDy = lockedDirY;
                 const behindAngle = Math.atan2(aDx, -aDy);
@@ -718,12 +730,12 @@ function onTouchStart(sx, sy) {
                 cam.targetX = ball.x;
                 cam.targetY = ball.y;
                 cam.targetZoom = Math.max(cam.targetZoom * 1.5, 3);
-                meterActive = true;
-                meterPhase = 2;
+                dragBackMode = true;
+                shotLocked = false;
+                meterActive = false;
                 meterAngle = -1;
                 meterDir = 1;
                 curl = 0;
-                curlDragStartX = W() / 2;
                 meterSpeed = (0.75 + (CLUBS[selectedClub].maxPower / 500) * 0.75);
                 return;
             }
@@ -736,13 +748,13 @@ function onTouchStart(sx, sy) {
         }
         // Club switching — left side stack (up/down arrows)
         const csX = 6, csY = H() - 140;
-        if (!shotLocked && sx < 70) {
+        if (!shotLocked && !dragBackMode && sx < 70) {
             if (sy >= csY && sy <= csY + 28) { cycleClub(-1); updateTargetFromClub(); return; }
             if (sy >= csY + 88 && sy <= csY + 116) { cycleClub(1); updateTargetFromClub(); return; }
         }
         // Spin control
         const spinY = shotLocked ? H() - 290 : H() - 190;
-        if (!flyoverActive) {
+        if (!flyoverActive && !dragBackMode) {
             const spX = W() - 60, spR = 28;
             const sdx = sx - spX, sdy = sy - spinY;
             if (sdx * sdx + sdy * sdy < (spR + 10) * (spR + 10)) {
@@ -768,14 +780,16 @@ function onTouchMove(sx, sy) {
         spin.top = Math.max(-1, Math.min(1, -(sy - spY) / (spR * 0.8)));
         return;
     }
-    if (state === 'playing' && meterActive && meterPhase === 2) {
-        // During accuracy phase, drag left/right for curl
-        // Only apply curl if dragged significantly (dead zone of 15px)
-        const curlDelta = sx - curlDragStartX;
-        if (Math.abs(curlDelta) > 15) {
-            curl = Math.max(-1, Math.min(1, (curlDelta - Math.sign(curlDelta) * 15) / 65));
-        } else {
-            curl = 0;
+    if (state === 'playing' && dragBackActive) {
+        // Track how far the ball has been pulled back (only downward drag counts)
+        const raw = sy - dragBackStartSY;
+        dragBackY = Math.max(0, Math.min(raw, DRAG_BACK_THRESHOLD * 1.5));
+        // Engage accuracy meter once the drag crosses the threshold
+        if (!meterActive && dragBackY >= DRAG_BACK_THRESHOLD) {
+            meterActive = true;
+            meterPhase = 2;
+            meterAngle = -1;
+            meterDir = 1;
         }
         return;
     }
@@ -849,13 +863,34 @@ function onTouchEnd(sx, sy) {
     }
     if (state === 'playing' && draggingTarget) {
         draggingTarget = false;
-        aimSweeping = false;
         if (aimPower > 5) {
-            // Fire immediately using the current accuracy sweep value
-            const powerPct = aimPower / CLUBS[selectedClub].maxPower;
-            fireFromMeter(aimDirX, aimDirY, powerPct, aimMeterAngle, 0);
+            // Lock the aim — TAKE SHOT bar appears next
+            lockedPower = aimPower;
+            lockedDirX = aimDirX;
+            lockedDirY = aimDirY;
+            shotLocked = true;
         }
         aiming = false;
+        return;
+    }
+    if (state === 'playing' && dragBackActive) {
+        dragBackActive = false;
+        if (meterActive) {
+            // Fire with the current accuracy sweep value
+            const accuracy = meterAngle;
+            const powerPct = lockedPower / CLUBS[selectedClub].maxPower;
+            fireFromMeter(lockedDirX, lockedDirY, powerPct, accuracy, 0);
+            meterActive = false;
+            meterPhase = 0;
+            dragBackMode = false;
+            dragBackY = 0;
+            // Restore camera after firing
+            cam.targetRot = preMeterCam.rot;
+            cam.targetZoom = preMeterCam.zoom;
+        } else {
+            // Released before meter engaged — just reset the drag, stay in dragBackMode
+            dragBackY = 0;
+        }
         return;
     }
     if (state === 'playing' && putting) {
@@ -1356,7 +1391,7 @@ function drawPlaying() {
 
     // Green slope indicators (subtle arrows showing break direction)
     // Generate pseudo-random slopes based on hole position (deterministic per hole)
-    if (terrainAt(ball.x, ball.y) === T.GREEN || shotLocked || meterActive) {
+    if (terrainAt(ball.x, ball.y) === T.GREEN || shotLocked || meterActive || dragBackMode) {
         for (let r = 0; r < hole.rows; r++) {
             for (let c = 0; c < hole.cols; c++) {
                 if (hole.grid[r][c] === T.GREEN) {
@@ -1417,9 +1452,9 @@ function drawPlaying() {
     // Always show aim guides when we have a target (not putting, not in ball flight)
     const onGreenNow = terrainAt(ball.x, ball.y) === T.GREEN;
     const hasTarget = !onGreenNow && !ball.moving && !holeComplete && !flyoverActive;
-    const showAimPower = (shotLocked || meterActive) ? lockedPower : aimPower;
-    const showAimDirX = (shotLocked || meterActive) ? lockedDirX : aimDirX;
-    const showAimDirY = (shotLocked || meterActive) ? lockedDirY : aimDirY;
+    const showAimPower = (shotLocked || meterActive || dragBackMode) ? lockedPower : aimPower;
+    const showAimDirX = (shotLocked || meterActive || dragBackMode) ? lockedDirX : aimDirX;
+    const showAimDirY = (shotLocked || meterActive || dragBackMode) ? lockedDirY : aimDirY;
     if (showAimPower > 10 && !onGreenNow) {
         const club = CLUBS[selectedClub];
         const len = Math.sqrt(showAimDirX * showAimDirX + showAimDirY * showAimDirY);
@@ -1510,9 +1545,9 @@ function drawPlaying() {
     // Aim line / Putt guide (visible during aim, locked, or default target)
     const aimVis = (aiming && aimPower > 5) || shotLocked || meterActive || hasTarget;
     // Priority: locked/meter use locked values, everything else uses current aim values
-    const visAimDirX = (shotLocked || meterActive) ? lockedDirX : aimDirX;
-    const visAimDirY = (shotLocked || meterActive) ? lockedDirY : aimDirY;
-    const visAimPower = (shotLocked || meterActive) ? lockedPower : aimPower;
+    const visAimDirX = (shotLocked || meterActive || dragBackMode) ? lockedDirX : aimDirX;
+    const visAimDirY = (shotLocked || meterActive || dragBackMode) ? lockedDirY : aimDirY;
+    const visAimPower = (shotLocked || meterActive || dragBackMode) ? lockedPower : aimPower;
     if (aimVis && (visAimPower > 5 || putting)) {
         const len = Math.sqrt(visAimDirX * visAimDirX + visAimDirY * visAimDirY);
         if (len > 0) {
@@ -1625,8 +1660,8 @@ function drawPlaying() {
 
             if (dirLen > 0) {
                 const nx = aimDirX / dirLen, ny = aimDirY / dirLen;
-                const usePower = (shotLocked || meterActive) ? lockedPower : aimPower;
-                const useDir = (shotLocked || meterActive) ? { x: lockedDirX, y: lockedDirY } : { x: aimDirX, y: aimDirY };
+                const usePower = (shotLocked || meterActive || dragBackMode) ? lockedPower : aimPower;
+                const useDir = (shotLocked || meterActive || dragBackMode) ? { x: lockedDirX, y: lockedDirY } : { x: aimDirX, y: aimDirY };
                 const uLen = Math.sqrt(useDir.x * useDir.x + useDir.y * useDir.y);
                 const unx = useDir.x / uLen, uny = useDir.y / uLen;
                 const landDist = (usePower / club3D.maxPower) * club3D.maxYds * YDS_TO_WORLD;
@@ -2185,112 +2220,63 @@ function drawPlaying() {
         ctx.fillStyle = '#e33';
         ctx.beginPath(); ctx.arc(bullX, bullY, 3, 0, Math.PI * 2); ctx.fill();
 
-        // "TAP TO SHOOT" text
+        // "RELEASE ON WHITE" hint (fires when arrow position is captured)
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 16px -apple-system,sans-serif';
+        ctx.font = 'bold 15px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('TAP TO SHOOT', W() / 2, arcCy - arcR - 55);
-
-        // Curl indicator
-        if (Math.abs(curl) > 0.05) {
-            ctx.fillStyle = '#4cf';
-            ctx.font = 'bold 13px -apple-system,sans-serif';
-            ctx.fillText(curl < 0 ? '\u21B0 Curl Left' : '\u21B1 Curl Right', W() / 2, arcCy + 30);
-        } else {
-            ctx.fillStyle = 'rgba(255,255,255,0.4)';
-            ctx.font = '11px -apple-system,sans-serif';
-            ctx.fillText('Drag L/R for curl', W() / 2, arcCy + 30);
-        }
+        ctx.fillText('RELEASE ON WHITE', W() / 2, arcCy - arcR - 55);
     }
 
-    // ---- Aim accuracy arc (runs while dragging target on normal shots) ----
-    if (aimSweeping && !meterActive && !putting) {
-        const arcCx = W() / 2;
-        const arcCy = H() - 15;
-        const arcR = Math.min(W() * 0.22, 95);
-        const arcSpread = Math.PI * 0.5;
-        const arcStart = -Math.PI / 2 - arcSpread / 2;
-        const arcEnd = -Math.PI / 2 + arcSpread / 2;
-
-        ctx.fillStyle = 'rgba(0,0,0,0.35)';
-        ctx.beginPath();
-        ctx.moveTo(arcCx, arcCy);
-        ctx.arc(arcCx, arcCy, arcR + 8, arcStart - 0.05, arcEnd + 0.05);
-        ctx.closePath();
+    // Cancel button during drag-back mode (to back out to TAKE SHOT bar)
+    if (dragBackMode) {
+        const cancelW = W() * 0.28, cancelH = 44;
+        const cancelX = W() - cancelW - 14, cancelY = H() - 56;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        roundRect(cancelX, cancelY, cancelW, cancelH, 22);
         ctx.fill();
-
-        const segments = 36;
-        for (let i = 0; i < segments; i++) {
-            const t = i / segments;
-            const a1 = arcStart + t * arcSpread;
-            const a2 = arcStart + (t + 1) / segments * arcSpread;
-            const fromCenter = Math.abs(t - 0.5) * 2;
-            let r, g, b;
-            if (fromCenter < 0.33) {
-                r = 56; g = 195; b = 90;
-            } else if (fromCenter < 0.66) {
-                const p = (fromCenter - 0.33) / 0.33;
-                r = 56 + (255 - 56) * p; g = 195 + (220 - 195) * p; b = 90 * (1 - p);
-            } else {
-                const p = (fromCenter - 0.66) / 0.34;
-                r = 255; g = 220 - 160 * p; b = 0;
-            }
-            ctx.fillStyle = `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.9)`;
-            ctx.beginPath();
-            ctx.moveTo(arcCx, arcCy);
-            ctx.arc(arcCx, arcCy, arcR, a1, a2);
-            ctx.closePath();
-            ctx.fill();
-        }
-
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(arcCx, arcCy, arcR, arcStart, arcEnd);
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 1;
+        roundRect(cancelX, cancelY, cancelW, cancelH, 22);
         ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.font = '15px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Cancel', cancelX + cancelW / 2, cancelY + cancelH / 2 + 5);
+    }
 
-        // White outline center target line
-        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.moveTo(arcCx, arcCy - arcR * 0.3);
-        ctx.lineTo(arcCx, arcCy - arcR - 6);
-        ctx.stroke();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(arcCx, arcCy - arcR * 0.3);
-        ctx.lineTo(arcCx, arcCy - arcR - 6);
-        ctx.stroke();
-
-        // Sweeping blue arrow
-        const arrowAngle = -Math.PI / 2 + aimMeterAngle * (arcSpread / 2);
-        const arrowLen = arcR + 12;
-        const arrowX = arcCx + Math.cos(arrowAngle) * arrowLen;
-        const arrowY = arcCy + Math.sin(arrowAngle) * arrowLen;
-        const arrowBaseX = arcCx + Math.cos(arrowAngle) * (arcR * 0.3);
-        const arrowBaseY = arcCy + Math.sin(arrowAngle) * (arcR * 0.3);
-
-        ctx.strokeStyle = '#4cf';
+    // ---- Drag-back target circle (shown after TAKE SHOT, before the drag is engaged) ----
+    if (dragBackMode && !meterActive) {
+        const bs = (scene3dReady && typeof worldToScreen3D === 'function') ? worldToScreen3D(ball.x, ball.y) : worldToScreen(ball.x, ball.y);
+        const cx = bs.x;
+        const cy = bs.y + DRAG_BACK_THRESHOLD + 30;
+        // Pulsing dashed target circle
+        const pulse = 1 + Math.sin(Date.now() / 300) * 0.08;
+        ctx.save();
+        ctx.setLineDash([6, 5]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(arrowBaseX, arrowBaseY);
-        ctx.lineTo(arrowX, arrowY);
+        ctx.arc(cx, cy, 30 * pulse, 0, Math.PI * 2);
         ctx.stroke();
-        const headLen = 9;
-        ctx.fillStyle = '#4cf';
-        ctx.beginPath();
-        ctx.moveTo(arrowX, arrowY);
-        ctx.lineTo(arrowX - Math.cos(arrowAngle - 0.4) * headLen, arrowY - Math.sin(arrowAngle - 0.4) * headLen);
-        ctx.lineTo(arrowX - Math.cos(arrowAngle + 0.4) * headLen, arrowY - Math.sin(arrowAngle + 0.4) * headLen);
-        ctx.fill();
-
-        drawBall(arcCx, arcCy, 8, player.ballColor);
-
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.restore();
+        // Small hint inside
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.font = 'bold 12px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('RELEASE ON WHITE', W() / 2, arcCy - arcR - 20);
+        ctx.fillText('DRAG BACK', cx, cy + 4);
+
+        // If the player is actively dragging but hasn't hit the threshold, draw the trail
+        if (dragBackActive && dragBackY > 5) {
+            const tY = bs.y + dragBackY;
+            // Green glow trail from ball to finger
+            const grad = ctx.createLinearGradient(cx, bs.y, cx, tY);
+            grad.addColorStop(0, 'rgba(120,255,140,0.0)');
+            grad.addColorStop(1, 'rgba(120,255,140,0.6)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(cx - 22, bs.y, 44, tY - bs.y);
+            // Virtual ball at finger position
+            drawBall(cx, tY, 12, player.ballColor);
+        }
     }
 
     // ---- Putt accuracy arc (runs during drag-back on the green) ----
@@ -2389,7 +2375,7 @@ function drawPlaying() {
     }
 
     // ---- Spin control (shown when not moving, not in meter mode) ----
-    const showSpin = !ball.moving && !holeComplete && !flyoverActive && !meterActive && !shotLocked && terrainAt(ball.x, ball.y) !== T.GREEN;
+    const showSpin = !ball.moving && !holeComplete && !flyoverActive && !meterActive && !shotLocked && !dragBackMode && terrainAt(ball.x, ball.y) !== T.GREEN;
     if (showSpin) {
         const spX = W() - 52, spY = H() - 185, spR = 30;
 
@@ -2478,7 +2464,7 @@ function drawPlaying() {
     }
 
     // Camera control pills (left side) — glass circles
-    if (!ball.moving && !flyoverActive && !shotLocked && !meterActive) {
+    if (!ball.moving && !flyoverActive && !shotLocked && !meterActive && !dragBackMode) {
         const btns = [
             { y: 68, label: '+' },
             { y: 102, label: '\u2212' },
@@ -2899,14 +2885,6 @@ function gameLoop(time) {
                 if (meterAngle > 1) { meterAngle = 1; meterDir = -1; }
                 if (meterAngle < -1) { meterAngle = -1; meterDir = 1; }
             }
-            // Update aim accuracy sweep (runs while dragging target for normal shots)
-            if (aimSweeping) {
-                const pwrPct = Math.max(0.2, aimPower / CLUBS[selectedClub].maxPower);
-                aimMeterSpeed = 1.0 + pwrPct * 1.3;
-                aimMeterAngle += aimMeterDir * aimMeterSpeed * dt * 2;
-                if (aimMeterAngle > 1) { aimMeterAngle = 1; aimMeterDir = -1; }
-                if (aimMeterAngle < -1) { aimMeterAngle = -1; aimMeterDir = 1; }
-            }
             // Update putt accuracy sweep (runs while dragging back on the green)
             if (putting && aimPower > 10) {
                 // Sweep faster on longer putts — harder to time
@@ -2939,7 +2917,7 @@ function gameLoop(time) {
             const hx = (currentHole.hole.x + 0.5) * CELL;
             const hy = (currentHole.hole.y + 0.5) * CELL;
             setCameraBehindBall(ball.x, ball.y, hx, hy, 60);
-        } else if (meterActive) {
+        } else if (meterActive || dragBackMode) {
             const tdx = lockedDirX, tdy = lockedDirY;
             const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
             setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 80, ball.y + tdy / tlen * 80, 28);
