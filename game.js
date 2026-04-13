@@ -32,11 +32,11 @@ const SCORE_NAMES = {
 const YDS_TO_WORLD = 16;
 
 const CLUBS = [
-    { name: 'Driver',  maxPower: 500, launch: 550, airMin: 0.15, maxYds: 230 },
-    { name: '3 Wood',  maxPower: 420, launch: 480, airMin: 0.18, maxYds: 195 },
-    { name: '5 Iron',  maxPower: 340, launch: 420, airMin: 0.20, maxYds: 160 },
-    { name: '7 Iron',  maxPower: 260, launch: 380, airMin: 0.22, maxYds: 120 },
-    { name: 'P Wedge', maxPower: 180, launch: 500, airMin: 0.15, maxYds: 80  },
+    { name: 'Driver',  maxPower: 500, launch: 561, airMin: 0.15, maxYds: 230 },
+    { name: '3 Wood',  maxPower: 420, launch: 490, airMin: 0.18, maxYds: 195 },
+    { name: '5 Iron',  maxPower: 340, launch: 428, airMin: 0.20, maxYds: 160 },
+    { name: '7 Iron',  maxPower: 260, launch: 388, airMin: 0.22, maxYds: 120 },
+    { name: 'P Wedge', maxPower: 180, launch: 510, airMin: 0.15, maxYds: 80  },
     { name: 'Putter',  maxPower: 120, launch: 0,   airMin: 999,  maxYds: 40  }
 ];
 let selectedClub = 0;
@@ -192,7 +192,7 @@ function terrainAt(wx, wy) {
 }
 
 // ---- Ball physics update ----
-const GRAVITY = 350; // tuned for ~5s air time on a driver
+const GRAVITY = 304; // tuned for 15% slower flight, 20% higher arc
 
 function updateBall(dt) {
     if (!ball.moving) return;
