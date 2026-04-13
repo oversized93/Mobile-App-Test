@@ -203,6 +203,20 @@ function terrainHeightAt(wx, wy) {
     return currentHole.heights[gr][gc] || 0;
 }
 
+// Downhill gradient from the heightmap — returns a vector pointing downhill.
+// sx/sy are dimensionless (height drop per world unit).
+function terrainSlopeAt(wx, wy) {
+    const hE = terrainHeightAt(wx + CELL, wy);
+    const hW = terrainHeightAt(wx - CELL, wy);
+    const hS = terrainHeightAt(wx, wy + CELL);
+    const hN = terrainHeightAt(wx, wy - CELL);
+    // Negative gradient = downhill direction
+    return {
+        sx: -(hE - hW) / (2 * CELL),
+        sy: -(hS - hN) / (2 * CELL)
+    };
+}
+
 // Generate a heightmap for a hole using smooth noise
 function generateHeights(hole) {
     const h = [];
@@ -258,13 +272,23 @@ function updateBall(dt) {
     if (!ball.moving) return;
     const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
 
-    // Ball has stopped rolling on ground
+    // Ball has stopped rolling on ground — but only if the slope can't keep it going
     if (speed < 2 && !ball.airborne) {
-        ball.vx = 0; ball.vy = 0; ball.vz = 0;
-        ball.z = terrainHeightAt(ball.x, ball.y);
-        ball.moving = false; ball.airborne = false;
-        onBallStopped();
-        return;
+        const hslope = terrainSlopeAt(ball.x, ball.y);
+        const slopeMag = Math.sqrt(hslope.sx * hslope.sx + hslope.sy * hslope.sy);
+        // Friction strong enough to hold on this gradient?
+        const ter = terrainAt(ball.x, ball.y);
+        const staticHold = (1 - (TERRAIN_FRICTION[ter] || 0.97)) * 0.8;
+        if (slopeMag < staticHold) {
+            ball.vx = 0; ball.vy = 0; ball.vz = 0;
+            ball.z = terrainHeightAt(ball.x, ball.y);
+            ball.moving = false; ball.airborne = false;
+            onBallStopped();
+            return;
+        }
+        // Otherwise: nudge the ball downhill so slope takes over
+        ball.vx = hslope.sx * 30;
+        ball.vy = hslope.sy * 30;
     }
 
     // Record trail
@@ -308,21 +332,21 @@ function updateBall(dt) {
             // Ball has landed (z below the terrain at current position)
             const groundHeight = terrainHeightAt(ball.x, ball.y);
             if (ball.z <= groundHeight) {
+                // Capture the vertical speed BEFORE zeroing so bounce math has it
+                const vzImpact = Math.abs(ball.vz);
                 ball.z = groundHeight;
-                ball.vz = 0;
-                ball.airborne = false;
 
                 // Check what we landed on
                 const ter = terrainAt(ball.x, ball.y);
                 if (ter === T.WATER) {
-                    ball.vx = 0; ball.vy = 0; ball.moving = false;
+                    ball.vx = 0; ball.vy = 0; ball.vz = 0; ball.moving = false;
                     notify('Splash! +1 stroke');
                     strokes++;
                     resetBallToLastSafe();
                     return;
                 }
                 if (ter === T.OOB) {
-                    ball.vx = 0; ball.vy = 0; ball.moving = false;
+                    ball.vx = 0; ball.vy = 0; ball.vz = 0; ball.moving = false;
                     notify('Out of bounds! +1 stroke');
                     strokes++;
                     resetBallToLastSafe();
@@ -335,12 +359,57 @@ function updateBall(dt) {
                     notify('Landed in trees!');
                 }
 
-                // Bounce: heavy speed loss on landing, modified by topspin/backspin
-                // Topspin (+1) = more roll, backspin (-1) = less roll / stops faster
+                ball.bounceCount = (ball.bounceCount || 0) + 1;
+                const isFirstBounce = ball.bounceCount === 1;
                 const topSpinMult = ball.topSpin || 0;
-                const rollFactor = 0.3 + topSpinMult * 0.2; // range: 0.1 (backspin) to 0.5 (topspin)
-                ball.vx *= Math.max(0.05, rollFactor);
-                ball.vy *= Math.max(0.05, rollFactor);
+
+                // Incoming angle: shallow (rolling in) = 0, steep (dropping in) = near π/2
+                const hSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+                const cosAngle = hSpeed > 1 ? Math.cos(Math.atan2(vzImpact, hSpeed)) : 0;
+                // Cubed — much more aggressive stop on steep shots, runout on flat
+                const rollAngleFactor = cosAngle * cosAngle * cosAngle;
+
+                // Horizontal speed retained after bounce
+                let rollRetain = 0.15 + rollAngleFactor * 0.78; // ~0.15 (vertical) -> ~0.93 (rolling in)
+                // Terrain modifiers
+                if (ter === T.FAIRWAY || ter === T.TEE) rollRetain *= 1.05;
+                else if (ter === T.GREEN) rollRetain *= 0.55;  // green grabs
+                else if (ter === T.ROUGH) rollRetain *= 0.4;   // rough kills forward momentum
+                else if (ter === T.SAND) rollRetain = 0.08;    // sand is a brick wall
+                else if (ter === T.PATH) rollRetain *= 1.3;    // cartpath is lively
+                // Topspin adds, backspin removes
+                rollRetain += topSpinMult * 0.12;
+                rollRetain = Math.max(0.03, Math.min(0.95, rollRetain));
+                ball.vx *= rollRetain;
+                ball.vy *= rollRetain;
+
+                // Vertical bounce — preserve some vz so the ball springs up again
+                // Uses cosAngle (linear) so steep shots still bounce a little
+                const bounceTable = [0.40, 0.22, 0.10, 0];
+                let vzRetain = bounceTable[Math.min(ball.bounceCount - 1, 3)] * (0.35 + cosAngle * 0.65);
+                if (ter === T.SAND) vzRetain = 0;
+                if (ter === T.ROUGH) vzRetain *= 0.3;
+                if (ter === T.TREE) vzRetain = 0;
+                if (vzRetain > 0 && vzImpact > 40) {
+                    ball.vz = vzImpact * vzRetain;
+                    ball.airborne = true;
+                } else {
+                    ball.vz = 0;
+                    ball.airborne = false;
+                }
+
+                // Backspin check — only on the first bounce on green/fairway
+                if (isFirstBounce && topSpinMult < -0.2 && (ter === T.GREEN || ter === T.FAIRWAY)) {
+                    const backMag = Math.abs(topSpinMult);
+                    const cs = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+                    if (cs > 4) {
+                        const nx = ball.vx / cs, ny = ball.vy / cs;
+                        // Reverse a chunk of the remaining horizontal velocity
+                        const backImpulse = (cs + 60) * backMag * 1.6;
+                        ball.vx -= nx * backImpulse;
+                        ball.vy -= ny * backImpulse;
+                    }
+                }
                 // Don't check hole while landing — need to roll in
             }
             continue; // Skip ground checks while airborne
@@ -375,6 +444,16 @@ function updateBall(dt) {
         // Apply terrain friction
         ball.vx *= Math.pow(fric, stepDt * 60);
         ball.vy *= Math.pow(fric, stepDt * 60);
+
+        // Heightmap slope force — downhill gravity on every terrain type.
+        // Keeps the ball rolling on slopes and dead-flats it on plateaus.
+        const hslope = terrainSlopeAt(ball.x, ball.y);
+        // Greens are flatter (10% height) so boost their slope response a bit for feel.
+        const slopeGain = (ter === T.GREEN) ? 420 : 350;
+        ball.vx += hslope.sx * slopeGain * stepDt;
+        ball.vy += hslope.sy * slopeGain * stepDt;
+        // Keep the ball in the heightmap pocket (don't let it float off a hill)
+        ball.z = terrainHeightAt(ball.x, ball.y);
 
         // Green slope forces — ball breaks toward hole with variation
         if (ter === T.GREEN && currentHole) {
@@ -538,6 +617,7 @@ function takeShot(power, dirX, dirY) {
     ball.z = terrainHeightAt(ball.x, ball.y);
     ball.vz = 0;
     ball.airborne = false;
+    ball.bounceCount = 0;
 
     if (club.launch > 0 && powerPct > club.airMin) {
         ball.airborne = true;
