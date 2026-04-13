@@ -33,9 +33,8 @@ function init3D() {
     // Renderer
     renderer3d = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true });
     renderer3d.setSize(window.innerWidth, window.innerHeight);
-    renderer3d.setPixelRatio(window.devicePixelRatio);
-    renderer3d.shadowMap.enabled = true;
-    renderer3d.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer3d.shadowMap.enabled = false;
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -43,15 +42,6 @@ function init3D() {
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(100, 200, 50);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
-    dirLight.shadow.camera.near = 1;
-    dirLight.shadow.camera.far = 600;
-    dirLight.shadow.camera.left = -300;
-    dirLight.shadow.camera.right = 300;
-    dirLight.shadow.camera.top = 300;
-    dirLight.shadow.camera.bottom = -300;
     scene3d.add(dirLight);
 
     // Skybox — gradient sky using vertex colors
@@ -185,13 +175,16 @@ function onResize3D() {
     renderer3d.setSize(window.innerWidth, window.innerHeight);
 }
 
-// ---- Build terrain from hole grid ----
+// ---- Build terrain from hole grid (INSTANCED for performance) ----
 function buildTerrain3D(hole) {
     // Clear existing terrain
     while (terrainGroup.children.length > 0) {
         const child = terrainGroup.children[0];
         if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
+        if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+        }
         terrainGroup.remove(child);
     }
     while (flagGroup.children.length > 0) {
@@ -201,80 +194,90 @@ function buildTerrain3D(hole) {
         flagGroup.remove(child);
     }
 
-    const cellSize = CELL; // 16 world units = 16 3D units
+    const cellSize = CELL;
 
-    // Create terrain cells as flat planes
+    // ---- Bucket cells by terrain type ----
+    const buckets = {};
+    const treeCells = [];
     for (let r = 0; r < hole.rows; r++) {
         for (let c = 0; c < hole.cols; c++) {
             const t = hole.grid[r][c];
-            const color = TERRAIN_COLORS[t] || '#1a3d1a';
-            const height = getTerrainHeight(t);
-
-            // Water: only render the water surface, skip base terrain
-            if (t === T.WATER) {
-                const waterGeo = new THREE.PlaneGeometry(cellSize + 0.1, cellSize + 0.1);
-                const waterMat = new THREE.MeshStandardMaterial({
-                    color: 0x2288bb,
-                    transparent: true,
-                    opacity: 0.8,
-                    roughness: 0.1,
-                    metalness: 0.4
-                });
-                const waterMesh = new THREE.Mesh(waterGeo, waterMat);
-                waterMesh.rotation.x = -Math.PI / 2;
-                waterMesh.position.set((c + 0.5) * cellSize, -0.3, (r + 0.5) * cellSize);
-                waterMesh.receiveShadow = true;
-                terrainGroup.add(waterMesh);
-                continue; // skip normal terrain plane for water
-            }
-
-            const geo = new THREE.PlaneGeometry(cellSize + 0.1, cellSize + 0.1);
-            const mat = new THREE.MeshStandardMaterial({
-                color: new THREE.Color(color),
-                roughness: 0.9,
-                metalness: 0
-            });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.rotation.x = -Math.PI / 2;
-            mesh.position.set(
-                (c + 0.5) * cellSize,
-                height,
-                (r + 0.5) * cellSize
-            );
-            mesh.receiveShadow = true;
-            terrainGroup.add(mesh);
-
-            // Trees — sparse placement (skip some for natural look)
+            if (!buckets[t]) buckets[t] = [];
+            buckets[t].push({ c, r });
             if (t === T.TREE) {
                 const treeHash = (c * 7 + r * 13) % 5;
-                if (treeHash < 4) { // ~80% of tree cells get trees
-                    const sizeVar = 0.8 + ((c * 31 + r * 17) % 10) / 20; // 0.8 to 1.3
-                    const trunkH = 24 * sizeVar;
-                    const canopyR = 20 * sizeVar;
-                    const canopyH = 36 * sizeVar;
-
-                    const trunkGeo = new THREE.CylinderGeometry(2.4, 4, trunkH, 6);
-                    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030 });
-                    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-                    trunk.position.set((c + 0.5) * cellSize, trunkH / 2 + height, (r + 0.5) * cellSize);
-                    trunk.castShadow = true;
-                    terrainGroup.add(trunk);
-
-                    const leafGeo = new THREE.ConeGeometry(canopyR, canopyH, 8);
-                    const leafColors = [0x1a6b2a, 0x1a5c2a, 0x227a32, 0x1e6830];
-                    const leafMat = new THREE.MeshStandardMaterial({ color: leafColors[treeHash % leafColors.length] });
-                    const leaf = new THREE.Mesh(leafGeo, leafMat);
-                    leaf.position.set((c + 0.5) * cellSize, trunkH + canopyH / 2 - 2 + height, (r + 0.5) * cellSize);
-                    leaf.castShadow = true;
-                    terrainGroup.add(leaf);
-                }
-            }
-
-            // Sand: slightly raised bumpy look
-            if (t === T.SAND) {
-                mesh.position.y = height - 0.3;
+                if (treeHash < 4) treeCells.push({ c, r, treeHash });
             }
         }
+    }
+
+    // ---- Build one InstancedMesh per terrain type ----
+    const cellGeo = new THREE.PlaneGeometry(cellSize + 0.1, cellSize + 0.1);
+    cellGeo.rotateX(-Math.PI / 2);
+    const dummy = new THREE.Object3D();
+
+    for (const tStr in buckets) {
+        const t = parseInt(tStr);
+        const cells = buckets[tStr];
+        if (cells.length === 0) continue;
+
+        const color = TERRAIN_COLORS[t] || '#1a3d1a';
+        const height = getTerrainHeight(t);
+        const isWater = (t === T.WATER);
+
+        const mat = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(isWater ? 0x2288bb : color),
+            roughness: isWater ? 0.1 : 0.9,
+            metalness: isWater ? 0.4 : 0,
+            transparent: isWater,
+            opacity: isWater ? 0.85 : 1
+        });
+
+        const inst = new THREE.InstancedMesh(cellGeo, mat, cells.length);
+        inst.receiveShadow = true;
+        const y = isWater ? -0.3 : (t === T.SAND ? height - 0.3 : height);
+        for (let i = 0; i < cells.length; i++) {
+            dummy.position.set((cells[i].c + 0.5) * cellSize, y, (cells[i].r + 0.5) * cellSize);
+            dummy.updateMatrix();
+            inst.setMatrixAt(i, dummy.matrix);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        terrainGroup.add(inst);
+    }
+
+    // ---- Trees as two InstancedMeshes (trunks + canopies) ----
+    if (treeCells.length > 0) {
+        const trunkGeo = new THREE.CylinderGeometry(2.4, 4, 24, 6);
+        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030 });
+        const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCells.length);
+        trunkInst.castShadow = true;
+
+        const leafGeo = new THREE.ConeGeometry(20, 36, 8);
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x1e6830 });
+        const leafInst = new THREE.InstancedMesh(leafGeo, leafMat, treeCells.length);
+        leafInst.castShadow = true;
+
+        for (let i = 0; i < treeCells.length; i++) {
+            const { c, r } = treeCells[i];
+            const sizeVar = 0.8 + ((c * 31 + r * 17) % 10) / 20;
+
+            // Trunk
+            dummy.position.set((c + 0.5) * cellSize, 12 * sizeVar, (r + 0.5) * cellSize);
+            dummy.scale.set(sizeVar, sizeVar, sizeVar);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            trunkInst.setMatrixAt(i, dummy.matrix);
+
+            // Leaf
+            dummy.position.set((c + 0.5) * cellSize, 24 * sizeVar + 16 * sizeVar, (r + 0.5) * cellSize);
+            dummy.updateMatrix();
+            leafInst.setMatrixAt(i, dummy.matrix);
+        }
+        dummy.scale.set(1, 1, 1);
+        trunkInst.instanceMatrix.needsUpdate = true;
+        leafInst.instanceMatrix.needsUpdate = true;
+        terrainGroup.add(trunkInst);
+        terrainGroup.add(leafInst);
     }
 
     // Flag pole + flag
