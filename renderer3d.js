@@ -22,8 +22,8 @@ function hexToThreeColor(hex) {
 function init3D() {
     threeCanvas = document.getElementById('three-canvas');
     scene3d = new THREE.Scene();
-    scene3d.background = new THREE.Color('#1a7a8a');
-    scene3d.fog = new THREE.Fog('#1a7a8a', 5000, 12000);
+    scene3d.background = new THREE.Color('#87b8d8'); // sky blue, not teal water
+    scene3d.fog = new THREE.Fog('#87b8d8', 5000, 12000);
 
     // Camera
     camera3d = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 15000);
@@ -60,9 +60,9 @@ function init3D() {
             const p = (t - 0.48) / 0.1;
             skyColors.push(0.85 - p * 0.4, 0.88 - p * 0.3, 0.9 - p * 0.15);
         } else {
-            // Below horizon: teal matching water
+            // Below horizon: soft green haze matching ground
             const p = t / 0.48;
-            skyColors.push(0.08 + p * 0.77, 0.35 + p * 0.53, 0.42 + p * 0.48);
+            skyColors.push(0.1 + p * 0.75, 0.25 + p * 0.63, 0.12 + p * 0.78);
         }
     }
     skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyColors, 3));
@@ -97,19 +97,16 @@ function init3D() {
         scene3d.add(cloud);
     }
 
-    // Water plane extending beyond the course (teal ocean)
+    // Ground plane extending beyond the course — dark rough color, pushed way down
     const groundGeo = new THREE.PlaneGeometry(20000, 20000);
     const groundMat = new THREE.MeshStandardMaterial({
-        color: 0x1a7a8a,
-        roughness: 0.2,
-        metalness: 0.3,
-        transparent: true,
-        opacity: 0.92
+        color: 0x1a4020, // dark rough green, matches rough color
+        roughness: 0.95,
+        metalness: 0
     });
     const groundMesh = new THREE.Mesh(groundGeo, groundMat);
     groundMesh.rotation.x = -Math.PI / 2;
-    groundMesh.position.y = -1.0;
-    groundMesh.receiveShadow = true;
+    groundMesh.position.y = -200; // way below terrain so nothing pokes through
     scene3d.add(groundMesh);
 
     // Groups
