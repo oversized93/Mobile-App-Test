@@ -605,6 +605,12 @@ let puttMeterAngle = 0;
 let puttMeterDir = 1;
 let puttMeterSpeed = 1.3;
 
+// Aim accuracy sweep (runs during target drag on normal shots)
+let aimSweeping = false;
+let aimMeterAngle = 0;
+let aimMeterDir = 1;
+let aimMeterSpeed = 1.3;
+
 // Camera state saved before entering meter mode
 let preMeterCam = { x: 0, y: 0, zoom: 1, rot: 0 };
 
@@ -691,6 +697,10 @@ function onTouchStart(sx, sy) {
                 draggingTarget = true;
                 aiming = true;
                 shotLocked = false;
+                // Start accuracy sweep
+                aimSweeping = true;
+                aimMeterAngle = -1;
+                aimMeterDir = 1;
                 return;
             }
         }
@@ -839,12 +849,11 @@ function onTouchEnd(sx, sy) {
     }
     if (state === 'playing' && draggingTarget) {
         draggingTarget = false;
+        aimSweeping = false;
         if (aimPower > 5) {
-            // Lock the aim
-            lockedPower = aimPower;
-            lockedDirX = aimDirX;
-            lockedDirY = aimDirY;
-            shotLocked = true;
+            // Fire immediately using the current accuracy sweep value
+            const powerPct = aimPower / CLUBS[selectedClub].maxPower;
+            fireFromMeter(aimDirX, aimDirY, powerPct, aimMeterAngle, 0);
         }
         aiming = false;
         return;
@@ -2194,6 +2203,96 @@ function drawPlaying() {
         }
     }
 
+    // ---- Aim accuracy arc (runs while dragging target on normal shots) ----
+    if (aimSweeping && !meterActive && !putting) {
+        const arcCx = W() / 2;
+        const arcCy = H() - 15;
+        const arcR = Math.min(W() * 0.22, 95);
+        const arcSpread = Math.PI * 0.5;
+        const arcStart = -Math.PI / 2 - arcSpread / 2;
+        const arcEnd = -Math.PI / 2 + arcSpread / 2;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath();
+        ctx.moveTo(arcCx, arcCy);
+        ctx.arc(arcCx, arcCy, arcR + 8, arcStart - 0.05, arcEnd + 0.05);
+        ctx.closePath();
+        ctx.fill();
+
+        const segments = 36;
+        for (let i = 0; i < segments; i++) {
+            const t = i / segments;
+            const a1 = arcStart + t * arcSpread;
+            const a2 = arcStart + (t + 1) / segments * arcSpread;
+            const fromCenter = Math.abs(t - 0.5) * 2;
+            let r, g, b;
+            if (fromCenter < 0.33) {
+                r = 56; g = 195; b = 90;
+            } else if (fromCenter < 0.66) {
+                const p = (fromCenter - 0.33) / 0.33;
+                r = 56 + (255 - 56) * p; g = 195 + (220 - 195) * p; b = 90 * (1 - p);
+            } else {
+                const p = (fromCenter - 0.66) / 0.34;
+                r = 255; g = 220 - 160 * p; b = 0;
+            }
+            ctx.fillStyle = `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},0.9)`;
+            ctx.beginPath();
+            ctx.moveTo(arcCx, arcCy);
+            ctx.arc(arcCx, arcCy, arcR, a1, a2);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(arcCx, arcCy, arcR, arcStart, arcEnd);
+        ctx.stroke();
+
+        // White outline center target line
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(arcCx, arcCy - arcR * 0.3);
+        ctx.lineTo(arcCx, arcCy - arcR - 6);
+        ctx.stroke();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(arcCx, arcCy - arcR * 0.3);
+        ctx.lineTo(arcCx, arcCy - arcR - 6);
+        ctx.stroke();
+
+        // Sweeping blue arrow
+        const arrowAngle = -Math.PI / 2 + aimMeterAngle * (arcSpread / 2);
+        const arrowLen = arcR + 12;
+        const arrowX = arcCx + Math.cos(arrowAngle) * arrowLen;
+        const arrowY = arcCy + Math.sin(arrowAngle) * arrowLen;
+        const arrowBaseX = arcCx + Math.cos(arrowAngle) * (arcR * 0.3);
+        const arrowBaseY = arcCy + Math.sin(arrowAngle) * (arcR * 0.3);
+
+        ctx.strokeStyle = '#4cf';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(arrowBaseX, arrowBaseY);
+        ctx.lineTo(arrowX, arrowY);
+        ctx.stroke();
+        const headLen = 9;
+        ctx.fillStyle = '#4cf';
+        ctx.beginPath();
+        ctx.moveTo(arrowX, arrowY);
+        ctx.lineTo(arrowX - Math.cos(arrowAngle - 0.4) * headLen, arrowY - Math.sin(arrowAngle - 0.4) * headLen);
+        ctx.lineTo(arrowX - Math.cos(arrowAngle + 0.4) * headLen, arrowY - Math.sin(arrowAngle + 0.4) * headLen);
+        ctx.fill();
+
+        drawBall(arcCx, arcCy, 8, player.ballColor);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = 'bold 12px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('RELEASE ON WHITE', W() / 2, arcCy - arcR - 20);
+    }
+
     // ---- Putt accuracy arc (runs during drag-back on the green) ----
     if (putting && aimPower > 10 && !meterActive) {
         const arcCx = W() / 2;
@@ -2799,6 +2898,14 @@ function gameLoop(time) {
                 meterAngle += meterDir * meterSpeed * dt * 2;
                 if (meterAngle > 1) { meterAngle = 1; meterDir = -1; }
                 if (meterAngle < -1) { meterAngle = -1; meterDir = 1; }
+            }
+            // Update aim accuracy sweep (runs while dragging target for normal shots)
+            if (aimSweeping) {
+                const pwrPct = Math.max(0.2, aimPower / CLUBS[selectedClub].maxPower);
+                aimMeterSpeed = 1.0 + pwrPct * 1.3;
+                aimMeterAngle += aimMeterDir * aimMeterSpeed * dt * 2;
+                if (aimMeterAngle > 1) { aimMeterAngle = 1; aimMeterDir = -1; }
+                if (aimMeterAngle < -1) { aimMeterAngle = -1; aimMeterDir = 1; }
             }
             // Update putt accuracy sweep (runs while dragging back on the green)
             if (putting && aimPower > 10) {
