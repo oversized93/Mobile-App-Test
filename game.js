@@ -206,24 +206,44 @@ function terrainHeightAt(wx, wy) {
 // Generate a heightmap for a hole using smooth noise
 function generateHeights(hole) {
     const h = [];
-    // Simple seeded noise based on hole dimensions
+    // Generate a low-res control grid of random heights, then smoothly interpolate
+    // This gives rolling hills instead of jagged pixel noise
     const seed = hole.cols * 137 + hole.rows * 311;
-    function noise(x, y, freq) {
-        const a = Math.sin((x * freq + y * freq * 1.3 + seed) * 12.9898) * 43758.5453;
-        return (a - Math.floor(a)) * 2 - 1;
+    function hash(x, y) {
+        const a = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
+        return (a - Math.floor(a)) * 2 - 1; // -1 to 1
     }
+    // Low-res control grid (every 20 cells)
+    const STEP = 20;
+    const ctrlCols = Math.ceil(hole.cols / STEP) + 2;
+    const ctrlRows = Math.ceil(hole.rows / STEP) + 2;
+    const ctrl = [];
+    for (let r = 0; r < ctrlRows; r++) {
+        ctrl[r] = [];
+        for (let c = 0; c < ctrlCols; c++) {
+            // Two octaves of hash noise
+            ctrl[r][c] = hash(c, r) * 8 + hash(c * 2.7, r * 2.7) * 3;
+        }
+    }
+    // Smoothstep curve for interpolation (matches Perlin-style easing)
+    function smooth(t) { return t * t * (3 - 2 * t); }
     for (let r = 0; r < hole.rows; r++) {
         h[r] = [];
         for (let c = 0; c < hole.cols; c++) {
-            // Multi-octave noise for natural rolling terrain
-            let height = 0;
-            height += noise(c, r, 0.04) * 50;
-            height += noise(c, r, 0.12) * 15;
-            height += noise(c, r, 0.25) * 5;
-            // Flatten tees and greens
+            // Bilinear interpolation from control grid
+            const fc = c / STEP, fr = r / STEP;
+            const cx = Math.floor(fc), cy = Math.floor(fr);
+            const tx = smooth(fc - cx), ty = smooth(fr - cy);
+            const a = ctrl[cy][cx];
+            const b = ctrl[cy][cx + 1];
+            const cc = ctrl[cy + 1][cx];
+            const d = ctrl[cy + 1][cx + 1];
+            let height = (a * (1 - tx) + b * tx) * (1 - ty) + (cc * (1 - tx) + d * tx) * ty;
+            // Flatten tees, greens, fairways
             const t = hole.grid[r][c];
             if (t === T.TEE || t === T.GREEN) height *= 0.1;
-            if (t === T.WATER) height = -8;
+            else if (t === T.FAIRWAY) height *= 0.5;
+            if (t === T.WATER) height = -3;
             h[r][c] = height;
         }
     }
@@ -2653,7 +2673,7 @@ function gameLoop(time) {
     if (use3D) {
         show3D();
         // Update 3D ball position
-        updateBall3D(ball.x, ball.y, ball.z, player.ballColor);
+        updateBall3D(ball.x, ball.y, ball.z, player.ballColor, terrainHeightAt(ball.x, ball.y));
         // Update 3D target
         const onGreenNow = terrainAt(ball.x, ball.y) === T.GREEN;
         updateTarget3D(targetX, targetY, !onGreenNow && !ball.moving && !holeComplete);

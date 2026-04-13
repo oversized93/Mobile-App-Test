@@ -319,9 +319,13 @@ function getTerrainHeight(t) {
 // ---- Update ball position (world coords → 3D coords) ----
 // Our 2D world: x = horizontal, y = vertical (down the screen)
 // Three.js: x = horizontal, y = up, z = depth (into screen)
-function updateBall3D(wx, wy, wz, color) {
+function updateBall3D(wx, wy, wz, color, groundY) {
     if (!ballMesh) return;
-    ballMesh.position.set(wx, (wz || 0) + 1.0, wy);
+    // Render at 1:1 world scale — terrain height comes through via wz
+    // Scale air portion (height above ground) by 0.5 to keep arcs readable
+    const gY = groundY || 0;
+    const airHeight = Math.max(0, (wz || 0) - gY);
+    ballMesh.position.set(wx, gY + airHeight * 0.5 + 1.0, wy);
     if (color) ballMesh.material.color.set(color);
 }
 
