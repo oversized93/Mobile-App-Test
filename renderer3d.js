@@ -241,51 +241,54 @@ function buildTerrain3D(hole) {
     const vertCols = hole.cols + 1;
     const vertRows = hole.rows + 1;
 
-    // Heights map so water vertices drop (lake bed)
+    // Priority — higher = wins the vertex color
+    const typePriority = {
+        [T.SAND]: 5,
+        [T.GREEN]: 4,
+        [T.TEE]: 4,
+        [T.FAIRWAY]: 3,
+        [T.PATH]: 3,
+        [T.ROUGH]: 2,
+        [T.TREE]: 2,
+        [T.WATER]: 1,
+        [T.OOB]: 0,
+    };
+
     for (let i = 0; i < posAttr.count; i++) {
-        // i maps to (vc, vr) where vc = 0..cols, vr = 0..rows
         const vr = Math.floor(i / vertCols);
         const vc = i - vr * vertCols;
 
-        // Sample 4 neighbor cells around this vertex
-        // Vertex (vc, vr) is the top-left corner of cell (vc, vr)
-        // so neighbors are cells (vc-1, vr-1), (vc, vr-1), (vc-1, vr), (vc, vr)
-        const c0 = vc - 1, r0 = vr - 1;
-        const c1 = vc,     r1 = vr;
+        // 4 cells that share this vertex
         const neighbors = [
-            { c: c0, r: r0 }, { c: c1, r: r0 },
-            { c: c0, r: r1 }, { c: c1, r: r1 }
+            { c: vc - 1, r: vr - 1 }, { c: vc, r: vr - 1 },
+            { c: vc - 1, r: vr     }, { c: vc, r: vr     }
         ];
-        let sumH = 0, sumR = 0, sumG = 0, sumB = 0;
-        let waterCount = 0, landCount = 0;
+        let sumH = 0;
+        let waterCount = 0;
+        let bestType = T.ROUGH;
+        let bestPriority = -1;
         for (const n of neighbors) {
-            const t = (n.c < 0 || n.c >= hole.cols || n.r < 0 || n.r >= hole.rows)
-                ? T.ROUGH
-                : hole.grid[n.r][n.c];
-            const h = (n.c < 0 || n.c >= hole.cols || n.r < 0 || n.r >= hole.rows)
-                ? 0
-                : (hole.heights ? hole.heights[n.r][n.c] : 0);
+            const inBounds = n.c >= 0 && n.c < hole.cols && n.r >= 0 && n.r < hole.rows;
+            const t = inBounds ? hole.grid[n.r][n.c] : T.ROUGH;
+            const h = (inBounds && hole.heights) ? hole.heights[n.r][n.c] : 0;
             sumH += h;
-            if (t === T.WATER) {
-                waterCount++;
-                // Water bed — sample rough color dimmed
-                const rgb = terrainRGB[T.WATER] || [0.2, 0.4, 0.5];
-                sumR += rgb[0]; sumG += rgb[1]; sumB += rgb[2];
-            } else {
-                landCount++;
-                const rgb = terrainRGB[t] || [0.1, 0.3, 0.15];
-                sumR += rgb[0]; sumG += rgb[1]; sumB += rgb[2];
+            if (t === T.WATER) waterCount++;
+            const pri = typePriority[t] || 0;
+            if (pri > bestPriority) {
+                bestPriority = pri;
+                bestType = t;
             }
         }
         const avgH = sumH / 4;
-        // If vertex is fully water, drop it to form the lake bed
+        // Fully water → drop to lake bed
         const isAllWater = (waterCount === 4);
         const y = isAllWater ? -4 : avgH;
         posAttr.setY(i, y);
 
-        colors[i * 3]     = sumR / 4;
-        colors[i * 3 + 1] = sumG / 4;
-        colors[i * 3 + 2] = sumB / 4;
+        const rgb = terrainRGB[bestType] || [0.1, 0.3, 0.15];
+        colors[i * 3]     = rgb[0];
+        colors[i * 3 + 1] = rgb[1];
+        colors[i * 3 + 2] = rgb[2];
     }
     posAttr.needsUpdate = true;
     terrainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));

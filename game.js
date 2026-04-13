@@ -213,16 +213,16 @@ function generateHeights(hole) {
         const a = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
         return (a - Math.floor(a)) * 2 - 1; // -1 to 1
     }
-    // Low-res control grid (every 20 cells)
-    const STEP = 20;
+    // Low-res control grid (every 15 cells)
+    const STEP = 15;
     const ctrlCols = Math.ceil(hole.cols / STEP) + 2;
     const ctrlRows = Math.ceil(hole.rows / STEP) + 2;
     const ctrl = [];
     for (let r = 0; r < ctrlRows; r++) {
         ctrl[r] = [];
         for (let c = 0; c < ctrlCols; c++) {
-            // Two octaves of hash noise
-            ctrl[r][c] = hash(c, r) * 8 + hash(c * 2.7, r * 2.7) * 3;
+            // Two octaves of hash noise — dramatic rolling hills
+            ctrl[r][c] = hash(c, r) * 60 + hash(c * 2.7, r * 2.7) * 20;
         }
     }
     // Smoothstep curve for interpolation (matches Perlin-style easing)
