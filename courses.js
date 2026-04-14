@@ -53,7 +53,8 @@ function makeHole1_1() {
     fillRect(g, 14, 8, 33, 58, T.FAIRWAY);
     // Enormous friendly green
     fillCircle(g, 24, 14, 10, T.GREEN);
-    // A single cosmetic bunker off to the side (doesn't block the line)
+    // Cosmetic bunker off to the left — adds a sense of danger without punishing
+    // the default auto-aim (intro hole, player should almost never hit this)
     fillCircle(g, 9, 22, 3, T.SAND);
     // Tee (with rough gap)
     fillRect(g, 22, 63, 26, 68, T.TEE);
@@ -75,12 +76,14 @@ function makeHole1_2() {
     // RIGHT branch — narrower, shorter, forces a carry over sand
     fillRect(g, 33, 85, 47, 135, T.FAIRWAY);
     fillRect(g, 28, 15, 44, 90, T.FAIRWAY);
-    // Central hazard dividing the two routes (sand islands in rough)
-    fillCircle(g, 29, 110, 4, T.SAND);
-    fillCircle(g, 30, 95, 4, T.SAND);
-    fillCircle(g, 28, 80, 3, T.SAND);
+    // Central hazard dividing the two routes — catches any drive that tries to
+    // split the difference. Three bunkers cover 150, 180 and 210 yd distances.
+    fillCircle(g, 29, 110, 4, T.SAND); // 150 yd layup blocker
+    fillCircle(g, 30, 95, 4, T.SAND);  // 180 yd layup blocker
+    fillCircle(g, 28, 80, 3, T.SAND);  // 210 yd carry blocker (driver commit test)
     // Green — favors the left route slightly (pin on left side)
     fillCircle(g, 20, 15, 7, T.GREEN);
+    // Pin-protection bunkers — punish a pulled or pushed approach
     fillCircle(g, 11, 18, 3, T.SAND);
     fillCircle(g, 30, 18, 3, T.SAND);
     // Tee (with rough gap)
@@ -92,27 +95,37 @@ function makeHole1_2() {
 }
 
 function makeHole1_3() {
-    // Par 5 — "Go For It". Gimmick: water bisects fairway. Lay up for 3 easy shots OR carry for reach-in-2.
-    const cols = 54, rows = 252;
+    // Par 5 — "Go For It". Gimmick: water bisects fairway. Lay up in 3 OR reach in 2.
+    // The tee-shot landing is split into a safe-wide left lane and a risky-narrow
+    // right lane that has a carry bunker. Both lanes can reach the green in 2, but
+    // the right lane gives a cleaner angle at the cost of landing area.
+    const cols = 56, rows = 252;
     const g = makeGrid(cols, rows, T.ROUGH);
     // Upper fairway (after water, running up to green)
-    fillRect(g, 16, 15, 38, 92, T.FAIRWAY);
-    // Lower fairway (tee side, up to the water's edge)
-    fillRect(g, 16, 120, 38, 235, T.FAIRWAY);
+    fillRect(g, 16, 15, 40, 92, T.FAIRWAY);
+    // LEFT tee landing lane — wide and safe
+    fillRect(g, 12, 118, 26, 236, T.FAIRWAY);
+    // RIGHT tee landing lane — narrow, aggressive
+    fillRect(g, 30, 118, 42, 236, T.FAIRWAY);
+    // (Rough strip cols 27-29 between the two lanes creates the decision)
     // Water hazard cutting the fairway — forces lay-up or carry
     fillRect(g, 4, 98, 50, 116, T.WATER);
     // Green
-    fillCircle(g, 27, 20, 8, T.GREEN);
-    fillCircle(g, 13, 22, 3, T.SAND);
-    fillCircle(g, 41, 22, 3, T.SAND);
-    // Layup target bunker (punishes a sloppy lay-up)
-    fillCircle(g, 18, 130, 3, T.SAND);
+    fillCircle(g, 28, 20, 8, T.GREEN);
+    // Pin-protection bunkers — punish a pulled or pushed approach
+    fillCircle(g, 14, 22, 3, T.SAND);
+    fillCircle(g, 42, 22, 3, T.SAND);
+    // Carry bunker on the right lane at driver-max distance — forces commitment
+    // (tee y243 - 113 ≈ y130, right lane cols 30-42)
+    fillCircle(g, 36, 132, 3, T.SAND);
+    // Layup target bunker on the left lane — punishes a sloppy lay-up
+    fillCircle(g, 17, 165, 3, T.SAND);
     // Tee (with rough gap)
     fillRect(g, 25, 241, 29, 246, T.TEE);
     // Tree borders
     treeLine(g, 0, 0, 6, rows - 1);
-    treeLine(g, 47, 0, cols - 1, rows - 1);
-    return { grid: g, cols, rows, tee: { x: 27, y: 243 }, hole: { x: 27, y: 20 }, par: 5, name: 'Go For It' };
+    treeLine(g, 49, 0, cols - 1, rows - 1);
+    return { grid: g, cols, rows, tee: { x: 27, y: 243 }, hole: { x: 28, y: 20 }, par: 5, name: 'Go For It' };
 }
 
 // ============================================================
@@ -134,9 +147,11 @@ function makeHole2_1() {
     fillRect(g, 4, 135, 30, 188, T.WATER);
     // Green
     fillCircle(g, 18, 18, 7, T.GREEN);
+    // Pin-protection bunkers — side-guards on either side of the green
     fillCircle(g, 10, 20, 3, T.SAND);
     fillCircle(g, 26, 22, 3, T.SAND);
-    // Fairway bunker rewarding committed cut
+    // Carry bunker at ~180 yd on the safe tee-leg — punishes under-hit drives
+    // that bail out of the water carry
     fillCircle(g, 34, 105, 3, T.SAND);
     // Tee (with rough gap)
     fillRect(g, 38, 194, 42, 199, T.TEE);
@@ -157,7 +172,7 @@ function makeHole2_2() {
     fillRect(g, 5, 10, 45, 65, T.WATER);
     // Island green
     fillCircle(g, 25, 25, 9, T.GREEN);
-    // Sand on the island (punishes slight miss)
+    // Pin-protection bunkers on the island — punish a slight miss that stayed dry
     fillCircle(g, 18, 28, 2, T.SAND);
     fillCircle(g, 32, 22, 2, T.SAND);
     return { grid: g, cols, rows, tee: { x: 25, y: 83 }, hole: { x: 25, y: 25 }, par: 3, name: 'Island Green' };
@@ -183,10 +198,13 @@ function makeHole2_3() {
     fillRect(g, 4, 60, 14, 145, T.WATER);
     // Green
     fillCircle(g, 28, 20, 8, T.GREEN);
+    // Pin-protection bunkers — side-guards on either side of the green
     fillCircle(g, 19, 22, 3, T.SAND);
     fillCircle(g, 37, 22, 3, T.SAND);
-    // Fairway bunkers
+    // Fairway bunker at ~190 yd from tee — punishes a lazy tee-leg layup
     fillCircle(g, 26, 170, 3, T.SAND);
+    // Approach bunker at ~100 yd from the mid-fairway landing — side guard
+    // for aggressive second shots trying to reach the upper fairway
     fillCircle(g, 30, 100, 3, T.SAND);
     // Tee (with rough gap)
     fillRect(g, 37, 263, 41, 268, T.TEE);
@@ -209,11 +227,12 @@ function makeHole3_1() {
     fillRect(g, 17, 10, 25, 183, T.FAIRWAY);
     // Tiny green — precision demanded
     fillCircle(g, 21, 14, 5, T.GREEN);
-    // Green bunkers pinching the target
+    // Pin-protection bunkers — pinch the tiny target from both sides
     fillCircle(g, 14, 16, 2, T.SAND);
     fillCircle(g, 28, 16, 2, T.SAND);
-    // Mid-fairway obstacles (rewards laying back)
+    // Layup-target bunker at 160 yd — forces a precise 5I layup
     fillCircle(g, 25, 110, 2, T.SAND);
+    // Approach side-guard at ~100 yd from layup — catches short second shots
     fillCircle(g, 17, 60, 2, T.SAND);
     // Tee (with rough gap)
     fillRect(g, 19, 188, 23, 193, T.TEE);
@@ -243,10 +262,13 @@ function makeHole3_2() {
     fillRect(g, 30, 85, 54, 140, T.WATER);
     // Green
     fillCircle(g, 30, 18, 7, T.GREEN);
+    // Pin-protection bunkers — side-guards on either side of the green
     fillCircle(g, 22, 22, 3, T.SAND);
     fillCircle(g, 38, 22, 3, T.SAND);
-    // Fairway bunkers on aggressive lines
+    // First-leg layup bunker at ~190 yd — punishes a pulled drive inside the bend
     fillCircle(g, 20, 170, 3, T.SAND);
+    // Second-leg approach bunker — side-guard for the aggressive second shot
+    // after the first water carry
     fillCircle(g, 24, 60, 3, T.SAND);
     // Tee (with rough gap)
     fillRect(g, 38, 263, 43, 268, T.TEE);
@@ -267,7 +289,7 @@ function makeHole3_3() {
     fillRect(g, 3, 22, 46, 78, T.WATER);
     // Tiny green with minimal buffer
     fillCircle(g, 25, 14, 5, T.GREEN);
-    // Sand pinching the tiny target
+    // Pin-protection bunkers — the only refuge off the green if you carry the water
     fillCircle(g, 16, 17, 2, T.SAND);
     fillCircle(g, 34, 17, 2, T.SAND);
     // Tree borders
