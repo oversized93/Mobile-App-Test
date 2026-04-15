@@ -132,13 +132,13 @@ function drawInkLine(line, opts = {}) {
     if (!line || line.pts.length < 2) return;
     // Soft shadow offset down-right
     ctx.save();
-    ctx.translate(1, 1.5);
-    strokeLinePath(line.pts, 5, PALETTE.inkShadow);
+    ctx.translate(0.8, 1.2);
+    strokeLinePath(line.pts, 3.5, PALETTE.inkShadow);
     ctx.restore();
     // Main ink stroke
-    strokeLinePath(line.pts, 3.5, opts.preview ? 'rgba(40, 24, 12, 0.65)' : PALETTE.ink);
+    strokeLinePath(line.pts, 2.4, opts.preview ? 'rgba(40, 24, 12, 0.65)' : PALETTE.ink);
     // Subtle highlight along the stroke for a wet-ink shine
-    strokeLinePath(line.pts, 1, 'rgba(255, 240, 210, 0.22)');
+    strokeLinePath(line.pts, 0.8, 'rgba(255, 240, 210, 0.22)');
 }
 
 function drawAllInk() {

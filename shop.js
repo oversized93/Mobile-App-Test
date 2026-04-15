@@ -29,12 +29,11 @@ const UPGRADES = {
     autoDrop: {
         id: 'autoDrop',
         label: 'Auto Drop',
-        desc: 'Coming soon — idle stones',
-        baseCost: 0,
+        desc: 'Release stones on their own — faster per level',
+        baseCost: 60,
         level: 0,
-        maxLevel: 1,
-        locked: true,
-        cost() { return 0; }
+        maxLevel: 13,
+        cost(level) { return Math.round(this.baseCost * Math.pow(1.95, level)); }
     }
 };
 
@@ -51,6 +50,15 @@ function getInkRemaining() {
 }
 function getMarbleValue() {
     return BASE_MARBLE_VALUE + UPGRADES.marbleValue.level;
+}
+
+// Final payout for a marble, factoring in bounces.
+// Each counted bounce adds 25% value up to a 16-bounce cap (5× max).
+function marblePayout(m) {
+    const base = getMarbleValue();
+    const capped = Math.min(m.bounces || 0, 16);
+    const mult = 1 + capped * 0.25;
+    return Math.max(1, Math.round(base * mult));
 }
 
 function canAfford(upgradeId) {
@@ -73,10 +81,15 @@ function buyUpgrade(upgradeId) {
 }
 
 function onMarbleCollected(m) {
-    money += getMarbleValue();
+    const payout = marblePayout(m);
+    money += payout;
     saveGame();
     if (typeof spawnCollectBurst === 'function') {
         spawnCollectBurst(m.x, m.y);
+    }
+    if (typeof spawnFloatText === 'function') {
+        const label = m.bounces > 0 ? '+$' + payout + '  ×' + m.bounces : '+$' + payout;
+        spawnFloatText(m.x, m.y - 8, label);
     }
 }
 
@@ -87,7 +100,8 @@ function saveGame() {
         lines: lines.map(l => ({ pts: l.pts, len: l.len })),
         upgrades: {
             ink: UPGRADES.ink.level,
-            marbleValue: UPGRADES.marbleValue.level
+            marbleValue: UPGRADES.marbleValue.level,
+            autoDrop: UPGRADES.autoDrop.level
         }
     });
 }
@@ -104,5 +118,6 @@ function loadGame() {
     if (s.upgrades) {
         UPGRADES.ink.level = s.upgrades.ink || 0;
         UPGRADES.marbleValue.level = s.upgrades.marbleValue || 0;
+        UPGRADES.autoDrop.level = s.upgrades.autoDrop || 0;
     }
 }

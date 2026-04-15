@@ -29,6 +29,41 @@ function spawnCollectBurst(x, y) {
 let notification = null;
 function notify(text) { notification = { text, timer: 1.6 }; }
 
+// ---- Floaty text (shown on collection to reward bounces) ----
+const floatTexts = [];
+function spawnFloatText(x, y, text) {
+    floatTexts.push({
+        x, y,
+        text,
+        life: 1.1,
+        maxLife: 1.1,
+        vy: -36
+    });
+}
+function updateFloatTexts(dt) {
+    for (let i = floatTexts.length - 1; i >= 0; i--) {
+        const t = floatTexts[i];
+        t.y += t.vy * dt;
+        t.vy *= 0.96;
+        t.life -= dt;
+        if (t.life <= 0) floatTexts.splice(i, 1);
+    }
+}
+function drawFloatTexts() {
+    for (const t of floatTexts) {
+        const a = Math.max(0, Math.min(1, t.life / t.maxLife));
+        ctx.font = 'bold 14px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // Shadow
+        ctx.fillStyle = `rgba(30, 18, 6, ${a * 0.5})`;
+        ctx.fillText(t.text, t.x + 1, t.y + 1);
+        // Gold text
+        ctx.fillStyle = `rgba(196, 160, 82, ${a})`;
+        ctx.fillText(t.text, t.x, t.y);
+    }
+}
+
 // ---- Layout ----
 const HUD_TOP = 60;
 const BOTTOM_H = 110;
@@ -195,9 +230,13 @@ function resetAllProgress() {
     currentLine = null;
     marbles.length = 0;
     trails.length = 0;
+    bouncePulses.length = 0;
     collectBursts.length = 0;
+    floatTexts.length = 0;
     UPGRADES.ink.level = 0;
     UPGRADES.marbleValue.level = 0;
+    UPGRADES.autoDrop.level = 0;
+    autoDropTimer = 1.0;
     try { localStorage.removeItem('mr_save'); } catch (e) {}
 }
 
@@ -432,6 +471,7 @@ function drawPlay(dt) {
     drawCollector();
     drawSpawner();
     drawAllInk();
+    drawBouncePulses();
     drawMarbles();
     drawHint();
     drawEraserCursor();
@@ -439,6 +479,8 @@ function drawPlay(dt) {
     drawDropBtn();
     drawEraserBtn();
     drawBursts(dt);
+    updateFloatTexts(dt);
+    drawFloatTexts();
     drawNotification(dt);
 }
 
@@ -581,7 +623,10 @@ function drawMenu() {
     ctx.fillText('— a zen garden —', cx, H() / 2 - 20);
 
     // Stats pill
-    const stats = '$' + money + '   •   ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + '   •   ink ' + (UPGRADES.ink.level + 1);
+    const autoRate = UPGRADES.autoDrop.level > 0
+        ? '   •   auto ' + autoDropInterval().toFixed(1) + 's'
+        : '';
+    const stats = '$' + money + '   •   ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + '   •   ink ' + (UPGRADES.ink.level + 1) + autoRate;
     ctx.font = '13px -apple-system,sans-serif';
     const sw = ctx.measureText(stats).width + 40;
     drawParchmentPill((W() - sw) / 2, H() / 2 + 4, sw, 32, 16);
@@ -696,6 +741,7 @@ function loop() {
     if (dt > 0.05) dt = 0.05;
 
     if (state === 'play') {
+        tickAutoDrop(dt);
         updateMarbles(dt);
         drawPlay(dt);
     } else if (state === 'shop') {

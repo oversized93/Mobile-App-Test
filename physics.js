@@ -2,11 +2,13 @@
 //  PHYSICS — Marble motion, segment collision, spawn/despawn
 // ============================================================
 
-const GRAVITY = 480;           // px / s²
-const RESTITUTION = 0.55;      // energy kept after a bounce (normal component)
-const TANGENT_FRICTION = 0.88; // energy kept along the tangent
-const MARBLE_RADIUS = 5;       // scaled 50% from original — twice the play area
-const MAX_MARBLES = 30;        // generous ceiling for idle mechanics later
+const GRAVITY = 360;           // px / s² — softened for more hang time / bouncing
+const RESTITUTION = 0.58;      // energy kept after a bounce (normal component)
+const TANGENT_FRICTION = 0.90; // energy kept along the tangent
+const MARBLE_RADIUS = 3;       // smaller = threads narrower gaps, more bounces
+const MAX_MARBLES = 60;        // higher ceiling for idle auto-drop
+const BOUNCE_VN_THRESHOLD = 18;   // min normal speed to count as a bounce
+const BOUNCE_DEBOUNCE = 0.06;     // seconds between counted bounces on one marble
 
 // Board anchors in pixel space — recomputed on resize
 let spawner = { x: 0, y: 0 };
@@ -24,17 +26,45 @@ function recomputeBoardAnchors() {
 // ---- Marble state ----
 const marbles = [];
 const trails = []; // fading trail points
+const bouncePulses = []; // visual ring pulses at bounce points
+
+// ---- Auto-drop timer ----
+let autoDropTimer = 1.0;
+
+function autoDropInterval() {
+    const lvl = UPGRADES.autoDrop.level;
+    if (lvl <= 0) return Infinity;
+    // Level 1 = 3.2s, decreasing 18% per level, floor 0.3s
+    return Math.max(0.3, 3.2 * Math.pow(0.82, lvl - 1));
+}
+
+function tickAutoDrop(dt) {
+    if (UPGRADES.autoDrop.level <= 0) return;
+    const interval = autoDropInterval();
+    if (autoDropTimer > interval) autoDropTimer = interval;
+    autoDropTimer -= dt;
+    if (autoDropTimer <= 0) {
+        spawnMarble();
+        autoDropTimer = interval;
+    }
+}
 
 function spawnMarble() {
     if (marbles.length >= MAX_MARBLES) return;
     marbles.push({
         x: spawner.x + (Math.random() * 3 - 1.5),
-        y: spawner.y + 6,
+        y: spawner.y + 4,
         vx: 0,
         vy: 0,
         r: MARBLE_RADIUS,
-        life: 0
+        life: 0,
+        bounces: 0,
+        lastBounceT: -1
     });
+}
+
+function spawnBouncePulse(x, y) {
+    bouncePulses.push({ x, y, r: 2, life: 0.45, maxLife: 0.45 });
 }
 
 // Closest point on line segment (ax,ay)-(bx,by) to point (px,py)
@@ -68,6 +98,12 @@ function collideMarbleWithSegments(m, segments) {
                 const vtx = m.vx - vnx, vty = m.vy - vny;
                 m.vx = vtx * TANGENT_FRICTION - vnx * RESTITUTION;
                 m.vy = vty * TANGENT_FRICTION - vny * RESTITUTION;
+                // Real bounce — count it for the value multiplier
+                if (-vn > BOUNCE_VN_THRESHOLD && (m.life - m.lastBounceT) > BOUNCE_DEBOUNCE) {
+                    m.bounces++;
+                    m.lastBounceT = m.life;
+                    spawnBouncePulse(p.x, p.y);
+                }
             }
         }
     }
@@ -148,6 +184,13 @@ function updateMarbles(dt) {
         trails[i].a -= dt * 0.9;
         if (trails[i].a <= 0) trails.splice(i, 1);
     }
+    // Grow + fade bounce pulses
+    for (let i = bouncePulses.length - 1; i >= 0; i--) {
+        const bp = bouncePulses[i];
+        bp.r += 22 * dt;
+        bp.life -= dt;
+        if (bp.life <= 0) bouncePulses.splice(i, 1);
+    }
 }
 
 // ---- Drawing ----
@@ -215,23 +258,34 @@ function drawCollector() {
     ctx.restore();
 }
 
+function drawBouncePulses() {
+    for (const bp of bouncePulses) {
+        const a = bp.life / bp.maxLife;
+        ctx.strokeStyle = `rgba(248, 191, 208, ${a * 0.65})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(bp.x, bp.y, bp.r, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+}
+
 function drawMarbles() {
     // Trail
     for (const t of trails) {
-        ctx.fillStyle = `rgba(60, 42, 24, ${t.a * 0.5})`;
+        ctx.fillStyle = `rgba(60, 42, 24, ${t.a * 0.55})`;
         ctx.beginPath();
-        ctx.arc(t.x, t.y, 1.6, 0, Math.PI * 2);
+        ctx.arc(t.x, t.y, 1.1, 0, Math.PI * 2);
         ctx.fill();
     }
     // Stones
     for (const m of marbles) {
         // Shadow
-        ctx.fillStyle = 'rgba(30, 18, 8, 0.35)';
+        ctx.fillStyle = 'rgba(30, 18, 8, 0.3)';
         ctx.beginPath();
-        ctx.ellipse(m.x + 0.5, m.y + 1.2, m.r, m.r * 0.55, 0, 0, Math.PI * 2);
+        ctx.ellipse(m.x + 0.3, m.y + 1, m.r, m.r * 0.55, 0, 0, Math.PI * 2);
         ctx.fill();
         // Body — smooth river stone gradient
-        const g = ctx.createRadialGradient(m.x - 1.4, m.y - 1.4, 0.5, m.x, m.y, m.r);
+        const g = ctx.createRadialGradient(m.x - 0.9, m.y - 0.9, 0.3, m.x, m.y, m.r);
         g.addColorStop(0, PALETTE.stoneHi);
         g.addColorStop(0.55, '#5a6670');
         g.addColorStop(1, '#2a323a');
@@ -240,9 +294,9 @@ function drawMarbles() {
         ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
         ctx.fill();
         // Shine
-        ctx.fillStyle = 'rgba(230, 238, 245, 0.8)';
+        ctx.fillStyle = 'rgba(230, 238, 245, 0.85)';
         ctx.beginPath();
-        ctx.arc(m.x - m.r * 0.32, m.y - m.r * 0.32, m.r * 0.28, 0, Math.PI * 2);
+        ctx.arc(m.x - m.r * 0.35, m.y - m.r * 0.35, m.r * 0.32, 0, Math.PI * 2);
         ctx.fill();
     }
 }
