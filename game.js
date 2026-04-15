@@ -288,6 +288,13 @@ function loop() {
 
 function init() {
     loadGame();
+    // Chunk-1 testing patch: if a river is already saved, start the round
+    // immediately so koi flow on reload. Chunk 2 removes this and restores
+    // the proper Draw Again / Test Flow / Start Round button flow.
+    if (river) {
+        roundStarted = true;
+        spawnTimer = 0;
+    }
     loop();
 }
 
