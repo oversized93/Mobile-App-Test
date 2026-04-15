@@ -9,7 +9,8 @@
 
 const INK_MIN_POINT_DIST = 3;     // px between consecutive points
 const INK_MIN_LINE_LENGTH = 16;   // shorter = discard (stray tap)
-const INK_ERASE_RADIUS = 18;      // tap-to-erase tolerance
+const INK_ERASE_RADIUS = 18;      // tap-to-erase-whole-line tolerance
+const INK_PARTIAL_ERASE_RADIUS = 18; // eraser-mode drag radius
 
 let lines = [];          // committed lines: { pts, len }
 let currentLine = null;  // line currently being drawn
@@ -62,6 +63,55 @@ function eraseLineNear(x, y) {
         }
     }
     return false;
+}
+
+// Build a {pts, len} line from a raw point array, recomputing length.
+function rebuildLineFromPts(pts) {
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) {
+        const dx = pts[i].x - pts[i - 1].x;
+        const dy = pts[i].y - pts[i - 1].y;
+        len += Math.sqrt(dx * dx + dy * dy);
+    }
+    return { pts: pts.slice(), len };
+}
+
+// Eraser-mode drag: remove any point within `radius` of (x,y).
+// Lines are split into multiple sub-lines when a gap forms in the middle.
+// Sub-lines shorter than INK_MIN_LINE_LENGTH are dropped (ink refunded).
+// Returns true if anything changed.
+function eraseAlongPath(x, y, radius) {
+    const rSq = radius * radius;
+    const next = [];
+    let changed = false;
+    for (const line of lines) {
+        let segment = [];
+        let anyRemoved = false;
+        for (const p of line.pts) {
+            const dx = p.x - x, dy = p.y - y;
+            if (dx * dx + dy * dy < rSq) {
+                anyRemoved = true;
+                if (segment.length >= 2) {
+                    const sub = rebuildLineFromPts(segment);
+                    if (sub.len >= INK_MIN_LINE_LENGTH) next.push(sub);
+                }
+                segment = [];
+            } else {
+                segment.push(p);
+            }
+        }
+        if (anyRemoved) {
+            changed = true;
+            if (segment.length >= 2) {
+                const sub = rebuildLineFromPts(segment);
+                if (sub.len >= INK_MIN_LINE_LENGTH) next.push(sub);
+            }
+        } else {
+            next.push(line);
+        }
+    }
+    if (changed) lines = next;
+    return changed;
 }
 
 // ---- Drawing ----

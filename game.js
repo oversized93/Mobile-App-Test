@@ -4,6 +4,8 @@
 
 let state = 'menu';         // 'menu' | 'play' | 'shop' | 'resetConfirm'
 let isDrawing = false;
+let isErasing = false;
+let eraserMode = false;
 
 // ---- Cherry-blossom burst effects on collection ----
 const collectBursts = [];
@@ -54,8 +56,15 @@ function inkBarRect() {
     return { x, y, w, h };
 }
 function dropBtnRect() {
-    const w = Math.min(W() - 40, 240), h = 52;
-    return { x: (W() - w) / 2, y: H() - h - 28, w, h };
+    // Make room for the eraser button to the right
+    const h = 52;
+    const w = Math.min(W() - 40 - 76, 220);
+    return { x: (W() - w - 76) / 2, y: H() - h - 28, w, h };
+}
+function eraserBtnRect() {
+    const db = dropBtnRect();
+    const w = 64, h = 52;
+    return { x: db.x + db.w + 12, y: db.y, w, h };
 }
 
 // ---- Menu layout ----
@@ -105,24 +114,41 @@ function onTouchStart(sx, sy) {
         spawnMarble();
         return;
     }
+    const eb = eraserBtnRect();
+    if (hitBtn(sx, sy, eb.x, eb.y, eb.w, eb.h)) {
+        eraserMode = !eraserMode;
+        notify(eraserMode ? 'Eraser on' : 'Drawing on');
+        return;
+    }
 
     // Don't allow drawing across the HUD bars
     if (sy < HUD_TOP + 4) return;
     if (sy > H() - BOTTOM_H) return;
 
-    startLine(sx, sy);
-    isDrawing = true;
+    if (eraserMode) {
+        isErasing = true;
+        eraseAlongPath(sx, sy, INK_PARTIAL_ERASE_RADIUS);
+    } else {
+        startLine(sx, sy);
+        isDrawing = true;
+    }
 }
 
 function onTouchMove(sx, sy) {
     if (state !== 'play') return;
     if (isDrawing) extendLine(sx, sy);
+    if (isErasing) eraseAlongPath(sx, sy, INK_PARTIAL_ERASE_RADIUS);
 }
 
 function onTouchEnd(sx, sy, info) {
     if (state === 'menu') { handleMenuTouchEnd(sx, sy); return; }
     if (state === 'resetConfirm') { handleResetConfirmTouchEnd(sx, sy); return; }
     if (state === 'shop') { handleShopTouchEnd(sx, sy); return; }
+    if (isErasing) {
+        isErasing = false;
+        saveGame();
+        return;
+    }
     if (!isDrawing) return;
     isDrawing = false;
     if (info && info.moved) {
@@ -293,6 +319,56 @@ function drawDropBtn() {
     ctx.fillText('◉  Release Stone', db.x + db.w / 2, db.y + db.h / 2 + 1);
 }
 
+function drawEraserBtn() {
+    const eb = eraserBtnRect();
+    if (eraserMode) {
+        // Active — terracotta warning gradient
+        const g = ctx.createLinearGradient(eb.x, eb.y, eb.x + eb.w, eb.y);
+        g.addColorStop(0, '#c46a4a');
+        g.addColorStop(1, '#a8543a');
+        ctx.fillStyle = g;
+        roundRect(eb.x, eb.y, eb.w, eb.h, eb.h / 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(80, 20, 10, 0.6)';
+        ctx.lineWidth = 2;
+        roundRect(eb.x, eb.y, eb.w, eb.h, eb.h / 2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255, 240, 210, 0.3)';
+        ctx.lineWidth = 1;
+        roundRect(eb.x + 3, eb.y + 3, eb.w - 6, eb.h - 6, (eb.h - 6) / 2);
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+    } else {
+        // Inactive — parchment pill
+        drawParchmentPill(eb.x, eb.y, eb.w, eb.h, eb.h / 2);
+        ctx.fillStyle = PALETTE.text;
+    }
+    ctx.font = 'bold 14px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Erase', eb.x + eb.w / 2, eb.y + eb.h / 2 + 1);
+}
+
+function drawEraserCursor() {
+    if (!eraserMode) return;
+    if (!isErasing && !touch.down) return;
+    // Only draw within the play area
+    if (touch.y < HUD_TOP + 4 || touch.y > H() - BOTTOM_H) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(200, 122, 92, 0.18)';
+    ctx.beginPath();
+    ctx.arc(touch.x, touch.y, INK_PARTIAL_ERASE_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(200, 80, 50, 0.85)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.arc(touch.x, touch.y, INK_PARTIAL_ERASE_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+}
+
 function drawHint() {
     // Only show the hint when no lines are drawn
     if (lines.length > 0) return;
@@ -300,7 +376,9 @@ function drawHint() {
     ctx.font = '14px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Drag to draw paths · Tap a line to erase', W() / 2, H() / 2);
+    ctx.fillText('Drag to draw paths', W() / 2, H() / 2);
+    ctx.font = '12px -apple-system,sans-serif';
+    ctx.fillText('Tap Erase to remove parts of a line', W() / 2, H() / 2 + 20);
 }
 
 function drawBursts(dt) {
@@ -356,8 +434,10 @@ function drawPlay(dt) {
     drawAllInk();
     drawMarbles();
     drawHint();
+    drawEraserCursor();
     drawHud();
     drawDropBtn();
+    drawEraserBtn();
     drawBursts(dt);
     drawNotification(dt);
 }
