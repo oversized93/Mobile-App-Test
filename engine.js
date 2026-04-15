@@ -266,10 +266,6 @@ function drawMapleSilhouette(cx, cy, size, flip) {
         { x: size * 0.3,  y: size * 0.15,  r: size * 0.38, c: PALETTE.mapleRed,    a: 0.6 }
     ];
     for (const b of blobs) {
-        const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
-        g.addColorStop(0, b.c);
-        g.addColorStop(1, b.c.replace(')', ', 0)').replace('#', 'rgba('));
-        // Fallback: hex -> translucent via alpha
         ctx.fillStyle = b.c;
         ctx.globalAlpha = b.a;
         ctx.beginPath();
