@@ -4,7 +4,7 @@
 // ============================================================
 
 const RIVER_MIN_PT_DIST = 3;         // px between stored points
-const RIVER_BASE_WIDTH = 102;        // base river width (3x the original stencil)
+const RIVER_BASE_WIDTH = 132;        // base river width (3x the original stencil, slightly wider)
 
 let river = null;            // committed river: { pts, width, totalLen }
 let draftRiver = null;       // in-progress during drag
@@ -252,41 +252,78 @@ function strokeRiverLayer(pts, width, color) {
     ctx.stroke();
 }
 
-function drawRiver() {
-    if (draftRiver && draftRiver.pts.length >= 2) {
-        // Draft preview — slightly translucent
-        strokeRiverLayer(draftRiver.pts, draftRiver.width + 4, 'rgba(20, 40, 55, 0.55)');
-        strokeRiverLayer(draftRiver.pts, draftRiver.width,     'rgba(74, 143, 181, 0.75)');
-        strokeRiverLayer(draftRiver.pts, draftRiver.width * 0.55, 'rgba(165, 216, 232, 0.85)');
-        strokeRiverLayer(draftRiver.pts, draftRiver.width * 0.25, 'rgba(240, 248, 251, 0.9)');
-    }
-    if (!river || river.pts.length < 2) return;
+function drawRiverBody(r, isDraft) {
+    const pts = r.pts;
+    const w = r.width;
+    const a = isDraft ? 0.72 : 1.0;
+    // Dark wet earth ring
+    strokeRiverLayer(pts, w + 10, 'rgba(18, 30, 10, ' + (0.42 * a) + ')');
+    // Mossy green bank
+    strokeRiverLayer(pts, w + 4, 'rgba(60, 100, 40, ' + (0.5 * a) + ')');
+    // Deep base turquoise
+    strokeRiverLayer(pts, w, 'rgba(34, 82, 108, ' + a + ')');
+    // Main surface — one broad turquoise color
+    strokeRiverLayer(pts, w * 0.9, 'rgba(70, 148, 180, ' + a + ')');
+    // Gentle lighter highlight (not a hard center stripe)
+    strokeRiverLayer(pts, w * 0.62, 'rgba(128, 190, 212, ' + (0.65 * a) + ')');
+    // Very subtle central shimmer
+    strokeRiverLayer(pts, w * 0.32, 'rgba(178, 218, 232, ' + (0.35 * a) + ')');
+}
 
-    // Dark edge — wet ground around the water
-    strokeRiverLayer(river.pts, river.width + 6, 'rgba(18, 30, 10, 0.45)');
-    // Deep bed
-    strokeRiverLayer(river.pts, river.width, PALETTE.riverDeep);
-    // Mid surface
-    strokeRiverLayer(river.pts, river.width * 0.72, PALETTE.riverMid);
-    // Bright highlight stripe
-    strokeRiverLayer(river.pts, river.width * 0.42, PALETTE.riverBright);
-    // Thin white center
-    strokeRiverLayer(river.pts, river.width * 0.18, PALETTE.foam);
-
-    // Animated foam flecks sliding along the current (depth-ordered, small)
+function drawRiverRipples(r) {
+    const total = r.totalLen;
+    if (!total) return;
+    const spacing = 26;
+    const count = Math.max(6, Math.floor(total / spacing));
     const now = performance.now() / 1000;
-    const flecks = 14;
-    for (let i = 0; i < flecks; i++) {
-        const phase = ((now * 0.25) + i / flecks) % 1;
-        const p = pointAtPathT(river, phase);
-        // Small perpendicular offset for organic feel
-        const off = Math.sin(now * 2 + i) * river.width * 0.18;
-        const px = p.x + Math.cos(p.angle + Math.PI / 2) * off;
-        const py = p.y + Math.sin(p.angle + Math.PI / 2) * off;
-        const alpha = 0.7 * Math.min(1, phase * 2, (1 - phase) * 3);
-        ctx.fillStyle = `rgba(240, 248, 251, ${alpha})`;
+
+    ctx.strokeStyle = 'rgba(220, 240, 250, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < count; i++) {
+        const phase = ((i / count) + now * 0.055) % 1;
+        const p = pointAtPathT(r, phase);
+        const nx = Math.cos(p.angle + Math.PI / 2);
+        const ny = Math.sin(p.angle + Math.PI / 2);
+        // Ripple spans a random fraction of the river width
+        const spread = r.width * 0.38 * (0.75 + Math.sin(i * 1.7 + now * 1.3) * 0.2);
+        // Offset slightly off-center for organic variation
+        const centerOff = Math.sin(i * 2.3 + now * 0.7) * r.width * 0.15;
+        const cx = p.x + nx * centerOff;
+        const cy = p.y + ny * centerOff;
+        ctx.beginPath();
+        ctx.moveTo(cx - nx * spread, cy - ny * spread);
+        ctx.lineTo(cx + nx * spread, cy + ny * spread);
+        ctx.stroke();
+    }
+}
+
+function drawRiverFoam(r) {
+    const now = performance.now() / 1000;
+    const count = 18;
+    for (let i = 0; i < count; i++) {
+        const phase = ((now * 0.22) + i / count) % 1;
+        const p = pointAtPathT(r, phase);
+        const nx = Math.cos(p.angle + Math.PI / 2);
+        const ny = Math.sin(p.angle + Math.PI / 2);
+        // Wider side variation so foam occupies the whole river
+        const off = Math.sin(now * 1.8 + i * 2.1) * r.width * 0.32 + Math.cos(i * 3.1) * r.width * 0.12;
+        const px = p.x + nx * off;
+        const py = p.y + ny * off;
+        const alpha = 0.55 * Math.min(1, phase * 2, (1 - phase) * 3);
+        ctx.fillStyle = 'rgba(240, 248, 251, ' + alpha + ')';
         ctx.beginPath();
         ctx.ellipse(px, py, 2.2, 1, p.angle, 0, Math.PI * 2);
         ctx.fill();
     }
+}
+
+function drawRiver() {
+    if (draftRiver && draftRiver.pts.length >= 2) {
+        drawRiverBody(draftRiver, true);
+    }
+    if (!river || river.pts.length < 2) return;
+    drawRiverBody(river, false);
+    drawRiverRipples(river);
+    drawRiverFoam(river);
 }

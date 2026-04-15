@@ -3,8 +3,8 @@
 //  obstacles, payouts. (replaces physics.js from marble run)
 // ============================================================
 
-const MAX_ANIMALS = 40;
-const BASE_SPAWN_INTERVAL = 3.8;   // seconds
+const MAX_ANIMALS = 80;
+const BASE_SPAWN_INTERVAL = 2.2;   // seconds
 const BASE_ANIMAL_SPEED = 70;      // pixels/sec along the polyline
 const ROCK_SLOW_RANGE_T = 0.035;   // pathT range affected by a rock
 const ROCK_SLOW_FACTOR = 0.35;     // multiplier when inside a rock's range
@@ -77,7 +77,8 @@ function spawnAnimal(forcedType) {
         pathT: 0,
         speed: BASE_ANIMAL_SPEED * type.baseSpeed,
         flowTime: 0,
-        side: (Math.random() - 0.5) * 0.5,
+        // Wider lateral range so koi spread across the full river width
+        side: (Math.random() - 0.5) * 1.9,
         wobble: Math.random() * Math.PI * 2,
     });
 }
@@ -183,7 +184,8 @@ function drawAnimals() {
     if (!river) return;
     for (const a of animals) {
         const p = pointAtPathT(river, a.pathT);
-        const off = a.side * river.width * 0.35;
+        // a.side is ±0.95, scaled by half-width with a small safety margin
+        const off = a.side * river.width * 0.42;
         const x = p.x + Math.cos(p.angle + Math.PI / 2) * off;
         const y = p.y + Math.sin(p.angle + Math.PI / 2) * off;
         const wig = Math.sin(a.wobble) * 0.3;
