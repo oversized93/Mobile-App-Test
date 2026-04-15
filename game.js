@@ -173,7 +173,12 @@ function onTouchEnd(sx, sy, info) {
         cancelDraftRiver();
         notify('Reach the pond');
     } else {
-        notify('River drawn — tap Test Flow or Start Round');
+        // Chunk-1 testing patch: auto-start the round so koi flow immediately.
+        // Chunk 2 removes this and replaces it with Test Flow / Start Round buttons.
+        roundStarted = true;
+        spawnTimer = 0.4;
+        notify('The river flows');
+        saveGame();
     }
 }
 
