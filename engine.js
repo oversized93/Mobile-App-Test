@@ -1,5 +1,5 @@
 // ============================================================
-//  ENGINE — Canvas setup, input, utilities, drawing helpers
+//  ENGINE — Canvas setup, input, drawing helpers, save/load
 // ============================================================
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -15,26 +15,6 @@ window.addEventListener('resize', resize);
 
 const W = () => window.innerWidth;
 const H = () => window.innerHeight;
-
-// ---- Grid ----
-// The grid is the play area. 32px cells.
-const CELL = 32;
-function gridCols() { return Math.floor(W() / CELL); }
-function gridRows() { return Math.floor((H() - 180) / CELL); } // leave room for HUD + picker
-function gridOriginX() { return (W() - gridCols() * CELL) / 2; }
-function gridOriginY() { return 80; }
-
-function worldToCell(sx, sy) {
-    const c = Math.floor((sx - gridOriginX()) / CELL);
-    const r = Math.floor((sy - gridOriginY()) / CELL);
-    return { col: c, row: r };
-}
-function cellToWorld(col, row) {
-    return { x: gridOriginX() + col * CELL, y: gridOriginY() + row * CELL };
-}
-function inGrid(col, row) {
-    return col >= 0 && col < gridCols() && row >= 0 && row < gridRows();
-}
 
 // ---- Save / load ----
 function saveData(key, val) {
@@ -62,110 +42,87 @@ function roundRect(x, y, w, h, r) {
     ctx.closePath();
 }
 
-function drawGlassPill(x, y, w, h, r) {
-    // Soft shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+function drawParchmentPill(x, y, w, h, r) {
+    // Shadow
+    ctx.fillStyle = 'rgba(40, 24, 10, 0.22)';
     roundRect(x, y + 2, w, h, r);
     ctx.fill();
-    // Glass fill
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    // Parchment base
+    ctx.fillStyle = 'rgba(248, 232, 198, 0.85)';
     roundRect(x, y, w, h, r);
     ctx.fill();
-    // Inner highlight
+    // Inner warm highlight
     const grad = ctx.createLinearGradient(x, y, x, y + h);
-    grad.addColorStop(0, 'rgba(255,255,255,0.18)');
-    grad.addColorStop(1, 'rgba(255,255,255,0.02)');
+    grad.addColorStop(0, 'rgba(255, 248, 220, 0.6)');
+    grad.addColorStop(1, 'rgba(215, 188, 140, 0.2)');
     ctx.fillStyle = grad;
     roundRect(x, y, w, h, r);
     ctx.fill();
-    // Hairline border
-    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    // Deep brown hairline
+    ctx.strokeStyle = 'rgba(80, 50, 20, 0.45)';
     ctx.lineWidth = 1;
     roundRect(x, y, w, h, r);
     ctx.stroke();
-}
-
-function drawBtn(x, y, w, h, text, color) {
-    drawGlassPill(x, y, w, h, h / 2);
-    if (color) {
-        ctx.fillStyle = color;
-        roundRect(x, y, w, h, h / 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-        ctx.lineWidth = 1;
-        roundRect(x, y, w, h, h / 2);
-        ctx.stroke();
-    }
-    ctx.fillStyle = '#fff';
-    ctx.font = `600 ${Math.min(h * 0.42, 17)}px -apple-system,sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + w / 2, y + h / 2 + 0.5);
 }
 
 function hitBtn(tx, ty, x, y, w, h) {
     return tx >= x && tx <= x + w && ty >= y && ty <= y + h;
 }
 
-// ---- Color palette ----
+// ---- Color palette — Japanese zen garden ----
 const PALETTE = {
-    bgTop:    '#0a1628',
-    bgBottom: '#153247',
-    grid:     'rgba(210,240,255,0.055)',
-    hud:      'rgba(255,255,255,0.08)',
-    accent:   '#6dd9ff',
-    accent2:  '#b4f5c8',
-    marble:   '#eaf4ff',
-    marbleTrail: 'rgba(180,245,200,0.35)',
-    piece:    '#7fb8d9',
-    pieceHi:  '#e0f4ff',
-    collector:'#b4f5c8',
-    spawner:  '#6dd9ff',
-    money:    '#ffd86d',
-    locked:   'rgba(255,255,255,0.25)',
+    bgTop:    '#f2e3c0',  // warm cream sand
+    bgBottom: '#d4b584',  // deeper tan
+    rake:     'rgba(130, 95, 55, 0.10)',
+    text:     '#2a1810',  // deep sumi brown
+    textSoft: 'rgba(40, 24, 10, 0.65)',
+    ink:      '#1a0f08',  // sumi black ink
+    inkShadow:'rgba(30, 18, 8, 0.45)',
+    stone:    '#4a5560',
+    stoneHi:  '#9cacb8',
+    spawner:  '#7a8c4d',  // bamboo green
+    collector:'#8c6a45',  // wooden bowl brown
+    water:    '#4a6b8c',  // koi pond blue
+    money:    '#c4a052',  // aged gold
+    blossom:  '#f8bfd0',  // cherry blossom
+    moss:     '#7a9c5e',
+    locked:   'rgba(40, 24, 10, 0.3)',
 };
 
 function drawBackground() {
+    // Base sand gradient
     const grad = ctx.createLinearGradient(0, 0, 0, H());
     grad.addColorStop(0, PALETTE.bgTop);
     grad.addColorStop(1, PALETTE.bgBottom);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W(), H());
-    // Ambient blobs
-    for (let i = 0; i < 3; i++) {
-        const cx = W() * (0.2 + i * 0.3);
-        const cy = H() * (0.3 + (i % 2) * 0.4);
-        const r = 220 + i * 40;
-        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        g.addColorStop(0, 'rgba(109,217,255,0.06)');
-        g.addColorStop(1, 'rgba(109,217,255,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, W(), H());
+
+    // Raked sand — horizontal wavy lines
+    ctx.strokeStyle = PALETTE.rake;
+    ctx.lineWidth = 1.2;
+    const step = 14;
+    for (let y = 20; y < H(); y += step) {
+        ctx.beginPath();
+        for (let x = 0; x <= W(); x += 20) {
+            const wave = Math.sin(x * 0.018 + y * 0.035) * 2.5;
+            if (x === 0) ctx.moveTo(x, y + wave);
+            else ctx.lineTo(x, y + wave);
+        }
+        ctx.stroke();
     }
+
+    // Soft vignette edges
+    const vg = ctx.createRadialGradient(
+        W() / 2, H() / 2, Math.min(W(), H()) * 0.35,
+        W() / 2, H() / 2, Math.max(W(), H()) * 0.75
+    );
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(80, 50, 20, 0.28)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W(), H());
 }
 
-function drawGrid() {
-    const ox = gridOriginX(), oy = gridOriginY();
-    const cols = gridCols(), rows = gridRows();
-    ctx.strokeStyle = PALETTE.grid;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let c = 0; c <= cols; c++) {
-        ctx.moveTo(ox + c * CELL, oy);
-        ctx.lineTo(ox + c * CELL, oy + rows * CELL);
-    }
-    for (let r = 0; r <= rows; r++) {
-        ctx.moveTo(ox, oy + r * CELL);
-        ctx.lineTo(ox + cols * CELL, oy + r * CELL);
-    }
-    ctx.stroke();
-    // Subtle outline
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(ox, oy, cols * CELL, rows * CELL);
-}
-
-// ---- Input state ----
+// ---- Touch / mouse input ----
 const touch = { down: false, x: 0, y: 0, startX: 0, startY: 0, moved: false, startT: 0 };
 
 function onTouchStartRaw(x, y) {

@@ -1,13 +1,13 @@
-# Marble Flow
+# Marble Flow — Japanese Zen Garden
 
-An ASMR idle marble run builder for mobile browsers. Place ramps, curves, and funnels on a grid; drop marbles; watch them roll into the collector and earn money. Spend money on more pieces and upgrades. Expand the loop over time.
+An ASMR idle marble run for mobile browsers. Draw sumi-ink lines across a raked-sand garden and watch smooth river stones roll along them into a koi-pond collector. Earn money, expand your ink budget, and keep the flow going.
 
 ## Branch Layout
 
 This repository hosts two parallel games on separate branches:
 
 - `claude/create-iphone-game-u21nY` — **Golf Tycoon** (a 3D Golf Clash-style game)
-- `claude/asmr-marble-run` — **Marble Flow** (this game, ASMR idle marble run)
+- `claude/asmr-marble-run` — **Marble Flow** (this game, ASMR idle marble drawing)
 
 Each branch has its own `index.html` and its own JS modules. They do not share code.
 
@@ -26,39 +26,41 @@ No build step, no dependencies — plain HTML5 canvas + JavaScript.
 
 ```
 index.html   Mobile shell, canvas, script tags
-engine.js    Canvas setup, input, grid, drawing helpers, save/load
-pieces.js    Piece type definitions and placed-piece state
-physics.js   Marble motion, segment collision, spawn/despawn
+engine.js    Canvas setup, input, zen palette, background, drawing helpers, save/load
+ink.js       Player-drawn freehand lines (sumi-ink) with ink budget + erase
+physics.js   Marble (stone) motion, segment collision, spawn/collect
 shop.js      Money, upgrades, save format
 game.js      Main loop, input handling, play/shop screens
 ```
 
 ## Controls
 
-- **Tap a piece** in the bottom picker to select it
-- **Tap an empty grid cell** to place the selected piece
-- **Double-tap a placed piece** to rotate 90°
-- **Long-press a placed piece** to remove it
-- **Tap Drop Marble** to spawn a marble at the spawner
+- **Drag anywhere** in the garden to draw a sumi-ink line
+- **Tap a line** to erase it (refunds the ink)
+- **Tap Release Stone** to drop a river stone from the bamboo spout
 - **Tap the ⚙ button** to open the shop
+
+Each line you draw costs ink proportional to its length. You start with 1400 ink and the *More Ink* upgrade adds 400 per level.
 
 ## Current MVP
 
-- 3 piece types: Ramp, Curve, Funnel
-- Fixed spawner (top) and collector (bottom-right)
+- Freehand drawing with real-time collision (marbles react to the line you're drawing)
+- Sand gradient background with raked-sand horizontal wave pattern
+- Sumi-ink strokes with soft shadow + wet-ink highlight
+- Bamboo spout spawner, wooden koi-pond collector
+- River-stone marbles with smooth gradient shading
+- Cherry-blossom petal particle bursts on collection
 - 2D gravity physics with line-segment collision
-- Shop with piece-slot and marble-value upgrades
+- Shop with ink-budget and stone-value upgrades (auto-drop placeholder locked)
 - Auto-save to `localStorage`
+- All gameplay elements sized at 50% of the original prototype — twice the effective play area
 
 ## Roadmap
 
-Layered in over future commits, without refactoring the core loop:
-
-1. Audio — click on place, chime on earn, calm ambient loop
-2. Idle mechanics — auto-spawn interval, offline earnings
-3. More pieces — splitter, accelerator, loop, bumper, teleporter
-4. Marble upgrades — gold (×5), rainbow (×10), trails
-5. Particle polish — bursts on earn, sparkle trails
-6. Themes — neon, zen garden, space
-7. Prestige — reset for a permanent multiplier
-8. Multiple collectors with different payouts
+1. Audio — soft chime on collect, brush-stroke sound on draw, ambient koto loop
+2. Idle mechanics — auto-drop interval, offline earnings
+3. Stone variants — jade (×5), onyx (×10), with trails
+4. More environment — koi fish in pond, bamboo leaves in wind, distant pagoda
+5. Zen themes — dusk, cherry-blossom season, winter snow
+6. Prestige — reset for a permanent multiplier
+7. Multiple collectors — routing challenges with different payouts

@@ -1,23 +1,26 @@
 // ============================================================
-//  SHOP — Economy, upgrades, save format
+//  SHOP — Money, upgrades, save format
 // ============================================================
 
 let money = 0;
 
+const BASE_INK_MAX = 1400;        // starting ink budget (pixels)
+const BASE_MARBLE_VALUE = 1;
+
 const UPGRADES = {
-    slots: {
-        id: 'slots',
-        label: 'Piece Slots',
-        desc: '+4 more pieces you can place',
-        baseCost: 25,
+    ink: {
+        id: 'ink',
+        label: 'More Ink',
+        desc: '+400 ink budget for drawing',
+        baseCost: 20,
         level: 0,
-        maxLevel: 12,
+        maxLevel: 15,
         cost(level) { return Math.round(this.baseCost * Math.pow(1.85, level)); }
     },
     marbleValue: {
         id: 'marbleValue',
-        label: 'Marble Value',
-        desc: 'Each collected marble pays +$1',
+        label: 'Stone Value',
+        desc: 'Each collected stone pays +$1',
         baseCost: 15,
         level: 0,
         maxLevel: 30,
@@ -25,8 +28,8 @@ const UPGRADES = {
     },
     autoDrop: {
         id: 'autoDrop',
-        label: 'Auto-Drop',
-        desc: 'Coming soon — idle mechanics',
+        label: 'Auto Drop',
+        desc: 'Coming soon — idle stones',
         baseCost: 0,
         level: 0,
         maxLevel: 1,
@@ -35,12 +38,16 @@ const UPGRADES = {
     }
 };
 
-// Base values — upgrades add to these
-const BASE_MAX_PIECES = 8;
-const BASE_MARBLE_VALUE = 1;
-
-function getMaxPieces() {
-    return BASE_MAX_PIECES + UPGRADES.slots.level * 4;
+function getInkMax() {
+    return BASE_INK_MAX + UPGRADES.ink.level * 400;
+}
+function getInkUsed() {
+    let total = 0;
+    for (const l of lines) total += l.len;
+    return total;
+}
+function getInkRemaining() {
+    return Math.max(0, getInkMax() - getInkUsed());
 }
 function getMarbleValue() {
     return BASE_MARBLE_VALUE + UPGRADES.marbleValue.level;
@@ -68,7 +75,6 @@ function buyUpgrade(upgradeId) {
 function onMarbleCollected(m) {
     money += getMarbleValue();
     saveGame();
-    // Fire a tiny burst effect (handled in game.js via collectedBursts)
     if (typeof spawnCollectBurst === 'function') {
         spawnCollectBurst(m.x, m.y);
     }
@@ -78,9 +84,9 @@ function onMarbleCollected(m) {
 function saveGame() {
     saveData('save', {
         money,
-        pieces: placedPieces,
+        lines: lines.map(l => ({ pts: l.pts, len: l.len })),
         upgrades: {
-            slots: UPGRADES.slots.level,
+            ink: UPGRADES.ink.level,
             marbleValue: UPGRADES.marbleValue.level
         }
     });
@@ -90,9 +96,13 @@ function loadGame() {
     const s = loadData('save', null);
     if (!s) return;
     money = s.money || 0;
-    placedPieces = Array.isArray(s.pieces) ? s.pieces : [];
+    if (Array.isArray(s.lines)) {
+        lines = s.lines
+            .filter(l => l && Array.isArray(l.pts) && l.pts.length >= 2)
+            .map(l => ({ pts: l.pts, len: l.len || 0 }));
+    }
     if (s.upgrades) {
-        UPGRADES.slots.level = s.upgrades.slots || 0;
+        UPGRADES.ink.level = s.upgrades.ink || 0;
         UPGRADES.marbleValue.level = s.upgrades.marbleValue || 0;
     }
 }
