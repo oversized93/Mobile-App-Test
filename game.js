@@ -2,7 +2,7 @@
 //  GAME — State, main loop, screens, input
 // ============================================================
 
-let state = 'play';         // 'play' | 'shop'
+let state = 'menu';         // 'menu' | 'play' | 'shop' | 'resetConfirm'
 let isDrawing = false;
 
 // ---- Cherry-blossom burst effects on collection ----
@@ -39,13 +39,18 @@ function shopBtnRect() {
     const w = 48, h = 40;
     return { x: W() - w - 14, y: 12, w, h };
 }
+function homeBtnRect() {
+    const w = 40, h = 40;
+    const sb = shopBtnRect();
+    return { x: sb.x - w - 8, y: sb.y, w, h };
+}
 function inkBarRect() {
     const mp = moneyPillRect();
-    const sb = shopBtnRect();
+    const hb = homeBtnRect();
     const x = mp.x + mp.w + 10;
     const y = 18;
     const h = 28;
-    const w = Math.max(60, sb.x - x - 10);
+    const w = Math.max(60, hb.x - x - 10);
     return { x, y, w, h };
 }
 function dropBtnRect() {
@@ -53,14 +58,46 @@ function dropBtnRect() {
     return { x: (W() - w) / 2, y: H() - h - 28, w, h };
 }
 
+// ---- Menu layout ----
+function menuPlayBtnRect() {
+    const w = Math.min(280, W() - 60), h = 58;
+    return { x: (W() - w) / 2, y: H() / 2 + 40, w, h };
+}
+function menuResetBtnRect() {
+    const w = 170, h = 38;
+    return { x: (W() - w) / 2, y: H() - 60, w, h };
+}
+
+// ---- Reset confirm modal layout ----
+function resetCardRect() {
+    const cw = Math.min(W() - 40, 340);
+    const ch = 220;
+    return { x: (W() - cw) / 2, y: (H() - ch) / 2, w: cw, h: ch };
+}
+function resetCancelBtnRect() {
+    const c = resetCardRect();
+    const btnW = c.w * 0.42, btnH = 44;
+    return { x: c.x + 20, y: c.y + c.h - btnH - 20, w: btnW, h: btnH };
+}
+function resetConfirmBtnRect() {
+    const c = resetCardRect();
+    const btnW = c.w * 0.42, btnH = 44;
+    return { x: c.x + c.w - btnW - 20, y: c.y + c.h - btnH - 20, w: btnW, h: btnH };
+}
+
 // ---- Input ----
 function onTouchStart(sx, sy) {
-    if (state === 'shop') return;
+    if (state !== 'play') return;
 
     // HUD hit tests first
     const sb = shopBtnRect();
     if (hitBtn(sx, sy, sb.x, sb.y, sb.w, sb.h)) {
         state = 'shop';
+        return;
+    }
+    const hb = homeBtnRect();
+    if (hitBtn(sx, sy, hb.x, hb.y, hb.w, hb.h)) {
+        state = 'menu';
         return;
     }
     const db = dropBtnRect();
@@ -78,15 +115,14 @@ function onTouchStart(sx, sy) {
 }
 
 function onTouchMove(sx, sy) {
-    if (state === 'shop') return;
+    if (state !== 'play') return;
     if (isDrawing) extendLine(sx, sy);
 }
 
 function onTouchEnd(sx, sy, info) {
-    if (state === 'shop') {
-        handleShopTouchEnd(sx, sy);
-        return;
-    }
+    if (state === 'menu') { handleMenuTouchEnd(sx, sy); return; }
+    if (state === 'resetConfirm') { handleResetConfirmTouchEnd(sx, sy); return; }
+    if (state === 'shop') { handleShopTouchEnd(sx, sy); return; }
     if (!isDrawing) return;
     isDrawing = false;
     if (info && info.moved) {
@@ -97,6 +133,46 @@ function onTouchEnd(sx, sy, info) {
         cancelLine();
         if (eraseLineNear(sx, sy)) notify('Line erased');
     }
+}
+
+// ---- Menu + reset handlers ----
+function handleMenuTouchEnd(sx, sy) {
+    const pb = menuPlayBtnRect();
+    if (hitBtn(sx, sy, pb.x, pb.y, pb.w, pb.h)) {
+        state = 'play';
+        return;
+    }
+    const rb = menuResetBtnRect();
+    if (hitBtn(sx, sy, rb.x, rb.y, rb.w, rb.h)) {
+        state = 'resetConfirm';
+        return;
+    }
+}
+
+function handleResetConfirmTouchEnd(sx, sy) {
+    const cancel = resetCancelBtnRect();
+    if (hitBtn(sx, sy, cancel.x, cancel.y, cancel.w, cancel.h)) {
+        state = 'menu';
+        return;
+    }
+    const confirm = resetConfirmBtnRect();
+    if (hitBtn(sx, sy, confirm.x, confirm.y, confirm.w, confirm.h)) {
+        resetAllProgress();
+        state = 'menu';
+        notify('Garden reset');
+    }
+}
+
+function resetAllProgress() {
+    money = 0;
+    lines.length = 0;
+    currentLine = null;
+    marbles.length = 0;
+    trails.length = 0;
+    collectBursts.length = 0;
+    UPGRADES.ink.level = 0;
+    UPGRADES.marbleValue.level = 0;
+    try { localStorage.removeItem('mr_save'); } catch (e) {}
 }
 
 function handleShopTouchEnd(sx, sy) {
@@ -174,13 +250,20 @@ function drawHud() {
     ctx.textBaseline = 'middle';
     ctx.fillText('INK ' + remaining, ib.x + ib.w / 2, ib.y + ib.h / 2 + 1);
 
+    // Home button (back to menu)
+    const hb = homeBtnRect();
+    drawParchmentPill(hb.x, hb.y, hb.w, hb.h, 14);
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 20px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('⌂', hb.x + hb.w / 2, hb.y + hb.h / 2 + 1);
+
     // Shop button
     const sb = shopBtnRect();
     drawParchmentPill(sb.x, sb.y, sb.w, sb.h, 14);
     ctx.fillStyle = PALETTE.text;
     ctx.font = 'bold 20px -apple-system,sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
     ctx.fillText('⚙', sb.x + sb.w / 2, sb.y + sb.h / 2 + 1);
 }
 
@@ -382,6 +465,148 @@ function drawShop() {
     }
 }
 
+// ---- Menu screen ----
+function drawMenu() {
+    drawBackground();
+
+    const cx = W() / 2;
+
+    // Enso circle (zen calligraphy brush ring) above the title
+    ctx.save();
+    ctx.translate(cx, H() / 2 - 120);
+    ctx.strokeStyle = 'rgba(30, 18, 8, 0.22)';
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(0, 0, 44, -Math.PI * 0.4, Math.PI * 1.55);
+    ctx.stroke();
+    // Inner shine
+    ctx.strokeStyle = 'rgba(255, 245, 215, 0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 44, -Math.PI * 0.4, Math.PI * 1.55);
+    ctx.stroke();
+    ctx.restore();
+
+    // Title
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 40px -apple-system,"SF Pro Display",serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Marble Flow', cx, H() / 2 - 50);
+
+    // Subtitle
+    ctx.fillStyle = PALETTE.textSoft;
+    ctx.font = '15px -apple-system,sans-serif';
+    ctx.fillText('— a zen garden —', cx, H() / 2 - 20);
+
+    // Stats pill
+    const stats = '$' + money + '   •   ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + '   •   ink ' + (UPGRADES.ink.level + 1);
+    ctx.font = '13px -apple-system,sans-serif';
+    const sw = ctx.measureText(stats).width + 40;
+    drawParchmentPill((W() - sw) / 2, H() / 2 + 4, sw, 32, 16);
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = '13px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(stats, cx, H() / 2 + 20);
+
+    // Play button — wooden tray style
+    const pb = menuPlayBtnRect();
+    const g = ctx.createLinearGradient(pb.x, pb.y, pb.x + pb.w, pb.y);
+    g.addColorStop(0, '#8c6a45');
+    g.addColorStop(0.5, '#a07a4f');
+    g.addColorStop(1, '#8c6a45');
+    ctx.fillStyle = g;
+    roundRect(pb.x, pb.y, pb.w, pb.h, pb.h / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60, 36, 18, 0.7)';
+    ctx.lineWidth = 2;
+    roundRect(pb.x, pb.y, pb.w, pb.h, pb.h / 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 240, 210, 0.25)';
+    ctx.lineWidth = 1;
+    roundRect(pb.x + 3, pb.y + 3, pb.w - 6, pb.h - 6, (pb.h - 6) / 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255, 240, 210, 0.96)';
+    ctx.font = 'bold 22px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(money > 0 || lines.length > 0 ? 'Continue' : 'Begin', pb.x + pb.w / 2, pb.y + pb.h / 2 + 1);
+
+    // Reset button — small, muted
+    const rb = menuResetBtnRect();
+    ctx.fillStyle = 'rgba(40, 24, 10, 0.1)';
+    roundRect(rb.x, rb.y, rb.w, rb.h, rb.h / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80, 50, 20, 0.35)';
+    ctx.lineWidth = 1;
+    roundRect(rb.x, rb.y, rb.w, rb.h, rb.h / 2);
+    ctx.stroke();
+    ctx.fillStyle = PALETTE.textSoft;
+    ctx.font = '13px -apple-system,sans-serif';
+    ctx.fillText('Reset Progress', rb.x + rb.w / 2, rb.y + rb.h / 2 + 1);
+}
+
+// ---- Reset confirmation modal ----
+function drawResetConfirm() {
+    // Render the menu underneath so the modal feels layered
+    drawMenu();
+    // Dim the scene
+    ctx.fillStyle = 'rgba(30, 18, 6, 0.6)';
+    ctx.fillRect(0, 0, W(), H());
+
+    const c = resetCardRect();
+    // Parchment card
+    ctx.fillStyle = 'rgba(248, 232, 198, 0.97)';
+    roundRect(c.x, c.y, c.w, c.h, 20);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80, 50, 20, 0.55)';
+    ctx.lineWidth = 1.5;
+    roundRect(c.x, c.y, c.w, c.h, 20);
+    ctx.stroke();
+
+    // Title
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 21px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Reset everything?', c.x + c.w / 2, c.y + 48);
+
+    // Body
+    ctx.fillStyle = PALETTE.textSoft;
+    ctx.font = '13px -apple-system,sans-serif';
+    ctx.fillText('Money, lines, and upgrades', c.x + c.w / 2, c.y + 86);
+    ctx.fillText('will be erased. This cannot', c.x + c.w / 2, c.y + 104);
+    ctx.fillText('be undone.', c.x + c.w / 2, c.y + 122);
+
+    // Cancel button
+    const cancel = resetCancelBtnRect();
+    ctx.fillStyle = 'rgba(40, 24, 10, 0.08)';
+    roundRect(cancel.x, cancel.y, cancel.w, cancel.h, cancel.h / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80, 50, 20, 0.4)';
+    ctx.lineWidth = 1;
+    roundRect(cancel.x, cancel.y, cancel.w, cancel.h, cancel.h / 2);
+    ctx.stroke();
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 15px -apple-system,sans-serif';
+    ctx.fillText('Cancel', cancel.x + cancel.w / 2, cancel.y + cancel.h / 2 + 1);
+
+    // Confirm button — terracotta warning color
+    const confirm = resetConfirmBtnRect();
+    ctx.fillStyle = '#c87a5c';
+    roundRect(confirm.x, confirm.y, confirm.w, confirm.h, confirm.h / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80, 20, 10, 0.55)';
+    ctx.lineWidth = 1.5;
+    roundRect(confirm.x, confirm.y, confirm.w, confirm.h, confirm.h / 2);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 15px -apple-system,sans-serif';
+    ctx.fillText('Reset', confirm.x + confirm.w / 2, confirm.y + confirm.h / 2 + 1);
+}
+
 // ---- Main loop ----
 let lastT = performance.now();
 function loop() {
@@ -395,6 +620,10 @@ function loop() {
         drawPlay(dt);
     } else if (state === 'shop') {
         drawShop();
+    } else if (state === 'menu') {
+        drawMenu();
+    } else if (state === 'resetConfirm') {
+        drawResetConfirm();
     }
 
     requestAnimationFrame(loop);
