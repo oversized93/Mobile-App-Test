@@ -96,17 +96,17 @@ const PALETTE = {
     ink:        '#1a0f08',
 };
 
-// ---- Layout regions (15% source, 75% draw, 10% outlet) ----
-const HUD_TOP_H = 60;
+// ---- Layout regions (compact source/outlet, most space for drawing) ----
+const HUD_TOP_H = 48;
 const HUD_BOTTOM_H = 110;
 
 function sourceZoneRect() {
     const top = HUD_TOP_H;
-    const h = Math.max(70, Math.round((H() - HUD_TOP_H - HUD_BOTTOM_H) * 0.15));
+    const h = Math.max(56, Math.round((H() - HUD_TOP_H - HUD_BOTTOM_H) * 0.07));
     return { x: 0, y: top, w: W(), h };
 }
 function outletZoneRect() {
-    const h = Math.max(60, Math.round((H() - HUD_TOP_H - HUD_BOTTOM_H) * 0.10));
+    const h = Math.max(42, Math.round((H() - HUD_TOP_H - HUD_BOTTOM_H) * 0.06));
     return { x: 0, y: H() - HUD_BOTTOM_H - h, w: W(), h };
 }
 function drawZoneRect() {
@@ -117,13 +117,13 @@ function drawZoneRect() {
 
 function springOpeningRect() {
     const s = sourceZoneRect();
-    const w = Math.min(180, W() * 0.45);
-    return { x: (W() - w) / 2, y: s.y + s.h - 24, w, h: 30 };
+    const w = Math.min(160, W() * 0.42);
+    return { x: (W() - w) / 2, y: s.y + s.h - 14, w, h: 20 };
 }
 function pondRect() {
     const o = outletZoneRect();
-    const w = Math.min(220, W() * 0.6);
-    return { x: (W() - w) / 2, y: o.y + 6, w, h: o.h - 12 };
+    const w = Math.min(180, W() * 0.52);
+    return { x: (W() - w) / 2, y: o.y + 4, w, h: Math.max(26, o.h - 8) };
 }
 
 // ---- Deterministic decorations (sampled once) ----

@@ -4,7 +4,7 @@
 // ============================================================
 
 const RIVER_MIN_PT_DIST = 3;         // px between stored points
-const RIVER_BASE_WIDTH = 34;         // base river width (level 0)
+const RIVER_BASE_WIDTH = 102;        // base river width (3x the original stencil)
 
 let river = null;            // committed river: { pts, width, totalLen }
 let draftRiver = null;       // in-progress during drag

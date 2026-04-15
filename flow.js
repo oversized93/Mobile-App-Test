@@ -142,7 +142,9 @@ function placeRockAtPoint(sx, sy) {
     if (rockInventory <= 0) return false;
     // Find the nearest pathT position on the river to (sx, sy)
     const target = projectOntoRiver(sx, sy);
-    if (!target || target.dist > 35) return false;
+    // Allow placement anywhere across the current river width
+    const halfW = (river && river.width) ? river.width * 0.55 : 35;
+    if (!target || target.dist > halfW) return false;
     rocks.push({ pathT: target.t });
     rockInventory--;
     saveGame();
