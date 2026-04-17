@@ -92,14 +92,16 @@ function spawnAnimal(forcedType) {
     if (!river) return;
     if (animals.length >= MAX_ANIMALS) return;
     const type = forcedType || rollAnimalType();
+    const startPos = typeof sampleRiverAt === 'function' ? sampleRiverAt(0) : { x: 0, y: 0, angle: 0 };
     animals.push({
         type: type.id,
         pathT: 0,
         speed: BASE_ANIMAL_SPEED * type.baseSpeed,
         flowTime: 0,
-        // Wider lateral range so koi spread across the full river width
         side: (Math.random() - 0.5) * 1.9,
         wobble: Math.random() * Math.PI * 2,
+        // Smooth rendering state (lerped each frame for buttery motion)
+        rx: startPos.x, ry: startPos.y, ra: startPos.angle,
     });
 }
 
@@ -140,7 +142,10 @@ function updateFlow(dt) {
         const spd = applyRockSlowdown(a.pathT, baseSpd);
         a.pathT += (spd / total) * dt;
         a.flowTime += dt;
-        a.wobble += dt * 3;
+        a.wobble += dt * 2.5;
+        // Gentle lateral meandering within the river
+        a.side += Math.sin(a.wobble * 0.4 + a.flowTime * 0.3) * 0.003;
+        a.side = Math.max(-0.95, Math.min(0.95, a.side));
         if (a.pathT >= 1) {
             onAnimalCollected(a);
             animals.splice(i, 1);
@@ -205,17 +210,28 @@ function projectOntoRiver(x, y) {
 // ---- Rendering ----
 function drawAnimals() {
     if (!river) return;
+    const useSamples = typeof sampleRiverAt === 'function' && riverSamples.length > 0;
     for (const a of animals) {
-        const p = pointAtPathT(river, a.pathT);
+        // Get target position from the river
+        const p = useSamples ? sampleRiverAt(a.pathT) : pointAtPathT(river, a.pathT);
         const off = a.side * river.width * 0.42;
-        const x = p.x + Math.cos(p.angle + Math.PI / 2) * off;
-        const y = p.y + Math.sin(p.angle + Math.PI / 2) * off;
-        const wig = Math.sin(a.wobble) * 0.3;
+        const tx = p.x + Math.cos(p.angle + Math.PI / 2) * off;
+        const ty = p.y + Math.sin(p.angle + Math.PI / 2) * off;
+        // Smooth lerp toward target position (buttery movement, no jitter)
+        a.rx += (tx - a.rx) * 0.12;
+        a.ry += (ty - a.ry) * 0.12;
+        // Smooth angle (wrap-safe lerp)
+        let da = p.angle - a.ra;
+        if (da > Math.PI) da -= Math.PI * 2;
+        if (da < -Math.PI) da += Math.PI * 2;
+        a.ra += da * 0.1;
+        // Very gentle wobble (swimming oscillation)
+        const wig = Math.sin(a.wobble) * 0.08;
         const type = ANIMAL_TYPES[a.type] || ANIMAL_TYPES.fish;
         if (type.style === 'lilypad') {
-            drawLilypadAnimal(x, y, p.angle + wig, a.type);
+            drawLilypadAnimal(a.rx, a.ry, a.ra + wig, a.type);
         } else {
-            drawSwimmer(x, y, p.angle + wig, a.type);
+            drawSwimmer(a.rx, a.ry, a.ra + wig, a.type);
         }
     }
 }

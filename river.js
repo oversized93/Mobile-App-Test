@@ -371,10 +371,19 @@ let riverSamples = [];
 function buildRiverSamples() {
     riverSamples = [];
     if (!river || river.pts.length < 2) return;
-    const count = 200;
+    const count = 400;
+    // First pass: positions
     for (let i = 0; i < count; i++) {
         const t = i / (count - 1);
         riverSamples.push(pointAtPathT(river, t));
+    }
+    // Second pass: smooth the angles by averaging over a wide window
+    for (let i = 0; i < count; i++) {
+        const back = Math.max(0, i - 12);
+        const fwd = Math.min(count - 1, i + 12);
+        const dx = riverSamples[fwd].x - riverSamples[back].x;
+        const dy = riverSamples[fwd].y - riverSamples[back].y;
+        riverSamples[i].angle = Math.atan2(dy, dx);
     }
 }
 
