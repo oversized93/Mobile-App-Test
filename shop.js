@@ -12,8 +12,10 @@ function getPrestigeMultiplier() { return Math.pow(1.5, prestigeLevel); }
 // ---- Tier layout for the shop UI ----
 const UPGRADE_TIERS = [
     { name: 'Basics',      keys: ['koiValue', 'spawnRate', 'flowMult'] },
-    { name: 'River',       keys: ['rock', 'widerRiver', 'expandGarden'] },
+    { name: 'River',       keys: ['widerRiver', 'expandGarden'] },
     { name: 'Wildlife',    keys: ['fishTree', 'lilypadTree'] },
+    { name: 'Obstacles',   keys: ['rock', 'obstacleTree'] },
+    { name: 'Garden',      keys: ['gardenTree', 'spawnerTree'] },
     { name: 'Advanced',    keys: ['doubleSpawn', 'goldenCurrent', 'swiftCurrent'] },
     { name: 'Harmony',    keys: ['gardenHarmony'] },
     { name: 'Zen Mastery', keys: ['prestige'] },
@@ -35,7 +37,14 @@ const UPGRADES = {
     fishTree:       { id: 'fishTree',      label: 'River Fish',        desc: 'Unlock rarer fish species',      baseCost: 0, level: 0, maxLevel: 5, scale: 1, isTree: true, requires: { totalEarned: 150 } },
     lilypadTree:    { id: 'lilypadTree',   label: 'Lily Pad Riders',   desc: 'Unlock animals riding lily pads', baseCost: 0, level: 0, maxLevel: 5, scale: 1, isTree: true, requires: { totalEarned: 350 } },
 
-    // --- Tier 4: Advanced ---
+    // --- Tier: Obstacles tree ---
+    obstacleTree:   { id: 'obstacleTree',  label: 'Better Obstacles',  desc: 'Unlock stronger obstacles', baseCost: 0, level: 0, maxLevel: 5, scale: 1, isTree: true, requires: { totalEarned: 300 } },
+
+    // --- Tier: Garden (passive income + spawner upgrades) ---
+    gardenTree:     { id: 'gardenTree',    label: 'Garden Beauty',     desc: 'Decorations that earn passive income', baseCost: 0, level: 0, maxLevel: 5, scale: 1, isTree: true, requires: { totalEarned: 150 } },
+    spawnerTree:    { id: 'spawnerTree',   label: 'More Springs',      desc: 'Multiply your spawn rate',  baseCost: 0, level: 0, maxLevel: 5, scale: 1, isTree: true, requires: { totalEarned: 1000 } },
+
+    // --- Tier: Advanced ---
     doubleSpawn:    { id: 'doubleSpawn',   label: 'Twin Springs',    desc: '15% chance to spawn 2 at once / lvl', baseCost: 800,  level: 0, maxLevel: 5, scale: 2.5, requires: { totalEarned: 500 } },
     goldenCurrent:  { id: 'goldenCurrent', label: 'Golden Current',  desc: '\u00d71.10 to all payouts / lvl',         baseCost: 1000, level: 0, maxLevel: 10, scale: 2.2, requires: { totalEarned: 700 } },
     swiftCurrent:   { id: 'swiftCurrent',  label: 'Swift Current',   desc: 'Animals move 8% faster / lvl',        baseCost: 600,  level: 0, maxLevel: 8,  scale: 1.9, requires: { totalEarned: 400 } },
@@ -63,12 +72,51 @@ const LILYPAD_TREE = [
     { id: 'panda',  label: 'Panda',  mult: 100, weight: 0.008, cost: 300000 },
 ];
 
+const OBSTACLE_TREE = [
+    { id: 'log',       label: 'Log',        slowFactor: 0.28, range: 0.045, cost: 400 },
+    { id: 'whirlpool', label: 'Whirlpool',  slowFactor: 0.15, range: 0.06,  cost: 3000 },
+    { id: 'waterfall', label: 'Waterfall',  slowFactor: 0.08, range: 0.08,  cost: 15000 },
+    { id: 'dam',       label: 'Dam',        slowFactor: 0.05, range: 0.10,  cost: 80000 },
+    { id: 'zenbridge', label: 'Zen Bridge', slowFactor: 0.02, range: 0.12,  cost: 400000 },
+];
+
+const GARDEN_TREE = [
+    { id: 'bamboo',   label: 'Bamboo',       incomePerSec: 0.5,  cost: 200 },
+    { id: 'bonsai',   label: 'Bonsai Tree',  incomePerSec: 2,    cost: 1000 },
+    { id: 'lantern',  label: 'Stone Lantern', incomePerSec: 8,   cost: 5000 },
+    { id: 'bridge',   label: 'Moon Bridge',  incomePerSec: 30,   cost: 25000 },
+    { id: 'torii',    label: 'Torii Gate',   incomePerSec: 100,  cost: 150000 },
+];
+
+const SPAWNER_TREE = [
+    { id: 'spring2',   label: 'Second Spring',  spawnMult: 2.0,  cost: 2000 },
+    { id: 'spring3',   label: 'Third Spring',   spawnMult: 3.0,  cost: 10000 },
+    { id: 'goldspring', label: 'Golden Spring',  spawnMult: 4.0,  cost: 50000 },
+    { id: 'sacred',    label: 'Sacred Spring',  spawnMult: 5.5,  cost: 250000 },
+    { id: 'eternal',   label: 'Eternal Spring', spawnMult: 8.0,  cost: 1000000 },
+];
+
+const TREE_DATA = {
+    fishTree: FISH_TREE,
+    lilypadTree: LILYPAD_TREE,
+    obstacleTree: OBSTACLE_TREE,
+    gardenTree: GARDEN_TREE,
+    spawnerTree: SPAWNER_TREE,
+};
+
 function getTreeNextInfo(id) {
-    const tree = id === 'fishTree' ? FISH_TREE : id === 'lilypadTree' ? LILYPAD_TREE : null;
+    const tree = TREE_DATA[id];
     if (!tree) return null;
     const lvl = UPGRADES[id].level;
-    if (lvl >= tree.length) return { label: 'All discovered', mult: 0, cost: Infinity, done: true };
-    return tree[lvl];
+    if (lvl >= tree.length) return { label: 'All discovered', cost: Infinity, done: true };
+    const entry = tree[lvl];
+    // Build a display string based on what kind of tree it is
+    let desc = entry.label;
+    if (entry.mult) desc += ' (' + entry.mult + '\u00d7)';
+    if (entry.incomePerSec) desc += ' (+$' + entry.incomePerSec + '/s)';
+    if (entry.spawnMult) desc += ' (' + entry.spawnMult + '\u00d7 spawns)';
+    if (entry.slowFactor) desc += ' (' + Math.round((1 - entry.slowFactor) * 100) + '% slow)';
+    return { label: desc, cost: entry.cost, done: false };
 }
 
 function upgradeCost(id) {
@@ -91,6 +139,28 @@ function getFlowCoefficient() { return 0.3 * Math.pow(1.12, UPGRADES.flowMult.le
 function getGoldenMultiplier() { return Math.pow(1.10, UPGRADES.goldenCurrent.level); }
 // Layer 4: garden harmony — meta-multiplier that boosts everything
 function getHarmonyMultiplier() { return Math.pow(1.08, UPGRADES.gardenHarmony.level); }
+// Passive income from Garden Beauty tree ($/sec)
+function getPassiveIncomePerSec() {
+    let total = 0;
+    const lvl = UPGRADES.gardenTree.level;
+    for (let i = 0; i < lvl && i < GARDEN_TREE.length; i++) {
+        total += GARDEN_TREE[i].incomePerSec;
+    }
+    return total * getHarmonyMultiplier() * getPrestigeMultiplier();
+}
+// Spawner multiplier from More Springs tree
+function getSpawnerMultiplier() {
+    const lvl = UPGRADES.spawnerTree.level;
+    if (lvl <= 0 || lvl > SPAWNER_TREE.length) return 1;
+    return SPAWNER_TREE[lvl - 1].spawnMult;
+}
+// Best obstacle available (for placement)
+function getBestObstacle() {
+    const lvl = UPGRADES.obstacleTree.level;
+    if (lvl <= 0) return { slowFactor: ROCK_SLOW_FACTOR, range: ROCK_SLOW_RANGE_T, label: 'Rock' };
+    const entry = OBSTACLE_TREE[Math.min(lvl - 1, OBSTACLE_TREE.length - 1)];
+    return { slowFactor: entry.slowFactor, range: entry.range, label: entry.label };
+}
 // Utility bonuses (not income multipliers)
 function getRiverWidthBonus() { return 1 + UPGRADES.widerRiver.level * 0.15; }
 function getSpeedMultiplier() { return 1 + UPGRADES.swiftCurrent.level * 0.08; }

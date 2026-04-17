@@ -71,7 +71,8 @@ let rockInventory = 0;
 // ---- Spawn logic ----
 function spawnInterval() {
     const lvl = UPGRADES.spawnRate.level || 0;
-    return Math.max(0.5, BASE_SPAWN_INTERVAL * Math.pow(0.85, lvl));
+    const spawnerMult = typeof getSpawnerMultiplier === 'function' ? getSpawnerMultiplier() : 1;
+    return Math.max(0.15, BASE_SPAWN_INTERVAL * Math.pow(0.85, lvl) / spawnerMult);
 }
 
 function tickSpawn(dt) {
@@ -149,9 +150,11 @@ function updateFlow(dt) {
 
 // Return effective speed given a list of rocks near this pathT
 function applyRockSlowdown(t, baseSpeed) {
+    // Use the best obstacle stats from the obstacle tree
+    const obs = typeof getBestObstacle === 'function' ? getBestObstacle() : { slowFactor: ROCK_SLOW_FACTOR, range: ROCK_SLOW_RANGE_T };
     for (const rk of rocks) {
-        if (Math.abs(t - rk.pathT) < ROCK_SLOW_RANGE_T) {
-            return baseSpeed * ROCK_SLOW_FACTOR;
+        if (Math.abs(t - rk.pathT) < obs.range) {
+            return baseSpeed * obs.slowFactor;
         }
     }
     return baseSpeed;

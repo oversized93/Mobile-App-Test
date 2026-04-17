@@ -752,6 +752,14 @@ function loop() {
     if (state === 'play') {
         tickSpawn(dt);
         updateFlow(dt);
+        // Passive income from Garden Beauty tree
+        if (roundStarted) {
+            const passive = getPassiveIncomePerSec() * dt;
+            if (passive > 0) {
+                money += passive;
+                totalEarned += passive;
+            }
+        }
         drawPlay(dt);
     } else if (state === 'menu') {
         drawMenu();
