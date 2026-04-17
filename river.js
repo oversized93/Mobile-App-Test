@@ -56,9 +56,11 @@ function commitDraftRiver() {
         return false;
     }
     river = draftRiver;
-    // Smooth the raw finger input into gentle curves
     river.pts = smoothPolyline(river.pts, 2);
     river.totalLen = riverTotalLength(river);
+    // Flush stale caches so they rebuild for the new path
+    riverSamples = [];
+    waterParticles = [];
     draftRiver = null;
     saveGame();
     return true;
@@ -68,6 +70,8 @@ function cancelDraftRiver() {
 }
 function clearRiver() {
     river = null;
+    riverSamples = [];
+    waterParticles = [];
     saveGame();
 }
 
