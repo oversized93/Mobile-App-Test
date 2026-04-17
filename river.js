@@ -16,7 +16,8 @@ function getViewScale() {
 }
 
 function getRiverWidth() {
-    return RIVER_BASE_WIDTH * getViewScale();
+    const widthBonus = typeof getRiverWidthBonus === 'function' ? getRiverWidthBonus() : 1;
+    return RIVER_BASE_WIDTH * getViewScale() * widthBonus;
 }
 
 // ---- Drawing lifecycle ----

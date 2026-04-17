@@ -97,6 +97,7 @@ function resetConfirmBtnRect() {
 
 // ---- Input ----
 function onTouchStart(sx, sy) {
+    if (state === 'shop') { handleShopTouchStart(sx, sy); return; }
     if (state !== 'play') return;
 
     // HUD buttons first
@@ -156,7 +157,15 @@ function onTouchStart(sx, sy) {
     }
 }
 
+let shopScroll = 0;
+let shopDragY = 0;
+let shopDragScroll = 0;
+
 function onTouchMove(sx, sy) {
+    if (state === 'shop') {
+        shopScroll = Math.max(0, shopDragScroll - (sy - shopDragY));
+        return;
+    }
     if (state !== 'play') return;
     if (isDrawingRiver) extendDraftRiver(sx, sy);
 }
@@ -193,26 +202,40 @@ function handleResetConfirmTouchEnd(sx, sy) {
     }
 }
 
+function handleShopTouchStart(sx, sy) {
+    shopDragY = sy;
+    shopDragScroll = shopScroll;
+}
 function handleShopTouchEnd(sx, sy) {
+    // Close button
     const sb = shopBtnRect();
     if (hitBtn(sx, sy, sb.x, sb.y, sb.w, sb.h)) { state = 'play'; return; }
-    const upgrades = Object.keys(UPGRADES);
-    const cardH = 88, gap = 12;
-    let y = 90;
-    for (const key of upgrades) {
-        const u = UPGRADES[key];
-        if (sy >= y && sy <= y + cardH && sx >= 20 && sx <= W() - 20) {
-            const btnX = W() - 20 - 120;
-            if (sx >= btnX && !u.locked && canAfford(key)) {
-                if (buyUpgrade(key)) notify(u.label + ' upgraded');
+    // If the touch was a scroll gesture, don't process taps
+    if (touch.moved) return;
+    // Find the card that was tapped
+    const cardH = 68, gap = 8, headerH = 32;
+    let y = 80 - shopScroll;
+    for (const tier of UPGRADE_TIERS) {
+        y += headerH;
+        for (const key of tier.keys) {
+            const u = UPGRADES[key];
+            if (!isUpgradeVisible(key)) { continue; }
+            if (sy >= y && sy <= y + cardH) {
+                const btnX = W() - 20 - 110;
+                if (sx >= btnX && canAfford(key)) {
+                    if (buyUpgrade(key)) notify(u.label + (u.maxLevel === 1 ? ' unlocked!' : ' upgraded'));
+                }
             }
+            y += cardH + gap;
         }
-        y += cardH + gap;
+        y += 6;
     }
 }
 
 function resetAllProgress() {
     money = 0;
+    totalEarned = 0;
+    prestigeLevel = 0;
     river = null;
     draftRiver = null;
     rocks.length = 0;
@@ -223,11 +246,8 @@ function resetAllProgress() {
     floatTexts.length = 0;
     notification = null;
     resetFlow();
-    UPGRADES.fishValue.level = 0;
-    UPGRADES.spawnRate.level = 0;
-    UPGRADES.flowMult.level = 0;
-    UPGRADES.rock.level = 0;
-    UPGRADES.expandGarden.level = 0;
+    for (const key in UPGRADES) UPGRADES[key].level = 0;
+    syncAnimalWeights();
     try { localStorage.removeItem('zr_save'); } catch (e) {}
 }
 
@@ -525,28 +545,193 @@ function drawMenu() {
     ctx.fillText('Reset Progress', rb.x + rb.w / 2, rb.y + rb.h / 2 + 1);
 }
 
-// ---- Stubbed (chunk 3) ----
+// ---- Reset confirmation modal ----
 function drawResetConfirm() {
     drawMenu();
-    ctx.fillStyle = 'rgba(30, 18, 6, 0.55)';
+    ctx.fillStyle = 'rgba(10, 20, 6, 0.6)';
     ctx.fillRect(0, 0, W(), H());
-    ctx.fillStyle = 'rgba(245, 232, 198, 0.95)';
-    ctx.font = 'bold 18px -apple-system,sans-serif';
+    const c = resetCardRect();
+    ctx.fillStyle = 'rgba(248, 232, 198, 0.97)';
+    roundRect(c.x, c.y, c.w, c.h, 20);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60, 36, 18, 0.6)';
+    ctx.lineWidth = 1.5;
+    roundRect(c.x, c.y, c.w, c.h, 20);
+    ctx.stroke();
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 21px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Reset? Tap to cancel — chunk 3 adds the real modal', W() / 2, H() / 2);
+    ctx.fillText('Reset everything?', c.x + c.w / 2, c.y + 48);
+    ctx.fillStyle = PALETTE.textSoft;
+    ctx.font = '13px -apple-system,sans-serif';
+    ctx.fillText('Money, river, and all upgrades', c.x + c.w / 2, c.y + 84);
+    ctx.fillText('will be erased. Cannot be undone.', c.x + c.w / 2, c.y + 102);
+    // Cancel
+    const cancel = resetCancelBtnRect();
+    ctx.fillStyle = 'rgba(40, 24, 10, 0.08)';
+    roundRect(cancel.x, cancel.y, cancel.w, cancel.h, cancel.h / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60, 36, 18, 0.45)';
+    ctx.lineWidth = 1;
+    roundRect(cancel.x, cancel.y, cancel.w, cancel.h, cancel.h / 2);
+    ctx.stroke();
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 15px -apple-system,sans-serif';
+    ctx.fillText('Cancel', cancel.x + cancel.w / 2, cancel.y + cancel.h / 2 + 1);
+    // Confirm
+    const confirm = resetConfirmBtnRect();
+    ctx.fillStyle = PALETTE.danger;
+    roundRect(confirm.x, confirm.y, confirm.w, confirm.h, confirm.h / 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 15px -apple-system,sans-serif';
+    ctx.fillText('Reset', confirm.x + confirm.w / 2, confirm.y + confirm.h / 2 + 1);
 }
+
+// ---- Shop screen (scrollable, tiered) ----
 function drawShop() {
     drawBackground();
-    ctx.fillStyle = 'rgba(30, 18, 6, 0.55)';
+    ctx.fillStyle = 'rgba(10, 20, 6, 0.65)';
     ctx.fillRect(0, 0, W(), H());
-    ctx.fillStyle = 'rgba(245, 232, 198, 0.95)';
-    ctx.font = 'bold 18px -apple-system,sans-serif';
-    ctx.textAlign = 'center';
+    // Header
+    ctx.fillStyle = 'rgba(245, 232, 198, 0.96)';
+    ctx.font = 'bold 24px -apple-system,sans-serif';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Shop — chunk 3 adds the real cards', W() / 2, H() / 2);
-    // Let the user back out of the shop by tapping the gear
-    drawHud();
+    ctx.fillText('Shop', 20, 32);
+    // Money + prestige multiplier
+    ctx.fillStyle = PALETTE.money;
+    ctx.font = 'bold 17px -apple-system,sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('$' + money, W() - 80, 26);
+    if (prestigeLevel > 0) {
+        ctx.fillStyle = 'rgba(200, 180, 255, 0.85)';
+        ctx.font = 'bold 12px -apple-system,sans-serif';
+        ctx.fillText('\u00d7' + getPrestigeMultiplier().toFixed(1) + ' zen', W() - 80, 42);
+    }
+    // Close button
+    const sb = shopBtnRect();
+    drawParchmentPill(sb.x, sb.y, sb.w, sb.h, 14);
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 22px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u00d7', sb.x + sb.w / 2, sb.y + sb.h / 2);
+
+    // Scrollable card area (clipped below the header)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 58, W(), H() - 58);
+    ctx.clip();
+
+    const cardH = 68, gap = 8, headerH = 32;
+    const tierColors = { Basics: '#5a8a4a', River: '#4a7a9a', Wildlife: '#6a9a4a', Advanced: '#9a8a4a', 'Zen Mastery': '#8a6aaa' };
+    let y = 80 - shopScroll;
+
+    for (const tier of UPGRADE_TIERS) {
+        // Check if any upgrades in this tier are visible
+        const visible = tier.keys.filter(k => isUpgradeVisible(k));
+        if (visible.length === 0) continue;
+
+        // Tier header
+        ctx.fillStyle = tierColors[tier.name] || '#6a6a6a';
+        ctx.font = 'bold 14px -apple-system,sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tier.name.toUpperCase(), 24, y + headerH / 2);
+        ctx.strokeStyle = 'rgba(245, 232, 198, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(24, y + headerH - 2);
+        ctx.lineTo(W() - 24, y + headerH - 2);
+        ctx.stroke();
+        y += headerH;
+
+        for (const key of tier.keys) {
+            if (!isUpgradeVisible(key)) continue;
+            const u = UPGRADES[key];
+            const unlocked = isUpgradeUnlocked(key);
+            const maxed = u.level >= u.maxLevel;
+            const afford = canAfford(key);
+            const cost = upgradeCost(key);
+
+            // Card background
+            ctx.fillStyle = unlocked ? 'rgba(245, 232, 198, 0.09)' : 'rgba(245, 232, 198, 0.04)';
+            roundRect(16, y, W() - 32, cardH, 14);
+            ctx.fill();
+            ctx.strokeStyle = unlocked ? 'rgba(245, 232, 198, 0.2)' : 'rgba(245, 232, 198, 0.1)';
+            ctx.lineWidth = 1;
+            roundRect(16, y, W() - 32, cardH, 14);
+            ctx.stroke();
+
+            // Label
+            ctx.fillStyle = unlocked ? 'rgba(245, 232, 198, 0.95)' : 'rgba(245, 232, 198, 0.4)';
+            ctx.font = 'bold 15px -apple-system,sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(u.label, 30, y + 22);
+            // Desc
+            ctx.fillStyle = unlocked ? 'rgba(245, 232, 198, 0.6)' : 'rgba(245, 232, 198, 0.3)';
+            ctx.font = '11px -apple-system,sans-serif';
+            ctx.fillText(u.desc, 30, y + 42);
+            // Level pill (if multi-level and unlocked)
+            if (unlocked && u.maxLevel > 1) {
+                ctx.fillStyle = 'rgba(245, 232, 198, 0.15)';
+                roundRect(30, y + 50, 50, 14, 7);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(245, 232, 198, 0.7)';
+                ctx.font = 'bold 9px -apple-system,sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('LV ' + u.level, 55, y + 58);
+            }
+
+            // Buy button (right side)
+            const btnX = W() - 16 - 100;
+            const btnY = y + (cardH - 38) / 2;
+            const btnW = 90, btnH = 38;
+            if (!unlocked) {
+                // Locked — show requirement
+                ctx.fillStyle = 'rgba(245, 232, 198, 0.06)';
+                roundRect(btnX, btnY, btnW, btnH, btnH / 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(245, 232, 198, 0.35)';
+                ctx.font = '10px -apple-system,sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                if (u.requires && u.requires.totalEarned) {
+                    ctx.fillText('Earn $' + u.requires.totalEarned, btnX + btnW / 2, btnY + btnH / 2);
+                } else {
+                    ctx.fillText('Locked', btnX + btnW / 2, btnY + btnH / 2);
+                }
+            } else if (maxed) {
+                ctx.fillStyle = 'rgba(106, 154, 74, 0.3)';
+                roundRect(btnX, btnY, btnW, btnH, btnH / 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(106, 154, 74, 0.9)';
+                ctx.font = 'bold 13px -apple-system,sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('MAX', btnX + btnW / 2, btnY + btnH / 2);
+            } else {
+                ctx.fillStyle = afford ? PALETTE.money : 'rgba(245, 232, 198, 0.12)';
+                roundRect(btnX, btnY, btnW, btnH, btnH / 2);
+                ctx.fill();
+                ctx.strokeStyle = afford ? 'rgba(80, 50, 10, 0.5)' : 'rgba(245, 232, 198, 0.1)';
+                ctx.lineWidth = 1;
+                roundRect(btnX, btnY, btnW, btnH, btnH / 2);
+                ctx.stroke();
+                ctx.fillStyle = afford ? '#1f120a' : 'rgba(245, 232, 198, 0.35)';
+                ctx.font = 'bold 14px -apple-system,sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('$' + cost, btnX + btnW / 2, btnY + btnH / 2);
+            }
+
+            y += cardH + gap;
+        }
+        y += 6;
+    }
+
+    ctx.restore();
 }
 
 // ---- Main loop ----

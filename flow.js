@@ -64,6 +64,10 @@ function tickSpawn(dt) {
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
         spawnAnimal();
+        // Double spawn chance from Twin Springs upgrade
+        if (typeof getDoubleSpawnChance === 'function' && Math.random() < getDoubleSpawnChance()) {
+            spawnAnimal();
+        }
         spawnTimer = spawnInterval();
     }
 }
@@ -115,7 +119,8 @@ function updateFlow(dt) {
     for (let i = animals.length - 1; i >= 0; i--) {
         const a = animals[i];
         const type = ANIMAL_TYPES[a.type] || ANIMAL_TYPES.fish;
-        const baseSpd = BASE_ANIMAL_SPEED * type.baseSpeed;
+        const swiftMult = typeof getSpeedMultiplier === 'function' ? getSpeedMultiplier() : 1;
+        const baseSpd = BASE_ANIMAL_SPEED * type.baseSpeed * swiftMult;
         const spd = applyRockSlowdown(a.pathT, baseSpd);
         a.pathT += (spd / total) * dt;
         a.flowTime += dt;
