@@ -13,7 +13,7 @@ function getPrestigeMultiplier() { return Math.pow(1.5, prestigeLevel); }
 const UPGRADE_TIERS = [
     { name: 'Basics',      keys: ['koiValue', 'spawnRate', 'flowMult'] },
     { name: 'River',       keys: ['rock', 'widerRiver', 'expandGarden'] },
-    { name: 'Wildlife',    keys: ['unlockFrog', 'unlockTurtle', 'unlockLilypad', 'rareVisitor'] },
+    { name: 'Wildlife',    keys: ['fishTree', 'lilypadTree'] },
     { name: 'Advanced',    keys: ['doubleSpawn', 'goldenCurrent', 'swiftCurrent'] },
     { name: 'Zen Mastery', keys: ['prestige'] },
 ];
@@ -30,11 +30,9 @@ const UPGRADES = {
     widerRiver:     { id: 'widerRiver',    label: 'Wider River',    desc: '+15% river width per level',          baseCost: 200,  level: 0, maxLevel: 8,  scale: 2.0 },
     expandGarden:   { id: 'expandGarden',  label: 'Expand Garden',  desc: 'Zoom out for more room — forces redraw', baseCost: 2000, level: 0, maxLevel: 6, scale: 4.5 },
 
-    // --- Tier 3: Wildlife (milestone unlocks) ---
-    unlockFrog:     { id: 'unlockFrog',    label: 'Attract Frogs',     desc: 'Frogs join — worth 3\u00d7 base',        baseCost: 500,   level: 0, maxLevel: 1, scale: 1, requires: { totalEarned: 200 } },
-    unlockTurtle:   { id: 'unlockTurtle',  label: 'Attract Turtles',   desc: 'Slow turtles — 8\u00d7 value',           baseCost: 2500,  level: 0, maxLevel: 1, scale: 1, requires: { totalEarned: 1200 } },
-    unlockLilypad:  { id: 'unlockLilypad', label: 'Lily Pad Riders',   desc: 'Animals ride lily pads — 5\u00d7 value', baseCost: 6000,  level: 0, maxLevel: 1, scale: 1, requires: { totalEarned: 4000 } },
-    rareVisitor:    { id: 'rareVisitor',   label: 'Rare Visitors',     desc: 'Big animals may visit — 50\u00d7!',      baseCost: 15000, level: 0, maxLevel: 1, scale: 1, requires: { totalEarned: 10000 } },
+    // --- Tier 3: Wildlife trees ---
+    fishTree:       { id: 'fishTree',      label: 'River Fish',        desc: 'Unlock rarer fish species',      baseCost: 0, level: 0, maxLevel: 5, scale: 1, isTree: true, requires: { totalEarned: 150 } },
+    lilypadTree:    { id: 'lilypadTree',   label: 'Lily Pad Riders',   desc: 'Unlock animals riding lily pads', baseCost: 0, level: 0, maxLevel: 5, scale: 1, isTree: true, requires: { totalEarned: 350 } },
 
     // --- Tier 4: Advanced ---
     doubleSpawn:    { id: 'doubleSpawn',   label: 'Twin Springs',    desc: '15% chance to spawn 2 at once / lvl', baseCost: 800,  level: 0, maxLevel: 5, scale: 2.5, requires: { totalEarned: 500 } },
@@ -45,9 +43,38 @@ const UPGRADES = {
     prestige:       { id: 'prestige',      label: 'Zen Mastery',     desc: 'Reset for a permanent 1.5\u00d7 multiplier', baseCost: 50000, level: 0, maxLevel: 10, scale: 5.0, requires: { totalEarned: 30000 } },
 };
 
+// ---- Fish and Lily Pad rarity trees ----
+const FISH_TREE = [
+    { id: 'goldfish',   label: 'Goldfish',    mult: 2,   weight: 0.35,  cost: 300 },
+    { id: 'catfish',    label: 'Catfish',      mult: 5,   weight: 0.15,  cost: 1500 },
+    { id: 'dragonfish', label: 'Dragon Fish',  mult: 12,  weight: 0.06,  cost: 8000 },
+    { id: 'goldenkoi',  label: 'Golden Koi',   mult: 30,  weight: 0.025, cost: 40000 },
+    { id: 'spiritfish', label: 'Spirit Fish',  mult: 80,  weight: 0.01,  cost: 200000 },
+];
+const LILYPAD_TREE = [
+    { id: 'frog',   label: 'Frog',   mult: 3,   weight: 0.28, cost: 500 },
+    { id: 'turtle', label: 'Turtle', mult: 8,   weight: 0.12, cost: 2500 },
+    { id: 'duck',   label: 'Duck',   mult: 15,  weight: 0.06, cost: 12000 },
+    { id: 'crane',  label: 'Crane',  mult: 40,  weight: 0.02, cost: 60000 },
+    { id: 'panda',  label: 'Panda',  mult: 100, weight: 0.008, cost: 300000 },
+];
+
+function getTreeNextInfo(id) {
+    const tree = id === 'fishTree' ? FISH_TREE : id === 'lilypadTree' ? LILYPAD_TREE : null;
+    if (!tree) return null;
+    const lvl = UPGRADES[id].level;
+    if (lvl >= tree.length) return { label: 'All discovered', mult: 0, cost: Infinity, done: true };
+    return tree[lvl];
+}
+
 function upgradeCost(id) {
     const u = UPGRADES[id];
     if (!u) return Infinity;
+    // Tree upgrades have per-tier costs instead of scaling formula
+    if (u.isTree) {
+        const info = getTreeNextInfo(id);
+        return info && !info.done ? info.cost : Infinity;
+    }
     return Math.round(u.baseCost * Math.pow(u.scale, u.level));
 }
 
@@ -126,10 +153,22 @@ function buyUpgrade(id) {
 }
 
 function syncAnimalWeights() {
-    ANIMAL_TYPES.frog.rollWeight    = UPGRADES.unlockFrog.level >= 1    ? 0.25 : 0;
-    ANIMAL_TYPES.turtle.rollWeight  = UPGRADES.unlockTurtle.level >= 1  ? 0.12 : 0;
-    ANIMAL_TYPES.lilypad.rollWeight = UPGRADES.unlockLilypad.level >= 1 ? 0.18 : 0;
-    ANIMAL_TYPES.rareBig.rollWeight = UPGRADES.rareVisitor.level >= 1   ? 0.04 : 0;
+    // Reset all non-koi weights to 0
+    for (const key in ANIMAL_TYPES) {
+        if (key !== 'fish') ANIMAL_TYPES[key].rollWeight = 0;
+    }
+    // Fish tree: each level unlocks one species from FISH_TREE
+    const fishLvl = UPGRADES.fishTree.level;
+    for (let i = 0; i < fishLvl && i < FISH_TREE.length; i++) {
+        const entry = FISH_TREE[i];
+        if (ANIMAL_TYPES[entry.id]) ANIMAL_TYPES[entry.id].rollWeight = entry.weight;
+    }
+    // Lily pad tree
+    const lilyLvl = UPGRADES.lilypadTree.level;
+    for (let i = 0; i < lilyLvl && i < LILYPAD_TREE.length; i++) {
+        const entry = LILYPAD_TREE[i];
+        if (ANIMAL_TYPES[entry.id]) ANIMAL_TYPES[entry.id].rollWeight = entry.weight;
+    }
 }
 
 // ---- Prestige ----

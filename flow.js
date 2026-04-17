@@ -10,21 +10,36 @@ const ROCK_SLOW_RANGE_T = 0.035;   // pathT range affected by a rock
 const ROCK_SLOW_FACTOR = 0.35;     // multiplier when inside a rock's range
 
 // ---- Animal data ----
-// More species will be added later; only 'fish' is active in MVP.
+// style: 'swim' = fish in the water. 'lilypad' = riding a pad.
 const ANIMAL_TYPES = {
-    fish: {
-        id: 'fish',
-        label: 'Koi',
-        baseValue: 1,
-        baseSpeed: 1.0,    // multiplier on BASE_ANIMAL_SPEED
-        rollWeight: 1.0,
-        color: 'koi',
-    },
-    // Placeholder stubs — art / behaviour will be injected in later commits
-    frog:       { id: 'frog',       label: 'Frog',      baseValue: 3,  baseSpeed: 1.1, rollWeight: 0, color: 'frog' },
-    turtle:     { id: 'turtle',     label: 'Turtle',    baseValue: 8,  baseSpeed: 0.55, rollWeight: 0, color: 'turtle' },
-    lilypad:    { id: 'lilypad',    label: 'Lily Pad',  baseValue: 5,  baseSpeed: 0.85, rollWeight: 0, color: 'lilypad' },
-    rareBig:    { id: 'rareBig',    label: 'Visitor',   baseValue: 50, baseSpeed: 0.4, rollWeight: 0, color: 'rare' },
+    // --- Fish tree (swimmers) ---
+    fish:       { id: 'fish',       label: 'Koi',         baseValue: 1,   baseSpeed: 1.0,  rollWeight: 1.0,  style: 'swim' },
+    goldfish:   { id: 'goldfish',   label: 'Goldfish',    baseValue: 2,   baseSpeed: 1.05, rollWeight: 0,    style: 'swim' },
+    catfish:    { id: 'catfish',    label: 'Catfish',     baseValue: 5,   baseSpeed: 0.88, rollWeight: 0,    style: 'swim' },
+    dragonfish: { id: 'dragonfish', label: 'Dragon Fish', baseValue: 12,  baseSpeed: 0.82, rollWeight: 0,    style: 'swim' },
+    goldenkoi:  { id: 'goldenkoi',  label: 'Golden Koi',  baseValue: 30,  baseSpeed: 0.78, rollWeight: 0,    style: 'swim' },
+    spiritfish: { id: 'spiritfish', label: 'Spirit Fish', baseValue: 80,  baseSpeed: 0.7,  rollWeight: 0,    style: 'swim' },
+    // --- Lily pad tree (riders) ---
+    frog:       { id: 'frog',       label: 'Frog',        baseValue: 3,   baseSpeed: 0.9,  rollWeight: 0,    style: 'lilypad' },
+    turtle:     { id: 'turtle',     label: 'Turtle',      baseValue: 8,   baseSpeed: 0.55, rollWeight: 0,    style: 'lilypad' },
+    duck:       { id: 'duck',       label: 'Duck',        baseValue: 15,  baseSpeed: 0.78, rollWeight: 0,    style: 'lilypad' },
+    crane:      { id: 'crane',      label: 'Crane',       baseValue: 40,  baseSpeed: 0.6,  rollWeight: 0,    style: 'lilypad' },
+    panda:      { id: 'panda',      label: 'Panda',       baseValue: 100, baseSpeed: 0.4,  rollWeight: 0,    style: 'lilypad' },
+};
+
+// Per-species colors: body + spot
+const ANIMAL_COLORS = {
+    fish:       { body: '#f6ede0', spot: '#d65a2a' },
+    goldfish:   { body: '#ffd866', spot: '#e8a030' },
+    catfish:    { body: '#5a6670', spot: '#3a4550' },
+    dragonfish: { body: '#e84848', spot: '#8a1818' },
+    goldenkoi:  { body: '#fff0c0', spot: '#c8942a' },
+    spiritfish: { body: '#d4c8ff', spot: '#8a6add' },
+    frog:       { body: '#5aaa3a', spot: '#2d6618' },
+    turtle:     { body: '#7a6a4a', spot: '#4a3a2a' },
+    duck:       { body: '#f5e540', spot: '#d9a020' },
+    crane:      { body: '#f0ece8', spot: '#1a1a20' },
+    panda:      { body: '#f0ece8', spot: '#2a2a30' },
 };
 
 // Pick an animal type based on the weight table.
@@ -189,12 +204,16 @@ function drawAnimals() {
     if (!river) return;
     for (const a of animals) {
         const p = pointAtPathT(river, a.pathT);
-        // a.side is ±0.95, scaled by half-width with a small safety margin
         const off = a.side * river.width * 0.42;
         const x = p.x + Math.cos(p.angle + Math.PI / 2) * off;
         const y = p.y + Math.sin(p.angle + Math.PI / 2) * off;
         const wig = Math.sin(a.wobble) * 0.3;
-        drawKoi(x, y, p.angle + wig);
+        const type = ANIMAL_TYPES[a.type] || ANIMAL_TYPES.fish;
+        if (type.style === 'lilypad') {
+            drawLilypadAnimal(x, y, p.angle + wig, a.type);
+        } else {
+            drawSwimmer(x, y, p.angle + wig, a.type);
+        }
     }
 }
 
@@ -220,7 +239,45 @@ function drawTestDroplet() {
     ctx.fill();
 }
 
-function drawKoi(x, y, angle) {
+function drawLilypadAnimal(x, y, angle, typeId) {
+    const scale = getViewScale();
+    const padR = 8 * scale;
+    const colors = ANIMAL_COLORS[typeId] || ANIMAL_COLORS.frog;
+    ctx.save();
+    ctx.translate(x, y);
+    // Lily pad (green disc)
+    ctx.fillStyle = 'rgba(40, 80, 20, 0.35)';
+    ctx.beginPath();
+    ctx.arc(0, 1.5, padR + 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#5a9a38';
+    ctx.beginPath();
+    ctx.arc(0, 0, padR, 0.15, Math.PI * 2 - 0.3);
+    ctx.fill();
+    ctx.fillStyle = '#78bb55';
+    ctx.beginPath();
+    ctx.ellipse(-padR * 0.2, -padR * 0.2, padR * 0.5, padR * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Animal blob sitting on top
+    const blobR = padR * 0.55;
+    ctx.fillStyle = colors.body;
+    ctx.beginPath();
+    ctx.arc(0, -blobR * 0.3, blobR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = colors.spot;
+    ctx.beginPath();
+    ctx.arc(-blobR * 0.2, -blobR * 0.4, blobR * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+    // Tiny eye
+    ctx.fillStyle = '#1a1a20';
+    ctx.beginPath();
+    ctx.arc(blobR * 0.35, -blobR * 0.5, blobR * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawSwimmer(x, y, angle, typeId) {
+    const colors = ANIMAL_COLORS[typeId] || ANIMAL_COLORS.fish;
     const scale = getViewScale();
     const len = 10 * scale;
     const wid = 5 * scale;
@@ -232,16 +289,16 @@ function drawKoi(x, y, angle) {
     ctx.beginPath();
     ctx.ellipse(0.5, 1, len, wid * 0.6, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Body — cream koi
+    // Body
     const g = ctx.createLinearGradient(-len, -wid, len, wid);
-    g.addColorStop(0, PALETTE.koiBody);
-    g.addColorStop(1, '#e8dcc0');
+    g.addColorStop(0, colors.body);
+    g.addColorStop(1, colors.body);
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.ellipse(0, 0, len, wid, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Orange spots
-    ctx.fillStyle = PALETTE.koiSpot;
+    // Spots
+    ctx.fillStyle = colors.spot;
     ctx.beginPath();
     ctx.ellipse(-len * 0.3, -wid * 0.25, len * 0.35, wid * 0.45, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -249,14 +306,14 @@ function drawKoi(x, y, angle) {
     ctx.ellipse(len * 0.15, wid * 0.2, len * 0.3, wid * 0.4, 0, 0, Math.PI * 2);
     ctx.fill();
     // Tail
-    ctx.fillStyle = PALETTE.koiBody;
+    ctx.fillStyle = colors.body;
     ctx.beginPath();
     ctx.moveTo(-len, 0);
     ctx.lineTo(-len * 1.6, -wid * 0.7);
     ctx.lineTo(-len * 1.6, wid * 0.7);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = 'rgba(214, 90, 42, 0.7)';
+    ctx.fillStyle = colors.spot;
     ctx.beginPath();
     ctx.moveTo(-len, 0);
     ctx.lineTo(-len * 1.5, -wid * 0.4);

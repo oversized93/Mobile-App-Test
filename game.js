@@ -669,10 +669,15 @@ function drawShop() {
             ctx.font = 'bold 15px -apple-system,sans-serif';
             ctx.textAlign = 'left';
             ctx.fillText(u.label, 30, y + 22);
-            // Desc
+            // Desc — dynamic for tree upgrades
+            let desc = u.desc;
+            if (u.isTree && typeof getTreeNextInfo === 'function') {
+                const info = getTreeNextInfo(key);
+                if (info) desc = info.done ? 'All species discovered' : 'Next: ' + info.label + ' (' + info.mult + '\u00d7)';
+            }
             ctx.fillStyle = unlocked ? 'rgba(245, 232, 198, 0.6)' : 'rgba(245, 232, 198, 0.3)';
             ctx.font = '11px -apple-system,sans-serif';
-            ctx.fillText(u.desc, 30, y + 42);
+            ctx.fillText(desc, 30, y + 42);
             // Level pill (if multi-level and unlocked)
             if (unlocked && u.maxLevel > 1) {
                 ctx.fillStyle = 'rgba(245, 232, 198, 0.15)';
