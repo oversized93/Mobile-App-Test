@@ -356,51 +356,137 @@ function drawRiverBody(r, isDraft) {
     }
 }
 
-function drawRiverRipples(r) {
-    const total = r.totalLen;
-    if (!total) return;
-    const spacing = 26;
-    const count = Math.max(6, Math.floor(total / spacing));
-    const now = performance.now() / 1000;
+// ---- Pre-sampled river positions for fast particle lookups ----
+let riverSamples = [];
 
-    ctx.strokeStyle = 'rgba(220, 240, 250, 0.22)';
-    ctx.lineWidth = 1;
-    ctx.lineCap = 'round';
+function buildRiverSamples() {
+    riverSamples = [];
+    if (!river || river.pts.length < 2) return;
+    const count = 200;
     for (let i = 0; i < count; i++) {
-        const phase = ((i / count) + now * 0.055) % 1;
-        const p = pointAtPathT(r, phase);
-        const nx = Math.cos(p.angle + Math.PI / 2);
-        const ny = Math.sin(p.angle + Math.PI / 2);
-        // Ripple spans a random fraction of the river width
-        const spread = r.width * 0.38 * (0.75 + Math.sin(i * 1.7 + now * 1.3) * 0.2);
-        // Offset slightly off-center for organic variation
-        const centerOff = Math.sin(i * 2.3 + now * 0.7) * r.width * 0.15;
-        const cx = p.x + nx * centerOff;
-        const cy = p.y + ny * centerOff;
-        ctx.beginPath();
-        ctx.moveTo(cx - nx * spread, cy - ny * spread);
-        ctx.lineTo(cx + nx * spread, cy + ny * spread);
-        ctx.stroke();
+        const t = i / (count - 1);
+        riverSamples.push(pointAtPathT(river, t));
     }
 }
 
-function drawRiverFoam(r) {
+function sampleRiverAt(t) {
+    if (riverSamples.length < 2) return { x: 0, y: 0, angle: 0 };
+    const idx = Math.max(0, Math.min(1, t)) * (riverSamples.length - 1);
+    const i = Math.floor(idx);
+    const f = idx - i;
+    const a = riverSamples[Math.min(i, riverSamples.length - 1)];
+    const b = riverSamples[Math.min(i + 1, riverSamples.length - 1)];
+    return {
+        x: a.x + (b.x - a.x) * f,
+        y: a.y + (b.y - a.y) * f,
+        angle: a.angle + (b.angle - a.angle) * f,
+    };
+}
+
+// ---- Water particle system ----
+let waterParticles = [];
+
+function generateWaterParticles() {
+    waterParticles = [];
+    if (!river) return;
+    const len = river.totalLen;
+    // Scale particle count with river length
+    const flowCount = Math.min(220, Math.round(len / 3));
+    const causticCount = Math.min(35, Math.round(len / 16));
+    const foamCount = Math.min(45, Math.round(len / 10));
+
+    // Flow particles — the main "water is moving" visual
+    for (let i = 0; i < flowCount; i++) {
+        waterParticles.push({
+            type: 0, // flow
+            pathT: Math.random(),
+            side: (Math.random() - 0.5) * 1.7,
+            speed: 0.08 + Math.random() * 0.06,
+            size: 0.8 + Math.random() * 2.2,
+            alpha: 0.06 + Math.random() * 0.22,
+            phase: Math.random() * Math.PI * 2,
+            hue: Math.random(), // 0=blue, 1=cyan
+        });
+    }
+    // Caustic highlights — dancing light refracting through water
+    for (let i = 0; i < causticCount; i++) {
+        waterParticles.push({
+            type: 1, // caustic
+            pathT: Math.random(),
+            side: (Math.random() - 0.5) * 1.2,
+            speed: 0.03 + Math.random() * 0.04,
+            size: 3 + Math.random() * 5,
+            phase: Math.random() * Math.PI * 2,
+        });
+    }
+    // Bank foam — white bubbles near the shoreline
+    for (let i = 0; i < foamCount; i++) {
+        const bankSide = Math.random() < 0.5 ? -1 : 1;
+        waterParticles.push({
+            type: 2, // foam
+            pathT: Math.random(),
+            side: bankSide * (0.72 + Math.random() * 0.22),
+            speed: 0.008 + Math.random() * 0.018,
+            size: 1 + Math.random() * 2,
+            phase: Math.random() * Math.PI * 2,
+        });
+    }
+}
+
+function updateAndDrawWaterParticles(dt) {
+    if (!river || waterParticles.length === 0) return;
     const now = performance.now() / 1000;
-    const count = 18;
-    for (let i = 0; i < count; i++) {
-        const phase = ((now * 0.22) + i / count) % 1;
-        const p = pointAtPathT(r, phase);
-        const nx = Math.cos(p.angle + Math.PI / 2);
-        const ny = Math.sin(p.angle + Math.PI / 2);
-        // Wider side variation so foam occupies the whole river
-        const off = Math.sin(now * 1.8 + i * 2.1) * r.width * 0.32 + Math.cos(i * 3.1) * r.width * 0.12;
-        const px = p.x + nx * off;
-        const py = p.y + ny * off;
-        const alpha = 0.55 * Math.min(1, phase * 2, (1 - phase) * 3);
-        ctx.fillStyle = 'rgba(240, 248, 251, ' + alpha + ')';
-        ctx.beginPath();
-        ctx.ellipse(px, py, 2.2, 1, p.angle, 0, Math.PI * 2);
-        ctx.fill();
+    const halfW = river.width * 0.46;
+
+    for (const p of waterParticles) {
+        // Advance downstream
+        p.pathT += p.speed * dt;
+        if (p.pathT > 1) {
+            p.pathT -= 1;
+            // Respawn with fresh lateral offset
+            if (p.type === 2) {
+                p.side = (Math.random() < 0.5 ? -1 : 1) * (0.72 + Math.random() * 0.22);
+            } else {
+                p.side = (Math.random() - 0.5) * (p.type === 0 ? 1.7 : 1.2);
+            }
+        }
+        // Gentle lateral drift for organic feel
+        if (p.type === 0) {
+            p.side += Math.sin(now * 0.6 + p.phase) * 0.006;
+            p.side = Math.max(-0.95, Math.min(0.95, p.side));
+        }
+
+        const pos = sampleRiverAt(p.pathT);
+        const nx = Math.cos(pos.angle + Math.PI / 2);
+        const ny = Math.sin(pos.angle + Math.PI / 2);
+        const off = p.side * halfW;
+        const x = pos.x + nx * off;
+        const y = pos.y + ny * off;
+
+        if (p.type === 0) {
+            // Flow particle — translucent moving ellipse
+            const a = p.alpha * (0.7 + Math.sin(now * 2.5 + p.phase) * 0.3);
+            const r = Math.round(200 + p.hue * 40);
+            const g = Math.round(235 + p.hue * 15);
+            ctx.fillStyle = 'rgba(' + r + ',' + g + ',250,' + a.toFixed(2) + ')';
+            ctx.beginPath();
+            ctx.ellipse(x, y, p.size, p.size * 0.5, pos.angle, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (p.type === 1) {
+            // Caustic — pulsing bright spot
+            const pulse = Math.sin(now * 3.2 + p.phase) * 0.5 + 0.5;
+            ctx.fillStyle = 'rgba(255,255,240,' + (0.12 * pulse).toFixed(2) + ')';
+            ctx.beginPath();
+            ctx.arc(x, y, p.size * (0.5 + pulse * 0.5), 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            // Bank foam — pulsing white bubble
+            const a = 0.25 + Math.sin(now * 1.8 + p.phase) * 0.12;
+            ctx.fillStyle = 'rgba(240,248,255,' + a.toFixed(2) + ')';
+            ctx.beginPath();
+            ctx.arc(x, y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 }
 
@@ -415,7 +501,8 @@ function drawRiver() {
         drawRiverBody(preview, true);
     }
     if (!river || river.pts.length < 2) return;
+    if (riverSamples.length === 0) buildRiverSamples();
+    if (waterParticles.length === 0) generateWaterParticles();
     drawRiverBody(river, false);
-    drawRiverRipples(river);
-    drawRiverFoam(river);
+    updateAndDrawWaterParticles(1 / 60);
 }
