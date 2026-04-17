@@ -314,6 +314,24 @@ function strokeBankLine(bank, color, width) {
     ctx.stroke();
 }
 
+// ---- Pre-rendered soft circle sprite for efficient particle drawing ----
+let _softSprite = null;
+function getSoftSprite() {
+    if (_softSprite) return _softSprite;
+    const size = 48;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.4)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    _softSprite = c;
+    return c;
+}
+
 function drawRiverBody(r, isDraft) {
     const pts = r.pts;
     if (pts.length < 2) return;
@@ -321,38 +339,29 @@ function drawRiverBody(r, isDraft) {
     const halfW = w / 2;
     const alpha = isDraft ? 0.72 : 1.0;
 
-    // Compute bank outlines with organic wobble
-    const banks = computeRiverBanks(pts, halfW + 4, 42);
-    const innerBanks = computeRiverBanks(pts, halfW * 0.65, 17);
-    const coreBanks = computeRiverBanks(pts, halfW * 0.3, 9);
-
-    // 1. Wet earth shadow behind the banks
     const earthBanks = computeRiverBanks(pts, halfW + 10, 42);
-    ctx.globalAlpha = 0.4 * alpha;
-    fillRiverPoly(earthBanks, '#121e0a');
-    ctx.globalAlpha = 1;
-
-    // 2. Mossy green bank fringe
-    ctx.globalAlpha = 0.55 * alpha;
-    fillRiverPoly(banks, '#3c6428');
-    ctx.globalAlpha = 1;
-
-    // 3. Deep water base
-    ctx.globalAlpha = alpha;
+    const banks = computeRiverBanks(pts, halfW + 4, 42);
     const mainBanks = computeRiverBanks(pts, halfW, 42);
-    fillRiverPoly(mainBanks, '#22526c');
 
-    // 4. Mid-water surface
-    fillRiverPoly(innerBanks, 'rgba(70, 148, 180, 0.85)');
-
-    // 5. Bright center highlight
-    fillRiverPoly(coreBanks, 'rgba(128, 195, 215, 0.55)');
+    // 1. Wet earth shadow
+    ctx.globalAlpha = 0.45 * alpha;
+    fillRiverPoly(earthBanks, '#0e1808');
     ctx.globalAlpha = 1;
 
-    // 6. Bank edge strokes — dark mossy outlines for definition
+    // 2. Mossy bank fringe
+    ctx.globalAlpha = 0.55 * alpha;
+    fillRiverPoly(banks, '#2c4a1a');
+    ctx.globalAlpha = 1;
+
+    // 3. DARK river bed — particles will light up the surface on top
+    ctx.globalAlpha = alpha;
+    fillRiverPoly(mainBanks, '#0e2030');
+    ctx.globalAlpha = 1;
+
+    // 4. Bank edge outlines
     if (!isDraft) {
-        strokeBankLine(mainBanks.left, 'rgba(25, 45, 18, 0.5)', 2);
-        strokeBankLine(mainBanks.right, 'rgba(25, 45, 18, 0.5)', 2);
+        strokeBankLine(mainBanks.left, 'rgba(18, 35, 12, 0.65)', 2.5);
+        strokeBankLine(mainBanks.right, 'rgba(18, 35, 12, 0.65)', 2.5);
     }
 }
 
@@ -390,44 +399,57 @@ function generateWaterParticles() {
     waterParticles = [];
     if (!river) return;
     const len = river.totalLen;
-    // Scale particle count with river length
-    const flowCount = Math.min(220, Math.round(len / 3));
-    const causticCount = Math.min(35, Math.round(len / 16));
-    const foamCount = Math.min(45, Math.round(len / 10));
 
-    // Flow particles — the main "water is moving" visual
-    for (let i = 0; i < flowCount; i++) {
+    // SURFACE BLOBS — large, very transparent, additive-blended
+    // These overlap heavily to create a continuous shimmering water surface
+    const surfaceCount = Math.min(180, Math.round(len / 4));
+    for (let i = 0; i < surfaceCount; i++) {
         waterParticles.push({
-            type: 0, // flow
+            type: 0,
             pathT: Math.random(),
-            side: (Math.random() - 0.5) * 1.7,
-            speed: 0.08 + Math.random() * 0.06,
-            size: 0.8 + Math.random() * 2.2,
-            alpha: 0.06 + Math.random() * 0.22,
+            side: (Math.random() - 0.5) * 1.8,
+            speed: 0.06 + Math.random() * 0.05,
+            size: 12 + Math.random() * 14, // LARGE — 12-26px
+            alpha: 0.025 + Math.random() * 0.025, // VERY transparent
             phase: Math.random() * Math.PI * 2,
-            hue: Math.random(), // 0=blue, 1=cyan
+            tint: Math.floor(Math.random() * 3), // 0=blue, 1=cyan, 2=teal
         });
     }
-    // Caustic highlights — dancing light refracting through water
+    // DETAIL STREAKS — smaller, faster, follow the current visibly
+    const streakCount = Math.min(90, Math.round(len / 6));
+    for (let i = 0; i < streakCount; i++) {
+        waterParticles.push({
+            type: 1,
+            pathT: Math.random(),
+            side: (Math.random() - 0.5) * 1.5,
+            speed: 0.09 + Math.random() * 0.07,
+            size: 3 + Math.random() * 4,
+            alpha: 0.06 + Math.random() * 0.08,
+            phase: Math.random() * Math.PI * 2,
+        });
+    }
+    // CAUSTIC SPOTS — dancing light patches
+    const causticCount = Math.min(25, Math.round(len / 20));
     for (let i = 0; i < causticCount; i++) {
         waterParticles.push({
-            type: 1, // caustic
+            type: 2,
             pathT: Math.random(),
             side: (Math.random() - 0.5) * 1.2,
-            speed: 0.03 + Math.random() * 0.04,
-            size: 3 + Math.random() * 5,
+            speed: 0.02 + Math.random() * 0.03,
+            size: 8 + Math.random() * 10,
             phase: Math.random() * Math.PI * 2,
         });
     }
-    // Bank foam — white bubbles near the shoreline
+    // BANK FOAM — white specs near the shore
+    const foamCount = Math.min(40, Math.round(len / 12));
     for (let i = 0; i < foamCount; i++) {
         const bankSide = Math.random() < 0.5 ? -1 : 1;
         waterParticles.push({
-            type: 2, // foam
+            type: 3,
             pathT: Math.random(),
-            side: bankSide * (0.72 + Math.random() * 0.22),
-            speed: 0.008 + Math.random() * 0.018,
-            size: 1 + Math.random() * 2,
+            side: bankSide * (0.78 + Math.random() * 0.18),
+            speed: 0.005 + Math.random() * 0.015,
+            size: 1.5 + Math.random() * 2.5,
             phase: Math.random() * Math.PI * 2,
         });
     }
@@ -437,56 +459,99 @@ function updateAndDrawWaterParticles(dt) {
     if (!river || waterParticles.length === 0) return;
     const now = performance.now() / 1000;
     const halfW = river.width * 0.46;
+    const sprite = getSoftSprite();
+    const spriteHalf = sprite.width / 2;
 
+    // --- Pass 1: surface blobs with additive blending (creates the water body) ---
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const tints = [
+        [30, 90, 140],  // deep blue
+        [50, 130, 160], // cyan
+        [35, 110, 120], // teal
+    ];
     for (const p of waterParticles) {
-        // Advance downstream
+        if (p.type !== 0) continue;
         p.pathT += p.speed * dt;
-        if (p.pathT > 1) {
-            p.pathT -= 1;
-            // Respawn with fresh lateral offset
-            if (p.type === 2) {
-                p.side = (Math.random() < 0.5 ? -1 : 1) * (0.72 + Math.random() * 0.22);
-            } else {
-                p.side = (Math.random() - 0.5) * (p.type === 0 ? 1.7 : 1.2);
-            }
-        }
-        // Gentle lateral drift for organic feel
-        if (p.type === 0) {
-            p.side += Math.sin(now * 0.6 + p.phase) * 0.006;
-            p.side = Math.max(-0.95, Math.min(0.95, p.side));
-        }
+        if (p.pathT > 1) { p.pathT -= 1; p.side = (Math.random() - 0.5) * 1.8; }
+        p.side += Math.sin(now * 0.5 + p.phase) * 0.004;
+        p.side = Math.max(-0.96, Math.min(0.96, p.side));
 
         const pos = sampleRiverAt(p.pathT);
         const nx = Math.cos(pos.angle + Math.PI / 2);
         const ny = Math.sin(pos.angle + Math.PI / 2);
-        const off = p.side * halfW;
-        const x = pos.x + nx * off;
-        const y = pos.y + ny * off;
+        const x = pos.x + nx * p.side * halfW;
+        const y = pos.y + ny * p.side * halfW;
+        const pulse = 0.8 + Math.sin(now * 1.5 + p.phase) * 0.2;
+        const t = tints[p.tint];
+        const a = p.alpha * pulse;
+        ctx.globalAlpha = a;
+        // Tint the white sprite by drawing a colored rect first, then the sprite on top
+        const sz = p.size * 2;
+        ctx.fillStyle = 'rgb(' + t[0] + ',' + t[1] + ',' + t[2] + ')';
+        ctx.globalAlpha = a * 0.7;
+        ctx.beginPath();
+        ctx.arc(x, y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Soft highlight via sprite
+        ctx.globalAlpha = a * 0.4;
+        ctx.drawImage(sprite, x - spriteHalf, y - spriteHalf, sz, sz);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.restore();
 
-        if (p.type === 0) {
-            // Flow particle — translucent moving ellipse
-            const a = p.alpha * (0.7 + Math.sin(now * 2.5 + p.phase) * 0.3);
-            const r = Math.round(200 + p.hue * 40);
-            const g = Math.round(235 + p.hue * 15);
-            ctx.fillStyle = 'rgba(' + r + ',' + g + ',250,' + a.toFixed(2) + ')';
-            ctx.beginPath();
-            ctx.ellipse(x, y, p.size, p.size * 0.5, pos.angle, 0, Math.PI * 2);
-            ctx.fill();
-        } else if (p.type === 1) {
-            // Caustic — pulsing bright spot
-            const pulse = Math.sin(now * 3.2 + p.phase) * 0.5 + 0.5;
-            ctx.fillStyle = 'rgba(255,255,240,' + (0.12 * pulse).toFixed(2) + ')';
-            ctx.beginPath();
-            ctx.arc(x, y, p.size * (0.5 + pulse * 0.5), 0, Math.PI * 2);
-            ctx.fill();
-        } else {
-            // Bank foam — pulsing white bubble
-            const a = 0.25 + Math.sin(now * 1.8 + p.phase) * 0.12;
-            ctx.fillStyle = 'rgba(240,248,255,' + a.toFixed(2) + ')';
-            ctx.beginPath();
-            ctx.arc(x, y, p.size, 0, Math.PI * 2);
-            ctx.fill();
-        }
+    // --- Pass 2: detail streaks (normal blending, visible current lines) ---
+    for (const p of waterParticles) {
+        if (p.type !== 1) continue;
+        p.pathT += p.speed * dt;
+        if (p.pathT > 1) { p.pathT -= 1; p.side = (Math.random() - 0.5) * 1.5; }
+
+        const pos = sampleRiverAt(p.pathT);
+        const nx = Math.cos(pos.angle + Math.PI / 2);
+        const ny = Math.sin(pos.angle + Math.PI / 2);
+        const x = pos.x + nx * p.side * halfW;
+        const y = pos.y + ny * p.side * halfW;
+        const a = p.alpha * (0.7 + Math.sin(now * 3 + p.phase) * 0.3);
+        ctx.fillStyle = 'rgba(180, 220, 240, ' + a.toFixed(3) + ')';
+        ctx.beginPath();
+        ctx.ellipse(x, y, p.size, p.size * 0.4, pos.angle, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // --- Pass 3: caustic light patches ---
+    for (const p of waterParticles) {
+        if (p.type !== 2) continue;
+        p.pathT += p.speed * dt;
+        if (p.pathT > 1) { p.pathT -= 1; p.side = (Math.random() - 0.5) * 1.2; }
+
+        const pos = sampleRiverAt(p.pathT);
+        const nx = Math.cos(pos.angle + Math.PI / 2);
+        const ny = Math.sin(pos.angle + Math.PI / 2);
+        const x = pos.x + nx * p.side * halfW;
+        const y = pos.y + ny * p.side * halfW;
+        const pulse = Math.sin(now * 2.8 + p.phase) * 0.5 + 0.5;
+        ctx.globalAlpha = 0.08 * pulse;
+        ctx.drawImage(sprite, x - p.size, y - p.size, p.size * 2, p.size * 2);
+        ctx.globalAlpha = 1;
+    }
+
+    // --- Pass 4: bank foam bubbles ---
+    for (const p of waterParticles) {
+        if (p.type !== 3) continue;
+        p.pathT += p.speed * dt;
+        if (p.pathT > 1) { p.pathT -= 1; p.side = (Math.random() < 0.5 ? -1 : 1) * (0.78 + Math.random() * 0.18); }
+
+        const pos = sampleRiverAt(p.pathT);
+        const nx = Math.cos(pos.angle + Math.PI / 2);
+        const ny = Math.sin(pos.angle + Math.PI / 2);
+        const x = pos.x + nx * p.side * halfW;
+        const y = pos.y + ny * p.side * halfW;
+        const a = 0.3 + Math.sin(now * 2 + p.phase) * 0.15;
+        ctx.fillStyle = 'rgba(230, 242, 250, ' + a.toFixed(2) + ')';
+        ctx.beginPath();
+        ctx.arc(x, y, p.size, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
 
