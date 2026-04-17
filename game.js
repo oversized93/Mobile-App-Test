@@ -247,6 +247,8 @@ function resetAllProgress() {
     notification = null;
     resetFlow();
     for (const key in UPGRADES) UPGRADES[key].level = 0;
+    lastMilestoneAt = 0;
+    lastPlayTime = Date.now();
     syncAnimalWeights();
     try { localStorage.removeItem('zr_save'); } catch (e) {}
 }
@@ -764,6 +766,22 @@ function loop() {
 
 function init() {
     loadGame();
+    // Offline earnings — if more than 1 minute has passed since last play
+    if (river && roundStarted && lastPlayTime) {
+        const elapsed = Date.now() - lastPlayTime;
+        if (elapsed > 60000) {
+            const earnings = calcOfflineEarnings(elapsed);
+            if (earnings > 0) {
+                money += earnings;
+                totalEarned += earnings;
+                const mins = Math.round(elapsed / 60000);
+                const hrs = Math.floor(mins / 60);
+                const timeStr = hrs > 0 ? hrs + 'h ' + (mins % 60) + 'm' : mins + 'm';
+                notify('While you rested (' + timeStr + ')... +$' + earnings);
+                saveGame();
+            }
+        }
+    }
     loop();
 }
 
