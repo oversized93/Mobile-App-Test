@@ -46,6 +46,9 @@ function commitDraftRiver() {
         return false;
     }
     river = draftRiver;
+    // Smooth the raw finger input into gentle curves
+    river.pts = smoothPolyline(river.pts, 2);
+    river.totalLen = riverTotalLength(river);
     draftRiver = null;
     saveGame();
     return true;
@@ -239,36 +242,118 @@ function drawOutletPond() {
     ctx.restore();
 }
 
-// ---- River water rendering ----
-function strokeRiverLayer(pts, width, color) {
+// ---- Polyline smoothing (Chaikin corner-cutting) ----
+function smoothPolyline(pts, iterations) {
+    let result = pts;
+    for (let iter = 0; iter < iterations; iter++) {
+        const s = [result[0]];
+        for (let i = 0; i < result.length - 1; i++) {
+            const a = result[i], b = result[i + 1];
+            s.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 });
+            s.push({ x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 });
+        }
+        s.push(result[result.length - 1]);
+        result = s;
+    }
+    return result;
+}
+
+// ---- Compute river bank outlines from the center polyline ----
+function computeRiverBanks(pts, halfWidth, wobbleSeed) {
+    const left = [], right = [];
+    const seed = wobbleSeed || 0;
+    for (let i = 0; i < pts.length; i++) {
+        let nx, ny;
+        if (i === 0) {
+            const dx = pts[1].x - pts[0].x, dy = pts[1].y - pts[0].y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            nx = -dy / len; ny = dx / len;
+        } else if (i === pts.length - 1) {
+            const dx = pts[i].x - pts[i - 1].x, dy = pts[i].y - pts[i - 1].y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            nx = -dy / len; ny = dx / len;
+        } else {
+            const dx1 = pts[i].x - pts[i - 1].x, dy1 = pts[i].y - pts[i - 1].y;
+            const dx2 = pts[i + 1].x - pts[i].x, dy2 = pts[i + 1].y - pts[i].y;
+            const l1 = Math.sqrt(dx1 * dx1 + dy1 * dy1) || 1;
+            const l2 = Math.sqrt(dx2 * dx2 + dy2 * dy2) || 1;
+            nx = -(dy1 / l1 + dy2 / l2) / 2;
+            ny = (dx1 / l1 + dx2 / l2) / 2;
+            const nl = Math.sqrt(nx * nx + ny * ny) || 1;
+            nx /= nl; ny /= nl;
+        }
+        // Organic wobble — slight perpendicular variation for natural shoreline
+        const wobble = Math.sin(i * 0.22 + seed) * 3.5 + Math.sin(i * 0.55 + seed * 1.7) * 1.5;
+        const wL = halfWidth + wobble;
+        const wR = halfWidth - wobble * 0.7;
+        left.push({ x: pts[i].x + nx * wL, y: pts[i].y + ny * wL });
+        right.push({ x: pts[i].x - nx * wR, y: pts[i].y - ny * wR });
+    }
+    return { left, right };
+}
+
+// ---- Fill a closed river-body polygon from bank outlines ----
+function fillRiverPoly(banks, color) {
+    ctx.beginPath();
+    ctx.moveTo(banks.left[0].x, banks.left[0].y);
+    for (let i = 1; i < banks.left.length; i++) ctx.lineTo(banks.left[i].x, banks.left[i].y);
+    for (let i = banks.right.length - 1; i >= 0; i--) ctx.lineTo(banks.right[i].x, banks.right[i].y);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+}
+
+function strokeBankLine(bank, color, width) {
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(pts[i].x, pts[i].y);
-    }
+    ctx.moveTo(bank[0].x, bank[0].y);
+    for (let i = 1; i < bank.length; i++) ctx.lineTo(bank[i].x, bank[i].y);
     ctx.stroke();
 }
 
 function drawRiverBody(r, isDraft) {
     const pts = r.pts;
+    if (pts.length < 2) return;
     const w = r.width;
-    const a = isDraft ? 0.72 : 1.0;
-    // Dark wet earth ring
-    strokeRiverLayer(pts, w + 10, 'rgba(18, 30, 10, ' + (0.42 * a) + ')');
-    // Mossy green bank
-    strokeRiverLayer(pts, w + 4, 'rgba(60, 100, 40, ' + (0.5 * a) + ')');
-    // Deep base turquoise
-    strokeRiverLayer(pts, w, 'rgba(34, 82, 108, ' + a + ')');
-    // Main surface — one broad turquoise color
-    strokeRiverLayer(pts, w * 0.9, 'rgba(70, 148, 180, ' + a + ')');
-    // Gentle lighter highlight (not a hard center stripe)
-    strokeRiverLayer(pts, w * 0.62, 'rgba(128, 190, 212, ' + (0.65 * a) + ')');
-    // Very subtle central shimmer
-    strokeRiverLayer(pts, w * 0.32, 'rgba(178, 218, 232, ' + (0.35 * a) + ')');
+    const halfW = w / 2;
+    const alpha = isDraft ? 0.72 : 1.0;
+
+    // Compute bank outlines with organic wobble
+    const banks = computeRiverBanks(pts, halfW + 4, 42);
+    const innerBanks = computeRiverBanks(pts, halfW * 0.65, 17);
+    const coreBanks = computeRiverBanks(pts, halfW * 0.3, 9);
+
+    // 1. Wet earth shadow behind the banks
+    const earthBanks = computeRiverBanks(pts, halfW + 10, 42);
+    ctx.globalAlpha = 0.4 * alpha;
+    fillRiverPoly(earthBanks, '#121e0a');
+    ctx.globalAlpha = 1;
+
+    // 2. Mossy green bank fringe
+    ctx.globalAlpha = 0.55 * alpha;
+    fillRiverPoly(banks, '#3c6428');
+    ctx.globalAlpha = 1;
+
+    // 3. Deep water base
+    ctx.globalAlpha = alpha;
+    const mainBanks = computeRiverBanks(pts, halfW, 42);
+    fillRiverPoly(mainBanks, '#22526c');
+
+    // 4. Mid-water surface
+    fillRiverPoly(innerBanks, 'rgba(70, 148, 180, 0.85)');
+
+    // 5. Bright center highlight
+    fillRiverPoly(coreBanks, 'rgba(128, 195, 215, 0.55)');
+    ctx.globalAlpha = 1;
+
+    // 6. Bank edge strokes — dark mossy outlines for definition
+    if (!isDraft) {
+        strokeBankLine(mainBanks.left, 'rgba(25, 45, 18, 0.5)', 2);
+        strokeBankLine(mainBanks.right, 'rgba(25, 45, 18, 0.5)', 2);
+    }
 }
 
 function drawRiverRipples(r) {
@@ -321,7 +406,13 @@ function drawRiverFoam(r) {
 
 function drawRiver() {
     if (draftRiver && draftRiver.pts.length >= 2) {
-        drawRiverBody(draftRiver, true);
+        // Live preview: light smoothing (1 iteration) for responsive feel
+        const preview = {
+            pts: smoothPolyline(draftRiver.pts, 1),
+            width: draftRiver.width,
+            totalLen: draftRiver.totalLen
+        };
+        drawRiverBody(preview, true);
     }
     if (!river || river.pts.length < 2) return;
     drawRiverBody(river, false);
