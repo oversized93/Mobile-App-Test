@@ -76,7 +76,7 @@ function spawnInterval() {
 }
 
 function tickSpawn(dt) {
-    if (!river || !roundStarted) return;
+    if (!rivers || rivers.length === 0 || !roundStarted) return;
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
         spawnAnimal();
@@ -89,10 +89,13 @@ function tickSpawn(dt) {
 }
 
 function spawnAnimal(forcedType) {
-    if (!river) return;
+    if (!rivers || rivers.length === 0) return;
     if (animals.length >= MAX_ANIMALS) return;
     const type = forcedType || rollAnimalType();
-    const startPos = typeof sampleRiverAt === 'function' ? sampleRiverAt(0) : { x: 0, y: 0, angle: 0 };
+    // Pick a random river for this animal to flow along
+    const ri = Math.floor(Math.random() * rivers.length);
+    const myRiver = rivers[ri];
+    const startPos = typeof sampleRiverAt === 'function' ? sampleRiverAt(myRiver, 0) : { x: 0, y: 0, angle: 0 };
     animals.push({
         type: type.id,
         pathT: 0,
@@ -100,14 +103,14 @@ function spawnAnimal(forcedType) {
         flowTime: 0,
         side: (Math.random() - 0.5) * 1.9,
         wobble: Math.random() * Math.PI * 2,
-        // Smooth rendering state (lerped each frame for buttery motion)
+        riverIdx: ri, // which river this animal flows along
         rx: startPos.x, ry: startPos.y, ra: startPos.angle,
     });
 }
 
 // ---- Test droplet ----
 function startTestFlow() {
-    if (!river) return;
+    if (!rivers || rivers.length === 0) return;
     testDroplet = { pathT: 0, flowTime: 0 };
 }
 function cancelTestFlow() {
@@ -116,13 +119,13 @@ function cancelTestFlow() {
 
 // ---- Per-frame update ----
 function updateFlow(dt) {
-    if (!river) return;
-    const total = river.totalLen;
+    if (!rivers || rivers.length === 0) return;
 
-    // Test droplet
-    if (testDroplet) {
+    // Test droplet (uses first river)
+    if (testDroplet && rivers.length > 0) {
+        const testRiver = rivers[0];
         const spd = applyRockSlowdown(testDroplet.pathT, BASE_ANIMAL_SPEED);
-        testDroplet.pathT += (spd / total) * dt;
+        testDroplet.pathT += (spd / testRiver.totalLen) * dt;
         testDroplet.flowTime += dt;
         if (testDroplet.pathT >= 1) {
             lastTestFlowTime = testDroplet.flowTime;
@@ -136,6 +139,9 @@ function updateFlow(dt) {
     // Real animals
     for (let i = animals.length - 1; i >= 0; i--) {
         const a = animals[i];
+        const myRiver = rivers[a.riverIdx] || rivers[0];
+        if (!myRiver) { animals.splice(i, 1); continue; }
+        const total = myRiver.totalLen;
         const type = ANIMAL_TYPES[a.type] || ANIMAL_TYPES.fish;
         const swiftMult = typeof getSpeedMultiplier === 'function' ? getSpeedMultiplier() : 1;
         const baseSpd = BASE_ANIMAL_SPEED * type.baseSpeed * swiftMult;
@@ -167,7 +173,8 @@ function applyRockSlowdown(t, baseSpeed) {
 
 // ---- Rocks ----
 function placeRockAtPoint(sx, sy) {
-    if (!river) return false;
+    if (!rivers || rivers.length === 0) return false;
+    const river = rivers[0]; // place rocks on the first river for now
     if (rockInventory <= 0) return false;
     // Find the nearest pathT position on the river to (sx, sy)
     const target = projectOntoRiver(sx, sy);
@@ -209,12 +216,13 @@ function projectOntoRiver(x, y) {
 
 // ---- Rendering ----
 function drawAnimals() {
-    if (!river) return;
-    const useSamples = typeof sampleRiverAt === 'function' && riverSamples.length > 0;
+    if (!rivers || rivers.length === 0) return;
     for (const a of animals) {
-        // Get target position from the river
-        const p = useSamples ? sampleRiverAt(a.pathT) : pointAtPathT(river, a.pathT);
-        const off = a.side * river.width * 0.42;
+        const myRiver = rivers[a.riverIdx] || rivers[0];
+        if (!myRiver) continue;
+        const p = (myRiver.samples && myRiver.samples.length > 0)
+            ? sampleRiverAt(myRiver, a.pathT) : pointAtPathT(myRiver, a.pathT);
+        const off = a.side * myRiver.width * 0.42;
         const tx = p.x + Math.cos(p.angle + Math.PI / 2) * off;
         const ty = p.y + Math.sin(p.angle + Math.PI / 2) * off;
         // Smooth lerp toward target position (buttery movement, no jitter)
@@ -237,8 +245,8 @@ function drawAnimals() {
 }
 
 function drawTestDroplet() {
-    if (!testDroplet || !river) return;
-    const p = pointAtPathT(river, testDroplet.pathT);
+    if (!testDroplet || !rivers || rivers.length === 0) return;
+    const p = pointAtPathT(rivers[0], testDroplet.pathT);
     // Glow
     const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 22);
     glow.addColorStop(0, 'rgba(200, 240, 255, 0.7)');

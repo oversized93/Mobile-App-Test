@@ -182,8 +182,9 @@ function animalPayout(a) {
 
 // Estimated income per second (used for offline earnings).
 function estimateIncomePerSec() {
-    if (!river || !roundStarted) return 0;
-    const avgFlowTime = river.totalLen / (BASE_ANIMAL_SPEED * getSpeedMultiplier());
+    if (!rivers || rivers.length === 0 || !roundStarted) return 0;
+    const mainR = rivers[0];
+    const avgFlowTime = mainR.totalLen / (BASE_ANIMAL_SPEED * getSpeedMultiplier());
     const dummy = { type: 'fish', flowTime: avgFlowTime };
     const avgPay = animalPayout(dummy);
     const spawnsPerSec = 1 / spawnInterval();
@@ -230,7 +231,7 @@ function buyUpgrade(id) {
     // Side effects
     if (id === 'rock') rockInventory++;
     if (id === 'expandGarden') {
-        river = null;
+        rivers = [];
         rocks.length = 0;
         roundStarted = false;
         resetFlow();
@@ -270,7 +271,7 @@ function syncAnimalWeights() {
 function doPrestige() {
     prestigeLevel++;
     money = 0;
-    river = null;
+    rivers = [];
     draftRiver = null;
     rocks.length = 0;
     rockInventory = 0;
@@ -392,11 +393,13 @@ function onAnimalCollected(a) {
     if (typeof moneyPulseTimer !== 'undefined') moneyPulseTimer = 0.8;
     saveGame();
     if (typeof spawnCollectBurst === 'function') {
-        const p = pointAtPathT(river, 1);
+        const r0 = rivers.length > 0 ? rivers[0] : null;
+        const p = r0 ? pointAtPathT(r0, 1) : { x: W() / 2, y: H() - 150 };
         spawnCollectBurst(p.x, p.y);
     }
     if (typeof spawnFloatText === 'function') {
-        const p = pointAtPathT(river, 1);
+        const r0 = rivers.length > 0 ? rivers[0] : null;
+        const p = r0 ? pointAtPathT(r0, 1) : { x: W() / 2, y: H() - 150 };
         const label = '+$' + payout + '  ' + a.flowTime.toFixed(1) + 's';
         spawnFloatText(p.x, p.y - 10, label);
     }
@@ -412,7 +415,7 @@ function saveGame() {
         prestigeLevel,
         lastMilestoneAt,
         lastPlayTime: Date.now(),
-        river: river ? { pts: river.pts, width: river.width, totalLen: river.totalLen } : null,
+        rivers: rivers.map(r => ({ pts: r.pts, width: r.width, totalLen: r.totalLen })),
         rocks: rocks.map(r => ({ pathT: r.pathT })),
         rockInventory,
         roundStarted,
@@ -428,14 +431,13 @@ function loadGame() {
     prestigeLevel = s.prestigeLevel || 0;
     lastMilestoneAt = s.lastMilestoneAt || 0;
     lastPlayTime = s.lastPlayTime || Date.now();
-    if (s.river && Array.isArray(s.river.pts) && s.river.pts.length >= 2) {
-        river = {
-            pts: s.river.pts,
-            width: s.river.width || getRiverWidth(),
-            totalLen: s.river.totalLen || 0
-        };
-        if (!river.totalLen || isNaN(river.totalLen)) {
-            river.totalLen = riverTotalLength(river);
+    rivers = [];
+    const savedRivers = Array.isArray(s.rivers) ? s.rivers : (s.river ? [s.river] : []);
+    for (const sr of savedRivers) {
+        if (sr && Array.isArray(sr.pts) && sr.pts.length >= 2) {
+            const r = { pts: sr.pts, width: sr.width || getRiverWidth(), totalLen: sr.totalLen || 0 };
+            if (!r.totalLen || isNaN(r.totalLen)) r.totalLen = riverTotalLength(r);
+            rivers.push(r);
         }
     }
     if (Array.isArray(s.rocks)) rocks = s.rocks.map(r => ({ pathT: r.pathT }));

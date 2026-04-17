@@ -119,10 +119,10 @@ function onTouchStart(sx, sy) {
     if (hitBtn(sx, sy, hb.x, hb.y, hb.w, hb.h)) { state = 'menu'; return; }
 
     // Pre-round buttons
-    if (!roundStarted && river) {
+    if (!roundStarted && rivers.length > 0) {
         const da = drawAgainBtnRect();
         if (hitBtn(sx, sy, da.x, da.y, da.w, da.h)) {
-            clearRiver();
+            clearAllRivers();
             resetFlow();
             notify('Draw a new river');
             return;
@@ -143,7 +143,7 @@ function onTouchStart(sx, sy) {
     }
 
     // Tap on the river with rock inventory → place a rock
-    if (river && rockInventory > 0 && roundStarted) {
+    if (rivers.length > 0 && rockInventory > 0 && roundStarted) {
         if (placeRockAtPoint(sx, sy)) {
             notify('Rock placed');
             return;
@@ -157,7 +157,8 @@ function onTouchStart(sx, sy) {
 
     // Begin drawing the river — only when there's no committed river and the
     // touch starts inside the spring opening at the top of the source zone.
-    if (!river) {
+    // Draw additional rivers from the spring (can always draw more)
+    if (!roundStarted) {
         const op = springOpeningRect();
         if (sx >= op.x - 10 && sx <= op.x + op.w + 10 &&
             sy >= op.y - 12 && sy <= op.y + op.h + 24) {
@@ -290,7 +291,7 @@ function resetAllProgress() {
     money = 0;
     totalEarned = 0;
     prestigeLevel = 0;
-    river = null;
+    rivers = [];
     draftRiver = null;
     rocks.length = 0;
     rockInventory = 0;
@@ -389,7 +390,7 @@ function drawHud() {
 }
 
 function drawPreRoundButtons() {
-    if (roundStarted || !river) return;
+    if (roundStarted || rivers.length === 0) return;
     const da = drawAgainBtnRect();
     const tb = testFlowBtnRect();
     const rb = startRoundBtnRect();
@@ -400,7 +401,7 @@ function drawPreRoundButtons() {
     ctx.font = 'bold 14px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Draw Again', da.x + da.w / 2, da.y + da.h / 2 + 1);
+    ctx.fillText('Clear Rivers', da.x + da.w / 2, da.y + da.h / 2 + 1);
 
     // Test Flow — water blue gradient
     const g2 = ctx.createLinearGradient(tb.x, tb.y, tb.x + tb.w, tb.y);
@@ -435,7 +436,7 @@ function drawPreRoundButtons() {
 }
 
 function drawHintText() {
-    if (river) return;
+    if (rivers.length > 0) return;
     ctx.fillStyle = 'rgba(245, 232, 198, 0.85)';
     ctx.font = 'bold 15px -apple-system,sans-serif';
     ctx.textAlign = 'center';
@@ -580,7 +581,7 @@ function drawMenu() {
     ctx.fillText('— a flowing garden —', cx, H() / 2 - 18);
 
     // Stats pill
-    const hasRiver = !!river;
+    const hasRiver = rivers.length > 0;
     const stateLabel = hasRiver ? (roundStarted ? 'round active' : 'river drawn') : 'no river';
     const stats = '$' + money + '   \u2022   ' + stateLabel;
     ctx.font = '13px -apple-system,sans-serif';

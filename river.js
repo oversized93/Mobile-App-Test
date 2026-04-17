@@ -4,10 +4,11 @@
 // ============================================================
 
 const RIVER_MIN_PT_DIST = 3;         // px between stored points
-const RIVER_BASE_WIDTH = 132;        // base river width (3x the original stencil, slightly wider)
+const RIVER_BASE_WIDTH = 66;        // halved for thinner rivers that can be drawn side-by-side
 
-let river = null;            // committed river: { pts, width, totalLen }
+let rivers = [];              // committed rivers: [{ pts, width, totalLen, samples, particles }, ...]
 let draftRiver = null;       // in-progress during drag
+const OVERLAP_MIN_DIST_FACTOR = 0.92; // rivers can almost touch but not overlap
 
 // ---- Visual scale from the Expand Garden upgrade ----
 function getViewScale() {
@@ -30,8 +31,23 @@ function extendDraftRiver(x, y) {
     const dx = x - last.x, dy = y - last.y;
     const d = Math.sqrt(dx * dx + dy * dy);
     if (d < RIVER_MIN_PT_DIST) return;
+    // Overlap check: reject points too close to any existing river
+    const minDist = getRiverWidth() * OVERLAP_MIN_DIST_FACTOR;
+    if (isPointTooCloseToRivers(x, y, minDist)) return;
     draftRiver.pts.push({ x, y });
     draftRiver.totalLen += d;
+}
+
+function isPointTooCloseToRivers(x, y, minDist) {
+    const md2 = minDist * minDist;
+    for (const r of rivers) {
+        // Check every 4th point for performance (polyline is dense after smoothing)
+        for (let i = 0; i < r.pts.length; i += 4) {
+            const dx = x - r.pts[i].x, dy = y - r.pts[i].y;
+            if (dx * dx + dy * dy < md2) return true;
+        }
+    }
+    return false;
 }
 function commitDraftRiver() {
     if (!draftRiver || draftRiver.pts.length < 3) {
@@ -45,19 +61,24 @@ function commitDraftRiver() {
         draftRiver = null;
         return false;
     }
-    river = draftRiver;
-    // Smooth the raw finger input into gentle curves
-    river.pts = smoothPolyline(river.pts, 2);
-    river.totalLen = riverTotalLength(river);
+    const newRiver = draftRiver;
     draftRiver = null;
+    newRiver.pts = smoothPolyline(newRiver.pts, 2);
+    newRiver.totalLen = riverTotalLength(newRiver);
+    // Pre-compute per-river samples and particles
+    newRiver.samples = buildSamplesForRiver(newRiver);
+    newRiver.particles = generateParticlesForRiver(newRiver);
+    rivers.push(newRiver);
     saveGame();
     return true;
 }
 function cancelDraftRiver() {
     draftRiver = null;
 }
-function clearRiver() {
-    river = null;
+function clearAllRivers() {
+    rivers = [];
+    riverSamples = [];
+    waterParticles = [];
     saveGame();
 }
 
@@ -368,32 +389,37 @@ function drawRiverBody(r, isDraft) {
 // ---- Pre-sampled river positions for fast particle lookups ----
 let riverSamples = [];
 
-function buildRiverSamples() {
-    riverSamples = [];
-    if (!river || river.pts.length < 2) return;
+function buildSamplesForRiver(r) {
+    if (!r || r.pts.length < 2) return [];
     const count = 400;
-    // First pass: positions
+    const samples = [];
     for (let i = 0; i < count; i++) {
-        const t = i / (count - 1);
-        riverSamples.push(pointAtPathT(river, t));
+        samples.push(pointAtPathT(r, i / (count - 1)));
     }
-    // Second pass: smooth the angles by averaging over a wide window
     for (let i = 0; i < count; i++) {
         const back = Math.max(0, i - 12);
         const fwd = Math.min(count - 1, i + 12);
-        const dx = riverSamples[fwd].x - riverSamples[back].x;
-        const dy = riverSamples[fwd].y - riverSamples[back].y;
-        riverSamples[i].angle = Math.atan2(dy, dx);
+        const dx = samples[fwd].x - samples[back].x;
+        const dy = samples[fwd].y - samples[back].y;
+        samples[i].angle = Math.atan2(dy, dx);
+    }
+    return samples;
+}
+function buildRiverSamples() {
+    // Rebuild samples for any river that's missing them (e.g. after load)
+    for (const r of rivers) {
+        if (!r.samples || r.samples.length === 0) r.samples = buildSamplesForRiver(r);
     }
 }
 
-function sampleRiverAt(t) {
-    if (riverSamples.length < 2) return { x: 0, y: 0, angle: 0 };
-    const idx = Math.max(0, Math.min(1, t)) * (riverSamples.length - 1);
+function sampleRiverAt(r, t) {
+    const samples = r.samples || [];
+    if (samples.length < 2) return pointAtPathT(r, t);
+    const idx = Math.max(0, Math.min(1, t)) * (samples.length - 1);
     const i = Math.floor(idx);
     const f = idx - i;
-    const a = riverSamples[Math.min(i, riverSamples.length - 1)];
-    const b = riverSamples[Math.min(i + 1, riverSamples.length - 1)];
+    const a = samples[Math.min(i, samples.length - 1)];
+    const b = samples[Math.min(i + 1, samples.length - 1)];
     return {
         x: a.x + (b.x - a.x) * f,
         y: a.y + (b.y - a.y) * f,
@@ -404,16 +430,16 @@ function sampleRiverAt(t) {
 // ---- Water particle system ----
 let waterParticles = [];
 
-function generateWaterParticles() {
-    waterParticles = [];
-    if (!river) return;
-    const len = river.totalLen;
+function generateParticlesForRiver(r) {
+    const particles = [];
+    if (!r) return particles;
+    const len = r.totalLen;
 
     // SURFACE BLOBS — large, very transparent, additive-blended
     // These overlap heavily to create a continuous shimmering water surface
     const surfaceCount = Math.min(180, Math.round(len / 4));
     for (let i = 0; i < surfaceCount; i++) {
-        waterParticles.push({
+        particles.push({
             type: 0,
             pathT: Math.random(),
             side: (Math.random() - 0.5) * 1.8,
@@ -427,7 +453,7 @@ function generateWaterParticles() {
     // DETAIL STREAKS — smaller, faster, follow the current visibly
     const streakCount = Math.min(90, Math.round(len / 6));
     for (let i = 0; i < streakCount; i++) {
-        waterParticles.push({
+        particles.push({
             type: 1,
             pathT: Math.random(),
             side: (Math.random() - 0.5) * 1.5,
@@ -440,7 +466,7 @@ function generateWaterParticles() {
     // CAUSTIC SPOTS — dancing light patches
     const causticCount = Math.min(25, Math.round(len / 20));
     for (let i = 0; i < causticCount; i++) {
-        waterParticles.push({
+        particles.push({
             type: 2,
             pathT: Math.random(),
             side: (Math.random() - 0.5) * 1.2,
@@ -453,7 +479,7 @@ function generateWaterParticles() {
     const foamCount = Math.min(40, Math.round(len / 12));
     for (let i = 0; i < foamCount; i++) {
         const bankSide = Math.random() < 0.5 ? -1 : 1;
-        waterParticles.push({
+        particles.push({
             type: 3,
             pathT: Math.random(),
             side: bankSide * (0.78 + Math.random() * 0.18),
@@ -462,12 +488,18 @@ function generateWaterParticles() {
             phase: Math.random() * Math.PI * 2,
         });
     }
+    return particles;
+}
+function generateWaterParticles() {
+    for (const r of rivers) {
+        if (!r.particles || r.particles.length === 0) r.particles = generateParticlesForRiver(r);
+    }
 }
 
-function updateAndDrawWaterParticles(dt) {
-    if (!river || waterParticles.length === 0) return;
+function updateAndDrawWaterParticlesForRiver(r, dt) {
+    if (!r || !r.particles || r.particles.length === 0) return;
     const now = performance.now() / 1000;
-    const halfW = river.width * 0.46;
+    const halfW = r.width * 0.46;
     const sprite = getSoftSprite();
     const spriteHalf = sprite.width / 2;
 
@@ -479,14 +511,14 @@ function updateAndDrawWaterParticles(dt) {
         [50, 130, 160], // cyan
         [35, 110, 120], // teal
     ];
-    for (const p of waterParticles) {
+    for (const p of r.particles) {
         if (p.type !== 0) continue;
         p.pathT += p.speed * dt;
         if (p.pathT > 1) { p.pathT -= 1; p.side = (Math.random() - 0.5) * 1.8; }
         p.side += Math.sin(now * 0.5 + p.phase) * 0.004;
         p.side = Math.max(-0.96, Math.min(0.96, p.side));
 
-        const pos = sampleRiverAt(p.pathT);
+        const pos = sampleRiverAt(r, p.pathT);
         const nx = Math.cos(pos.angle + Math.PI / 2);
         const ny = Math.sin(pos.angle + Math.PI / 2);
         const x = pos.x + nx * p.side * halfW;
@@ -511,12 +543,12 @@ function updateAndDrawWaterParticles(dt) {
     ctx.restore();
 
     // --- Pass 2: detail streaks (normal blending, visible current lines) ---
-    for (const p of waterParticles) {
+    for (const p of r.particles) {
         if (p.type !== 1) continue;
         p.pathT += p.speed * dt;
         if (p.pathT > 1) { p.pathT -= 1; p.side = (Math.random() - 0.5) * 1.5; }
 
-        const pos = sampleRiverAt(p.pathT);
+        const pos = sampleRiverAt(r, p.pathT);
         const nx = Math.cos(pos.angle + Math.PI / 2);
         const ny = Math.sin(pos.angle + Math.PI / 2);
         const x = pos.x + nx * p.side * halfW;
@@ -529,12 +561,12 @@ function updateAndDrawWaterParticles(dt) {
     }
 
     // --- Pass 3: caustic light patches ---
-    for (const p of waterParticles) {
+    for (const p of r.particles) {
         if (p.type !== 2) continue;
         p.pathT += p.speed * dt;
         if (p.pathT > 1) { p.pathT -= 1; p.side = (Math.random() - 0.5) * 1.2; }
 
-        const pos = sampleRiverAt(p.pathT);
+        const pos = sampleRiverAt(r, p.pathT);
         const nx = Math.cos(pos.angle + Math.PI / 2);
         const ny = Math.sin(pos.angle + Math.PI / 2);
         const x = pos.x + nx * p.side * halfW;
@@ -546,12 +578,12 @@ function updateAndDrawWaterParticles(dt) {
     }
 
     // --- Pass 4: bank foam bubbles ---
-    for (const p of waterParticles) {
+    for (const p of r.particles) {
         if (p.type !== 3) continue;
         p.pathT += p.speed * dt;
         if (p.pathT > 1) { p.pathT -= 1; p.side = (Math.random() < 0.5 ? -1 : 1) * (0.78 + Math.random() * 0.18); }
 
-        const pos = sampleRiverAt(p.pathT);
+        const pos = sampleRiverAt(r, p.pathT);
         const nx = Math.cos(pos.angle + Math.PI / 2);
         const ny = Math.sin(pos.angle + Math.PI / 2);
         const x = pos.x + nx * p.side * halfW;
@@ -574,9 +606,13 @@ function drawRiver() {
         };
         drawRiverBody(preview, true);
     }
-    if (!river || river.pts.length < 2) return;
-    if (riverSamples.length === 0) buildRiverSamples();
-    if (waterParticles.length === 0) generateWaterParticles();
-    drawRiverBody(river, false);
-    updateAndDrawWaterParticles(1 / 60);
+    if (rivers.length === 0) return;
+    buildRiverSamples(); // lazy-init any missing samples
+    generateWaterParticles(); // lazy-init any missing particles
+    for (const r of rivers) {
+        if (r.pts.length >= 2) {
+            drawRiverBody(r, false);
+            updateAndDrawWaterParticlesForRiver(r, 1 / 60);
+        }
+    }
 }
