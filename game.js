@@ -8,6 +8,18 @@ let roundStarted = false;
 let isDrawingRiver = false;
 let notification = null;
 
+// ---- Animated money display ----
+let displayMoney = 0;
+let moneyPulseTimer = 0;
+let cachedIncomePerSec = 0;
+let incomeUpdateTimer = 0;
+
+// ---- Confirm purchase modal ----
+let pendingPurchase = null; // upgrade id string or null
+
+// ---- Celebration banner ----
+let celebration = null; // { text, subtext, timer, maxTimer }
+
 // ---- Collection burst effects ----
 const collectBursts = [];
 function spawnCollectBurst(x, y) {
@@ -210,6 +222,11 @@ function handleShopTouchEnd(sx, sy) {
     // Close button
     const sb = shopBtnRect();
     if (hitBtn(sx, sy, sb.x, sb.y, sb.w, sb.h)) { state = 'play'; return; }
+    // Confirm modal is open — check its buttons instead
+    if (pendingPurchase) {
+        handleConfirmModalTouchEnd(sx, sy);
+        return;
+    }
     // If the touch was a scroll gesture, don't process taps
     if (touch.moved) return;
     // Find the card that was tapped
@@ -218,17 +235,54 @@ function handleShopTouchEnd(sx, sy) {
     for (const tier of UPGRADE_TIERS) {
         y += headerH;
         for (const key of tier.keys) {
-            const u = UPGRADES[key];
             if (!isUpgradeVisible(key)) { continue; }
             if (sy >= y && sy <= y + cardH) {
                 const btnX = W() - 20 - 110;
                 if (sx >= btnX && canAfford(key)) {
-                    if (buyUpgrade(key)) notify(u.label + (u.maxLevel === 1 ? ' unlocked!' : ' upgraded'));
+                    // Open confirm modal instead of buying immediately
+                    pendingPurchase = key;
+                    return;
                 }
             }
             y += cardH + gap;
         }
         y += 6;
+    }
+}
+
+function handleConfirmModalTouchEnd(sx, sy) {
+    const cw = Math.min(W() - 32, 340);
+    const ch = 280;
+    const cx = (W() - cw) / 2;
+    const cy = (H() - ch) / 2;
+    const btnW = cw * 0.42, btnH = 46;
+    const btnY = cy + ch - btnH - 16;
+    // Cancel
+    if (hitBtn(sx, sy, cx + 12, btnY, btnW, btnH)) {
+        pendingPurchase = null;
+        return;
+    }
+    // Buy
+    if (hitBtn(sx, sy, cx + cw - btnW - 12, btnY, btnW, btnH)) {
+        const id = pendingPurchase;
+        pendingPurchase = null;
+        if (buyUpgrade(id)) {
+            const u = UPGRADES[id];
+            moneyPulseTimer = 1;
+            // Celebration for tree unlocks
+            if (u.isTree) {
+                const tree = TREE_DATA[id];
+                const justUnlocked = tree && tree[u.level - 1];
+                if (justUnlocked) {
+                    celebration = {
+                        text: justUnlocked.label + ' Unlocked!',
+                        subtext: u.label + ' \u2014 level ' + u.level,
+                        timer: 2.5, maxTimer: 2.5
+                    };
+                }
+            }
+            notify(u.label + (u.maxLevel === 1 ? ' unlocked!' : ' upgraded'));
+        }
     }
 }
 
@@ -255,8 +309,22 @@ function resetAllProgress() {
 
 // ---- HUD helpers ----
 function drawHud() {
-    // Money pill
+    // Animate display money toward real money
+    if (displayMoney < money) {
+        const diff = money - displayMoney;
+        displayMoney += Math.max(0.5, diff * 0.12);
+        if (displayMoney > money) displayMoney = money;
+    } else {
+        displayMoney = money;
+    }
+
+    // Money pill (pulses on income)
     const mp = moneyPillRect();
+    const pulseScale = 1 + moneyPulseTimer * 0.08;
+    ctx.save();
+    ctx.translate(mp.x + mp.w / 2, mp.y + mp.h / 2);
+    ctx.scale(pulseScale, pulseScale);
+    ctx.translate(-(mp.x + mp.w / 2), -(mp.y + mp.h / 2));
     drawParchmentPill(mp.x, mp.y, mp.w, mp.h, mp.h / 2);
     ctx.fillStyle = PALETTE.money;
     ctx.beginPath();
@@ -273,7 +341,16 @@ function drawHud() {
     ctx.fillStyle = PALETTE.text;
     ctx.font = 'bold 17px -apple-system,sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('$' + money, mp.x + 36, mp.y + mp.h / 2 + 1);
+    ctx.fillText('$' + Math.floor(displayMoney), mp.x + 36, mp.y + mp.h / 2 + 1);
+    ctx.restore();
+
+    // $/sec rate below money pill
+    if (roundStarted && cachedIncomePerSec > 0.01) {
+        ctx.fillStyle = 'rgba(200, 160, 79, 0.85)';
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('$' + cachedIncomePerSec.toFixed(1) + '/s', mp.x + 4, mp.y + mp.h + 12);
+    }
 
     // Rock inventory pill (only while you have rocks)
     if (rockInventory > 0) {
@@ -620,6 +697,9 @@ function drawShop() {
     ctx.textAlign = 'center';
     ctx.fillText('\u00d7', sb.x + sb.w / 2, sb.y + sb.h / 2);
 
+    // Active multipliers breakdown
+    drawMultiplierBreakdown();
+
     // Scrollable card area (clipped below the header)
     ctx.save();
     ctx.beginPath();
@@ -739,6 +819,176 @@ function drawShop() {
     }
 
     ctx.restore();
+    drawConfirmModal();
+}
+
+// ---- Confirm purchase modal ----
+function drawConfirmModal() {
+    if (!pendingPurchase) return;
+    const preview = getUpgradePreview(pendingPurchase);
+    if (!preview) { pendingPurchase = null; return; }
+
+    // Dim overlay
+    ctx.fillStyle = 'rgba(10, 20, 6, 0.7)';
+    ctx.fillRect(0, 0, W(), H());
+
+    const cw = Math.min(W() - 32, 340);
+    const ch = 280;
+    const cx = (W() - cw) / 2;
+    const cy = (H() - ch) / 2;
+
+    // Parchment card
+    ctx.fillStyle = 'rgba(248, 232, 198, 0.97)';
+    roundRect(cx, cy, cw, ch, 20);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60, 36, 18, 0.6)';
+    ctx.lineWidth = 1.5;
+    roundRect(cx, cy, cw, ch, 20);
+    ctx.stroke();
+
+    // Title
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 19px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(preview.name + ' LV ' + preview.level + ' \u2192 ' + (preview.level + 1), cx + cw / 2, cy + 30);
+
+    // Description
+    ctx.fillStyle = PALETTE.textSoft;
+    ctx.font = '12px -apple-system,sans-serif';
+    ctx.fillText(preview.desc, cx + cw / 2, cy + 54);
+
+    let infoY = cy + 80;
+
+    if (preview.type === 'stat' && preview.statLabel) {
+        // Current → After stat
+        ctx.fillStyle = PALETTE.text;
+        ctx.font = '13px -apple-system,sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(preview.statLabel + ':', cx + 24, infoY);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(140, 100, 40, 0.9)';
+        ctx.fillText(preview.current + '  \u2192  ' + preview.after, cx + cw - 24, infoY);
+        infoY += 24;
+        // Income change
+        if (preview.incomeNow !== undefined) {
+            ctx.textAlign = 'left';
+            ctx.fillStyle = PALETTE.text;
+            ctx.fillText('Est. income:', cx + 24, infoY);
+            ctx.textAlign = 'right';
+            const incChange = preview.incomeAfter - preview.incomeNow;
+            ctx.fillStyle = incChange > 0 ? '#5a8a3a' : PALETTE.textSoft;
+            ctx.fillText('$' + preview.incomeNow.toFixed(1) + '/s  \u2192  $' + preview.incomeAfter.toFixed(1) + '/s', cx + cw - 24, infoY);
+            infoY += 24;
+        }
+    } else if (preview.type === 'tree') {
+        ctx.fillStyle = PALETTE.text;
+        ctx.font = 'bold 15px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Unlocks: ' + preview.nextLabel, cx + cw / 2, infoY + 6);
+        infoY += 34;
+    } else if (preview.type === 'prestige') {
+        ctx.fillStyle = PALETTE.text;
+        ctx.font = '13px -apple-system,sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('Permanent multiplier:', cx + 24, infoY);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#8a6add';
+        ctx.fillText(preview.currentMult + '  \u2192  ' + preview.afterMult, cx + cw - 24, infoY);
+        infoY += 24;
+    }
+
+    // Warning
+    if (preview.warning) {
+        ctx.fillStyle = PALETTE.danger;
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('\u26a0 ' + preview.warning, cx + cw / 2, infoY + 6);
+        infoY += 24;
+    }
+
+    // Cost
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Cost: $' + preview.cost, cx + cw / 2, infoY + 14);
+
+    // Buttons
+    const btnW = cw * 0.42, btnH = 46;
+    const btnY = cy + ch - btnH - 16;
+    // Cancel
+    ctx.fillStyle = 'rgba(40, 24, 10, 0.08)';
+    roundRect(cx + 12, btnY, btnW, btnH, btnH / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60, 36, 18, 0.45)';
+    ctx.lineWidth = 1;
+    roundRect(cx + 12, btnY, btnW, btnH, btnH / 2);
+    ctx.stroke();
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.fillText('Cancel', cx + 12 + btnW / 2, btnY + btnH / 2 + 1);
+    // Buy
+    ctx.fillStyle = PALETTE.money;
+    roundRect(cx + cw - btnW - 12, btnY, btnW, btnH, btnH / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80, 50, 10, 0.55)';
+    ctx.lineWidth = 1.5;
+    roundRect(cx + cw - btnW - 12, btnY, btnW, btnH, btnH / 2);
+    ctx.stroke();
+    ctx.fillStyle = '#1f120a';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.fillText('Buy $' + preview.cost, cx + cw - 12 - btnW / 2, btnY + btnH / 2 + 1);
+}
+
+// ---- Celebration banner (species unlocks) ----
+function drawCelebration(dt) {
+    if (!celebration) return;
+    celebration.timer -= dt;
+    if (celebration.timer <= 0) { celebration = null; return; }
+    const a = Math.min(1, celebration.timer / 0.5, (celebration.maxTimer - celebration.timer + 0.3) / 0.3);
+    // Full-width banner
+    const bh = 80;
+    const by = H() / 2 - bh / 2;
+    ctx.fillStyle = 'rgba(10, 20, 6, ' + (0.85 * a) + ')';
+    ctx.fillRect(0, by, W(), bh);
+    ctx.strokeStyle = 'rgba(200, 160, 79, ' + (0.7 * a) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, by); ctx.lineTo(W(), by);
+    ctx.moveTo(0, by + bh); ctx.lineTo(W(), by + bh);
+    ctx.stroke();
+    // Main text
+    ctx.fillStyle = 'rgba(255, 216, 100, ' + a + ')';
+    ctx.font = 'bold 24px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(celebration.text, W() / 2, by + bh / 2 - 10);
+    // Sub text
+    ctx.fillStyle = 'rgba(245, 232, 198, ' + (a * 0.75) + ')';
+    ctx.font = '13px -apple-system,sans-serif';
+    ctx.fillText(celebration.subtext, W() / 2, by + bh / 2 + 16);
+}
+
+// ---- Multiplier breakdown in shop header ----
+function drawMultiplierBreakdown() {
+    const breakdown = getMultiplierBreakdown();
+    let x = 20;
+    const y = 52;
+    ctx.font = '10px -apple-system,sans-serif';
+    ctx.textBaseline = 'middle';
+    for (const b of breakdown) {
+        if (b.val <= 1.001) continue;
+        ctx.fillStyle = 'rgba(245, 232, 198, 0.45)';
+        ctx.textAlign = 'left';
+        const text = b.label + ' \u00d7' + b.val.toFixed(2);
+        const tw = ctx.measureText(text).width + 12;
+        roundRect(x, y, tw, 16, 8);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(245, 232, 198, 0.8)';
+        ctx.fillText(text, x + 6, y + 9);
+        x += tw + 4;
+        if (x > W() - 80) break;
+    }
 }
 
 // ---- Main loop ----
@@ -748,6 +998,15 @@ function loop() {
     let dt = (now - lastT) / 1000;
     lastT = now;
     if (dt > 0.05) dt = 0.05;
+
+    // Update income rate cache every 0.5s
+    incomeUpdateTimer -= dt;
+    if (incomeUpdateTimer <= 0) {
+        cachedIncomePerSec = typeof getTotalIncomePerSec === 'function' ? getTotalIncomePerSec() : 0;
+        incomeUpdateTimer = 0.5;
+    }
+    // Decay money pulse
+    if (moneyPulseTimer > 0) moneyPulseTimer = Math.max(0, moneyPulseTimer - dt * 4);
 
     if (state === 'play') {
         tickSpawn(dt);
@@ -761,6 +1020,7 @@ function loop() {
             }
         }
         drawPlay(dt);
+        drawCelebration(dt);
     } else if (state === 'menu') {
         drawMenu();
     } else if (state === 'shop') {

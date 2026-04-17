@@ -282,8 +282,8 @@ function drawLilypadAnimal(x, y, angle, typeId) {
 function drawSwimmer(x, y, angle, typeId) {
     const colors = ANIMAL_COLORS[typeId] || ANIMAL_COLORS.fish;
     const scale = getViewScale();
-    const len = 10 * scale;
-    const wid = 5 * scale;
+    const len = 14 * scale;
+    const wid = 7 * scale;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);

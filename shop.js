@@ -308,6 +308,73 @@ function checkMilestones() {
     }
 }
 
+// ---- Total income rate (for HUD display) ----
+function getTotalIncomePerSec() {
+    return estimateIncomePerSec() + getPassiveIncomePerSec();
+}
+
+// ---- Upgrade preview (current → after for confirm modal) ----
+function getUpgradePreview(id) {
+    const u = UPGRADES[id];
+    if (!u) return null;
+    const cost = upgradeCost(id);
+    const res = { name: u.label, desc: u.desc, cost, level: u.level, maxLevel: u.maxLevel };
+
+    if (u.isTree) {
+        res.type = 'tree';
+        const info = getTreeNextInfo(id);
+        res.nextLabel = info && !info.done ? info.label : 'All discovered';
+        res.done = !!(info && info.done);
+        return res;
+    }
+    if (id === 'prestige') {
+        res.type = 'prestige';
+        res.currentMult = getPrestigeMultiplier().toFixed(2) + '\u00d7';
+        res.afterMult = Math.pow(1.5, prestigeLevel + 1).toFixed(2) + '\u00d7';
+        res.warning = 'Resets money, river, and all upgrades';
+        return res;
+    }
+
+    res.type = 'stat';
+    const pairs = {
+        koiValue:      ['Koi multiplier',     () => getKoiMultiplier().toFixed(2) + '\u00d7',     () => Math.pow(1.15, u.level + 1).toFixed(2) + '\u00d7'],
+        spawnRate:     ['Spawn interval',      () => spawnInterval().toFixed(1) + 's',             () => { const o = u.level; u.level++; const v = spawnInterval().toFixed(1) + 's'; u.level = o; return v; }],
+        flowMult:      ['Flow coefficient',    () => getFlowCoefficient().toFixed(2) + '/s',       () => (0.3 * Math.pow(1.12, u.level + 1)).toFixed(2) + '/s'],
+        goldenCurrent: ['Golden multiplier',   () => getGoldenMultiplier().toFixed(2) + '\u00d7',  () => Math.pow(1.10, u.level + 1).toFixed(2) + '\u00d7'],
+        gardenHarmony: ['Harmony multiplier',  () => getHarmonyMultiplier().toFixed(2) + '\u00d7', () => Math.pow(1.08, u.level + 1).toFixed(2) + '\u00d7'],
+        doubleSpawn:   ['Double spawn chance',  () => (getDoubleSpawnChance() * 100).toFixed(0) + '%', () => ((u.level + 1) * 15) + '%'],
+        swiftCurrent:  ['Speed multiplier',    () => getSpeedMultiplier().toFixed(2) + '\u00d7',   () => (1 + (u.level + 1) * 0.08).toFixed(2) + '\u00d7'],
+        widerRiver:    ['Width bonus',         () => Math.round(getRiverWidthBonus() * 100) + '%', () => Math.round((1 + (u.level + 1) * 0.15) * 100) + '%'],
+        expandGarden:  ['View scale',          () => Math.round(getViewScale() * 100) + '%',       () => Math.round(Math.max(45, Math.pow(0.82, u.level + 1) * 100)) + '%'],
+        rock:          ['Rock inventory',      () => '' + rockInventory,                            () => '' + (rockInventory + 1)],
+    };
+    const p = pairs[id];
+    if (p) {
+        res.statLabel = p[0];
+        res.current = p[1]();
+        res.after = p[2]();
+    }
+    if (id === 'expandGarden') res.warning = 'Forces a river redraw';
+
+    // Estimated income change
+    res.incomeNow = getTotalIncomePerSec();
+    const saved = u.level; u.level++; syncAnimalWeights();
+    res.incomeAfter = getTotalIncomePerSec();
+    u.level = saved; syncAnimalWeights();
+
+    return res;
+}
+
+// ---- Multiplier stack breakdown (for shop stats display) ----
+function getMultiplierBreakdown() {
+    return [
+        { label: 'Koi Value',      val: getKoiMultiplier() },
+        { label: 'Golden Current',  val: getGoldenMultiplier() },
+        { label: 'Garden Harmony',  val: getHarmonyMultiplier() },
+        { label: 'Prestige',        val: getPrestigeMultiplier() },
+    ];
+}
+
 // ---- Offline earnings ----
 let lastPlayTime = Date.now();
 function calcOfflineEarnings(elapsedMs) {
@@ -322,6 +389,7 @@ function onAnimalCollected(a) {
     money += payout;
     totalEarned += payout;
     checkMilestones();
+    if (typeof moneyPulseTimer !== 'undefined') moneyPulseTimer = 0.8;
     saveGame();
     if (typeof spawnCollectBurst === 'function') {
         const p = pointAtPathT(river, 1);
