@@ -1,24 +1,20 @@
 # Zen River
 
-A top-down ASMR idle game. Draw a river from the spring at the top to the pond at the bottom, then watch koi glide down it. Each koi earns money based on how long it was in the river — longer, windier rivers mean bigger payouts.
+A top-down ASMR idle game set in a Japanese zen garden. Draw a river from the spring to the pond, watch koi and wildlife flow down it, and earn money based on how long each creature stays in the water. Spend earnings on multiplicative upgrades across 8 progression tiers, unlock rare species, place obstacles to extend flow time, and eventually prestige for a permanent multiplier.
 
 ## Branch Layout
 
 This repository hosts multiple parallel games on separate branches:
 
 - `claude/create-iphone-game-u21nY` — **Golf Tycoon**
-- `claude/asmr-marble-run` — **Marble Flow** (ASMR bouncing marble version)
+- `claude/asmr-marble-run` — **Marble Flow** (bouncing marble version)
 - `claude/zen-river` — **Zen River** (this game)
-
-Each branch has its own `index.html` and its own JS modules. They do not share code.
 
 ## Running
 
-Open `index.html` in any modern mobile browser, or use a local HTTP server:
-
 ```
 python3 -m http.server 8000
-# then visit http://localhost:8000
+# visit http://localhost:8000
 ```
 
 No build step, no dependencies — plain HTML5 canvas + JavaScript.
@@ -27,61 +23,75 @@ No build step, no dependencies — plain HTML5 canvas + JavaScript.
 
 ```
 index.html   Mobile shell, canvas, script tags
-engine.js    Canvas, input, zen garden palette, background, save/load helpers
+engine.js    Canvas, input, zen garden palette, background with moss + maple silhouettes
 river.js     River polyline drawing + rendering, source spring, outlet pond
-flow.js      Animal spawning, parametric flow along the river, rocks, payout
-shop.js      Money, upgrades, save format
-game.js      Main loop, state machine, menu / play / shop / reset screens
+flow.js      Animal spawning, parametric flow, obstacles, per-species rendering
+shop.js      16 upgrades across 8 tiers, 5 rarity trees, prestige, offline earnings
+game.js      Main loop, menu / play / shop / reset screens, HUD, milestone system
 ```
 
 ## Core Loop
 
-1. **Draw the river** — press inside the spring opening at the top, drag in one fluid motion through the garden, release when you reach the pond at the bottom.
-2. **Test Flow** — spawn a single glowing droplet to see how long your river takes. Iterate as many times as you want before committing.
-3. **Start Round** — koi begin spawning from the spring and flow along your river. Each koi that reaches the pond pays out based on how long it was on the river.
-4. **Upgrade** — spend earnings on spawn rate, koi value, flow multiplier, rocks (obstacles that slow koi down and extend flow time), and eventually **Expand Garden** — the big-ticket upgrade that scales the whole garden down, giving you more drawing room and forcing you to redraw.
+1. **Draw the river** — drag from spring to pond in one motion
+2. **Test Flow** — send a droplet to measure travel time
+3. **Start Round** — koi begin spawning and flowing
+4. **Earn money** — each creature pays `base × koiMult × flowBonus × goldenCurrent × gardenHarmony × prestige`
+5. **Upgrade** — spend on 8 tiers of multiplicative upgrades
+6. **Hit a wall** — progress slows, new tier of upgrades becomes visible
+7. **Prestige** — reset for a permanent 1.5× compound multiplier, blast through early game faster
 
 ## Controls
 
-- **Drag from spring to pond** — draw the river (one continuous motion)
-- **Draw Again** — wipe the river and try another route
-- **Test Flow** — send one droplet to measure flow time
-- **Start Round** — lock in the river and start earning
-- **⚙ Shop** — buy upgrades
-- **⌂ Home** — return to the main menu
-- **Tap the river with a rock in inventory** — place a rock obstacle
+- **Drag from spring to pond** — draw the river
+- **Draw Again** — wipe and redraw before starting
+- **Test Flow** — one glowing droplet, shows travel time
+- **Start Round** — lock the river, animals begin flowing
+- **Tap river with rock inventory** — place an obstacle
+- **⚙ Shop** — buy upgrades across 8 tiers
+- **⌂ Home** — return to menu
 
-## Animals
+## Upgrade Tiers (8 tiers, 16 cards, 25 tree levels)
 
-MVP ships with **koi** as the only real sprite. Placeholders exist in `ANIMAL_TYPES` for future species:
+| Tier | Upgrades | Mechanic |
+|---|---|---|
+| Basics | Koi Value (×1.15/lvl), Spawn Rate, Flow Bonus (×1.12/lvl) | Multiplicative income layers |
+| River | Wider River (+15%/lvl), Expand Garden (zoom out + redraw) | River scaling |
+| Wildlife | Fish Tree (5 species), Lily Pad Tree (5 species) | Rarity + value escalation |
+| Obstacles | Rock (+1 to place), Obstacle Tree (5 levels) | Stronger slowdowns per level |
+| Garden | Garden Beauty (5 levels, passive $/s), More Springs (5 levels) | Passive income + spawn multiplier |
+| Advanced | Twin Springs (double spawn), Golden Current (×1.10), Swift Current | Meta-bonuses |
+| Harmony | Garden Harmony (×1.08 to ALL income) | Meta-multiplier layer |
+| Zen Mastery | Prestige (×1.5 compound reset) | Endgame loop |
 
-- Frog
-- Turtle (slow, valuable — long flow time bonus)
-- Lily pad passenger
-- Rare visitor (big animal event)
+## Wildlife Trees
 
-Each future species will get its own sprite and spawn weighting in later commits.
+### Fish (swimmers — koi-shaped, per-species colors)
+| LV | Species | Value | Spawn weight |
+|---|---|---|---|
+| 1 | Goldfish | 2× | 35% |
+| 2 | Catfish | 5× | 15% |
+| 3 | Dragon Fish | 12× | 6% |
+| 4 | Golden Koi | 30× | 2.5% |
+| 5 | Spirit Fish | 80× | 1% |
 
-## Upgrades
+### Lily Pad (riders — green pad + colored blob)
+| LV | Species | Value | Spawn weight |
+|---|---|---|---|
+| 1 | Frog | 3× | 28% |
+| 2 | Turtle | 8× | 12% |
+| 3 | Duck | 15× | 6% |
+| 4 | Crane | 40× | 2% |
+| 5 | Panda | 100× | 0.8% |
 
-| Upgrade | Effect |
-|---|---|
-| Koi Value | +1 base payout per koi |
-| Spawn Rate | Faster spawn interval |
-| Flow Multiplier | +0.1 per-second bonus |
-| Place Rock | +1 rock in inventory to place on the river |
-| Expand Garden | Scales the garden down for more room, forces a redraw (expensive) |
+## Art Style
+
+Inspired by Japanese zen gardens — lush mossy greens, basalt stones with moss caps, fiery autumn Japanese maple silhouettes, turquoise flowing water with cross-stream ripples and foam flecks, koi pond with lily pads, parchment HUD with deep brown ink text.
 
 ## Roadmap
 
-1. **Audio** — water babbling, koto ambient loop, soft chime on collection, splash on rock placement
-2. **More animals** — wire up the placeholder species with unique sprites and behaviours
-3. **Campaign mode** — preset levels with fixed animal counts, score = money earned converted to points, star ratings
-4. **Offline earnings** — idle ticker runs while the tab is closed
-5. **Themes** — dusk, autumn (more maple leaves), winter snow, cherry blossom spring
-6. **More obstacles** — logs, lily pads that carry animals for a bonus, reeds that split flow
-7. **Prestige** — reset for a permanent multiplier, zen-themed progression metaphor
-
-## Current Status
-
-Work-in-progress. The rendering, physics, shop, and save systems are in place; `game.js` (main loop and screens) is still being written and will land in a follow-up commit.
+1. Audio — water babbling, koto ambient, chime on collection
+2. Campaign mode — preset levels, score = money earned
+3. Visual upgrades — animate Garden Beauty decorations on the board
+4. Themes — dusk, cherry blossom, winter snow, night fireflies
+5. More obstacle types — visual variety per obstacle tree level
+6. Achievement system — one-time bonuses for milestones
