@@ -1,11 +1,14 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/river_drawer.gd" id="2"]
-[ext_resource type="Shader" path="res://shaders/water_flow.gdshader" id="3"]
+[ext_resource type="Script" path="res://scripts/background.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/spring_pond.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/river_drawer.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/flow_manager.gd" id="5"]
+[ext_resource type="Shader" path="res://shaders/water_flow.gdshader" id="6"]
 
 [sub_resource type="ShaderMaterial" id="water_mat"]
-shader = ExtResource("3")
+shader = ExtResource("6")
 shader_parameter/deep_color = Color(0.055, 0.125, 0.19, 1)
 shader_parameter/surface_color = Color(0.27, 0.58, 0.71, 1)
 shader_parameter/highlight_color = Color(0.65, 0.85, 0.92, 1)
@@ -19,19 +22,17 @@ shader_parameter/caustic_speed = 0.08
 shader_parameter/edge_foam_width = 0.12
 shader_parameter/depth_gradient = 0.6
 
-[sub_resource type="Environment" id="env"]
-
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
 
-[node name="Background" type="ColorRect" parent="."]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-color = Color(0.298, 0.478, 0.227, 1)
+[node name="Background" type="Node2D" parent="."]
+script = ExtResource("2")
+
+[node name="SpringPond" type="Node2D" parent="."]
+script = ExtResource("3")
 
 [node name="RiverDrawer" type="Node2D" parent="."]
-script = ExtResource("2")
+script = ExtResource("4")
 
 [node name="RiverPolygon" type="Polygon2D" parent="RiverDrawer"]
 material = SubResource("water_mat")
@@ -48,14 +49,147 @@ width = 2.5
 begin_cap_mode = 1
 end_cap_mode = 1
 
-[node name="Animals" type="Node2D" parent="."]
+[node name="FlowManager" type="Node2D" parent="."]
+script = ExtResource("5")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 layer = 10
 
 [node name="MoneyLabel" type="Label" parent="HUD"]
 offset_left = 14.0
-offset_top = 12.0
-offset_right = 200.0
+offset_top = 14.0
+offset_right = 180.0
 offset_bottom = 50.0
+theme_override_colors/font_color = Color(0.16, 0.09, 0.04, 1)
+theme_override_font_sizes/font_size = 22
 text = "$0"
+
+[node name="IncomeLabel" type="Label" parent="HUD"]
+offset_left = 14.0
+offset_top = 48.0
+offset_right = 140.0
+offset_bottom = 68.0
+theme_override_colors/font_color = Color(0.78, 0.63, 0.31, 0.85)
+theme_override_font_sizes/font_size = 13
+text = "$0.0/s"
+visible = false
+
+[node name="HomeBtn" type="Button" parent="HUD"]
+offset_left = 290.0
+offset_top = 10.0
+offset_right = 336.0
+offset_bottom = 50.0
+text = "⌂"
+
+[node name="ShopBtn" type="Button" parent="HUD"]
+offset_left = 340.0
+offset_top = 10.0
+offset_right = 386.0
+offset_bottom = 50.0
+text = "⚙"
+
+[node name="DrawAgainBtn" type="Button" parent="HUD"]
+offset_left = 14.0
+offset_top = 780.0
+offset_right = 130.0
+offset_bottom = 826.0
+text = "Draw Again"
+visible = false
+
+[node name="TestFlowBtn" type="Button" parent="HUD"]
+offset_left = 140.0
+offset_top = 780.0
+offset_right = 256.0
+offset_bottom = 826.0
+text = "Test Flow"
+visible = false
+
+[node name="StartRoundBtn" type="Button" parent="HUD"]
+offset_left = 266.0
+offset_top = 780.0
+offset_right = 382.0
+offset_bottom = 826.0
+text = "Start Round"
+visible = false
+
+[node name="NotificationLabel" type="Label" parent="HUD"]
+offset_left = 40.0
+offset_top = 70.0
+offset_right = 350.0
+offset_bottom = 100.0
+theme_override_colors/font_color = Color(0.96, 0.91, 0.77, 1)
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
+text = ""
+visible = false
+
+[node name="MenuLayer" type="CanvasLayer" parent="."]
+layer = 20
+
+[node name="MenuBg" type="ColorRect" parent="MenuLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.18, 0.30, 0.10, 0.92)
+
+[node name="TitleLabel" type="Label" parent="MenuLayer"]
+offset_left = 40.0
+offset_top = 300.0
+offset_right = 350.0
+offset_bottom = 360.0
+theme_override_colors/font_color = Color(0.96, 0.91, 0.77, 1)
+theme_override_font_sizes/font_size = 40
+horizontal_alignment = 1
+text = "Zen River"
+
+[node name="SubtitleLabel" type="Label" parent="MenuLayer"]
+offset_left = 40.0
+offset_top = 360.0
+offset_right = 350.0
+offset_bottom = 390.0
+theme_override_colors/font_color = Color(0.96, 0.91, 0.77, 0.7)
+theme_override_font_sizes/font_size = 15
+horizontal_alignment = 1
+text = "— a flowing garden —"
+
+[node name="BeginBtn" type="Button" parent="MenuLayer"]
+offset_left = 80.0
+offset_top = 460.0
+offset_right = 310.0
+offset_bottom = 518.0
+theme_override_font_sizes/font_size = 22
+text = "Begin"
+
+[node name="ResetBtn" type="Button" parent="MenuLayer"]
+offset_left = 120.0
+offset_top = 760.0
+offset_right = 270.0
+offset_bottom = 798.0
+theme_override_font_sizes/font_size = 13
+text = "Reset Progress"
+
+[node name="ShopLayer" type="CanvasLayer" parent="."]
+layer = 15
+visible = false
+
+[node name="ShopBg" type="ColorRect" parent="ShopLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.04, 0.08, 0.02, 0.85)
+
+[node name="ShopTitle" type="Label" parent="ShopLayer"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 200.0
+offset_bottom = 60.0
+theme_override_colors/font_color = Color(0.96, 0.91, 0.77, 1)
+theme_override_font_sizes/font_size = 24
+text = "Shop"
+
+[node name="ShopCloseBtn" type="Button" parent="ShopLayer"]
+offset_left = 330.0
+offset_top = 14.0
+offset_right = 380.0
+offset_bottom = 54.0
+text = "×"
