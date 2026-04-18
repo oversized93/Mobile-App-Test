@@ -12,6 +12,7 @@ var spawn_timer: float = 1.0
 var river_drawer: Node2D = null  # set by main.gd
 var test_droplet_t: float = -1.0
 var test_droplet_time: float = 0.0
+var rocks: Array = []  # [{ "path_t": float }, ...]
 
 signal animal_reached_pond(animal_type: String, base_value: float, flow_time: float)
 signal test_flow_complete(flow_time: float)
@@ -100,12 +101,24 @@ func _process(delta: float):
 
 	for child in get_children():
 		if child is Node2D and child.has_method("update_flow"):
-			child.update_flow(delta, river_len, speed_mult)
-			# Get river position for this animal
+			# Apply rock slowdown
+			var effective_mult = speed_mult
+			for rock in rocks:
+				var obs_range = 0.035
+				var obs_slow = 0.35
+				# Use best obstacle from obstacle tree
+				var obs_lvl = GameData.tree_levels.get("obstacle", 0)
+				if obs_lvl > 0 and obs_lvl <= GameData.obstacle_tree.size():
+					var obs = GameData.obstacle_tree[obs_lvl - 1]
+					obs_range = obs["range"]
+					obs_slow = obs["slow"]
+				if abs(child.path_t - rock["path_t"]) < obs_range:
+					effective_mult *= obs_slow
+					break
+			child.update_flow(delta, river_len, effective_mult)
 			var sample = river_drawer.sample_point(child.path_t)
 			child.update_render(sample["pos"], sample["angle"], river_drawer.get_river_width())
 			child.queue_redraw()
-			# Check if reached the pond
 			if child.path_t >= 1.0:
 				var payout = GameData.collect_animal(child.base_value, child.flow_time)
 				child.queue_free()
@@ -143,3 +156,4 @@ func clear_all():
 		child.queue_free()
 	spawn_timer = 1.0
 	test_droplet_t = -1.0
+	rocks.clear()

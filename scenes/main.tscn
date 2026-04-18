@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/background.gd" id="2"]
@@ -6,6 +6,9 @@
 [ext_resource type="Script" path="res://scripts/river_drawer.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/flow_manager.gd" id="5"]
 [ext_resource type="Shader" path="res://shaders/water_flow.gdshader" id="6"]
+[ext_resource type="Script" path="res://scripts/effects.gd" id="7"]
+[ext_resource type="Script" path="res://scripts/shop_ui.gd" id="8"]
+[ext_resource type="Script" path="res://scripts/reset_confirm.gd" id="9"]
 
 [sub_resource type="ShaderMaterial" id="water_mat"]
 shader = ExtResource("6")
@@ -51,6 +54,11 @@ end_cap_mode = 1
 
 [node name="FlowManager" type="Node2D" parent="."]
 script = ExtResource("5")
+
+[node name="Obstacles" type="Node2D" parent="."]
+
+[node name="Effects" type="Node2D" parent="."]
+script = ExtResource("7")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 layer = 10
@@ -178,6 +186,12 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 color = Color(0.04, 0.08, 0.02, 0.85)
 
+[node name="ShopControl" type="Control" parent="ShopLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("8")
+
 [node name="ShopTitle" type="Label" parent="ShopLayer"]
 offset_left = 20.0
 offset_top = 20.0
@@ -193,3 +207,13 @@ offset_top = 14.0
 offset_right = 380.0
 offset_bottom = 54.0
 text = "×"
+
+[node name="ResetLayer" type="CanvasLayer" parent="."]
+layer = 25
+visible = false
+
+[node name="ResetControl" type="Control" parent="ResetLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("9")

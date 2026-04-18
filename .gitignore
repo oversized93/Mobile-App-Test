@@ -1,0 +1,11 @@
+# Godot import cache
+.godot/
+
+# Export builds
+export/
+*.pck
+*.zip
+
+# OS files
+.DS_Store
+Thumbs.db

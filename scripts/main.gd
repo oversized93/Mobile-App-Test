@@ -22,7 +22,12 @@ var current_state: State = State.MENU
 @onready var menu_reset_btn: Button = $MenuLayer/ResetBtn
 @onready var menu_title: Label = $MenuLayer/TitleLabel
 @onready var shop_layer: CanvasLayer = $ShopLayer
+@onready var shop_ui: Control = $ShopLayer/ShopControl
 @onready var notification_label: Label = $HUD/NotificationLabel
+@onready var effects: Node2D = $Effects
+@onready var obstacles_node: Node2D = $Obstacles
+@onready var reset_layer: CanvasLayer = $ResetLayer
+@onready var reset_confirm: Control = $ResetLayer/ResetControl
 
 var display_money: float = 0.0
 var income_update_timer: float = 0.0
@@ -49,6 +54,11 @@ func _ready():
 	if start_round_btn: start_round_btn.pressed.connect(_on_start_round)
 	if menu_begin_btn: menu_begin_btn.pressed.connect(_on_menu_begin)
 	if menu_reset_btn: menu_reset_btn.pressed.connect(func(): _change_state(State.RESET_CONFIRM))
+	if shop_ui: shop_ui.close_requested.connect(func(): _change_state(State.PLAY_RUNNING if GameData.round_started else State.PLAY_PREROUND))
+	if shop_ui: shop_ui.purchase_confirmed.connect(_on_shop_purchase)
+	if reset_confirm:
+		reset_confirm.confirmed.connect(_on_reset_confirmed)
+		reset_confirm.cancelled.connect(func(): _change_state(State.MENU))
 	# Initial state
 	if GameData.round_started and river_drawer.has_river:
 		_change_state(State.PLAY_RUNNING)
@@ -131,10 +141,8 @@ func _on_touch_start(pos: Vector2):
 			else:
 				_show_notification("Start at the spring")
 		State.PLAY_RUNNING:
-			# Tap to place rock
 			if GameData.rock_inventory > 0 and river_drawer.has_river:
-				# TODO: rock placement
-				pass
+				_try_place_rock(pos)
 
 func _on_touch_move(pos: Vector2):
 	if current_state == State.PLAY_DRAWING and river_drawer.is_drawing:
@@ -175,6 +183,12 @@ func _update_visibility():
 	if menu_layer: menu_layer.visible = current_state == State.MENU
 	# Shop
 	if shop_layer: shop_layer.visible = current_state == State.SHOP
+	# Reset confirm
+	if reset_layer: reset_layer.visible = current_state == State.RESET_CONFIRM
+	# Obstacles
+	if obstacles_node: obstacles_node.visible = is_play
+	# Effects
+	if effects: effects.visible = is_play
 
 # ---- Button callbacks ----
 func _on_menu_begin():
@@ -212,8 +226,10 @@ func _on_milestone(msg: String):
 	_show_notification(msg)
 
 func _on_animal_collected(payout: int, flow_time: float):
-	# TODO: spawn float text + collection burst particles
-	pass
+	if effects and river_drawer.has_river:
+		var end_pos = river_drawer.sample_point(1.0)["pos"]
+		effects.spawn_float_text(end_pos + Vector2(0, -10), "+$%d  %.1fs" % [payout, flow_time])
+		effects.spawn_burst(end_pos)
 
 func _on_upgrade_purchased(id: String):
 	if id == "expand_garden":
@@ -236,3 +252,54 @@ func _show_notification(text: String):
 		notification_label.text = text
 		notification_label.visible = true
 		notification_timer = 2.5
+
+# ---- Rock placement ----
+func _try_place_rock(pos: Vector2):
+	if not river_drawer.has_river or GameData.rock_inventory <= 0:
+		return
+	# Project tap position onto the river to find pathT
+	var best_t = 0.0
+	var best_dist = INF
+	var total_len = river_drawer.get_total_length()
+	# Sample along the river to find closest point
+	for i in range(200):
+		var t = float(i) / 199.0
+		var sample = river_drawer.sample_point(t)
+		var d = pos.distance_to(sample["pos"])
+		if d < best_dist:
+			best_dist = d
+			best_t = t
+	# Must be within the river width
+	if best_dist > river_drawer.get_river_width() * 0.55:
+		return
+	GameData.rock_inventory -= 1
+	var rock = Node2D.new()
+	rock.set_script(preload("res://scripts/rock_obstacle.gd"))
+	rock.setup(best_t, river_drawer)
+	if obstacles_node:
+		obstacles_node.add_child(rock)
+	# Store for flow slowdown
+	flow_manager.rocks.append({ "path_t": best_t })
+	GameData.save_game()
+	_show_notification("Rock placed")
+
+# ---- Shop purchase handler ----
+func _on_shop_purchase(id: String):
+	if id == "expand_garden":
+		river_drawer.clear_river()
+		flow_manager.clear_all()
+		if obstacles_node:
+			for child in obstacles_node.get_children():
+				child.queue_free()
+		_change_state(State.PLAY_DRAWING)
+
+# ---- Reset handler ----
+func _on_reset_confirmed():
+	GameData.reset_all()
+	river_drawer.clear_river()
+	flow_manager.clear_all()
+	if obstacles_node:
+		for child in obstacles_node.get_children():
+			child.queue_free()
+	_change_state(State.MENU)
+	_show_notification("The garden rests")
