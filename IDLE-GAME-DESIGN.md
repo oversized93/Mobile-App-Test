@@ -176,15 +176,38 @@ A well-tuned idle game makes the player feel like they're always *just about* to
 
 ## Current Zen River Implementation Status
 
-| Tenet | Status |
+| Tenet | Status | Details |
+|---|---|---|
+| Core loop | ✅ Fully wired | Generate (koi flow) → spend (shop) → grow (multiplicative upgrades) → repeat |
+| Exponential growth | ✅ 5 multiplier layers | Koi ×1.15, Flow ×1.12, Golden ×1.10, Harmony ×1.08, Prestige ×1.5 — all compound |
+| Exponential costs | ✅ 16 upgrades + 25 tree levels | baseCost × scale^level, plus fixed-cost rarity trees |
+| Walls + breakthroughs | ✅ 7 milestones | Notifications at $50/$200/$1k/$5k/$15k/$30k/$100k. Wildlife trees are breakthroughs. |
+| Prestige | ✅ Zen Mastery | ×1.5 compound, resets all except prestige level. Each run faster than the last. |
+| Layered systems | ✅ 5 income + 5 orthogonal | Income layers compound; obstacle/garden/spawner/speed/twin systems are orthogonal |
+| Controlled acceleration | ✅ Full pacing | Offline earnings (50%), animated $/sec counter, confirm modal with income preview |
+
+### UI Feedback (making the economy visible)
+
+| Feature | Status |
 |---|---|
-| Core loop | ✅ Fully wired |
-| Exponential growth | ✅ All 5 multiplier layers compound |
-| Exponential costs | ✅ baseCost × scale^level across all 16 upgrades |
-| Walls + breakthroughs | ✅ 7 milestone notifications, wildlife trees as breakthroughs |
-| Prestige | ✅ Zen Mastery, 1.5× compound, full reset |
-| Layered systems | ✅ 5 income layers + 5 orthogonal systems |
-| Controlled acceleration | ✅ Offline earnings, tuned base costs, milestone pacing |
+| Animated money counter | ✅ Rolls up smoothly, pulses on collection |
+| Live $/sec display | ✅ Below money pill, updates every 0.5s |
+| Confirm purchase modal | ✅ Current→after stat, estimated income change, Buy/Cancel |
+| Breakthrough celebrations | ✅ Full-width gold banner on wildlife tree unlocks |
+| Multiplier breakdown | ✅ Small pills in shop header showing each active ×multiplier |
+| Prestige preview | ✅ Shows permanent multiplier transition + warning |
+| Milestone notifications | ✅ 7 thresholds with themed messages |
+
+### River System
+
+| Feature | Status |
+|---|---|
+| Chaikin polyline smoothing | ✅ 2 iterations on commit, 1 on draft preview |
+| Filled polygon banks | ✅ Organic wobble shorelines, mossy edge strokes |
+| Water particle system | ✅ 4 layers: surface blobs (additive), streaks, caustics, foam |
+| Self-intersection prevention | ✅ Rejects points within 90% of width of earlier path |
+| Smooth fish movement | ✅ Wide-span angle averaging, position lerping, gentle wobble |
+| Stale cache flush | ✅ Samples + particles rebuild on river clear/commit |
 
 ## Tuning Levers
 
