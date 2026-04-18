@@ -12,8 +12,8 @@ func _draw():
 	var ch = 220
 	var cx = (size.x - cw) / 2
 	var cy = (size.y - ch) / 2
-	draw_rect(Rect2(cx, cy, cw, ch), Color(0.97, 0.91, 0.77, 0.97), true, -1, 20)
-	draw_rect(Rect2(cx, cy, cw, ch), Color(0.24, 0.14, 0.07, 0.6), false, 1.5, 20)
+	draw_rect(Rect2(cx, cy, cw, ch), Color(0.97, 0.91, 0.77, 0.97), true)
+	draw_rect(Rect2(cx, cy, cw, ch), Color(0.24, 0.14, 0.07, 0.6), false, 1.5)
 	# Title
 	draw_string(ThemeDB.fallback_font, Vector2(cx + cw / 2 - 75, cy + 48),
 		"Reset everything?", HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("#2a1810"))
@@ -27,12 +27,12 @@ func _draw():
 	var btn_h = 46
 	var btn_y = cy + ch - btn_h - 16
 	# Cancel
-	draw_rect(Rect2(cx + 12, btn_y, btn_w, btn_h), Color(0.16, 0.09, 0.04, 0.08), true, -1, 23)
-	draw_rect(Rect2(cx + 12, btn_y, btn_w, btn_h), Color(0.24, 0.14, 0.07, 0.45), false, 1, 23)
+	draw_rect(Rect2(cx + 12, btn_y, btn_w, btn_h), Color(0.16, 0.09, 0.04, 0.08), true)
+	draw_rect(Rect2(cx + 12, btn_y, btn_w, btn_h), Color(0.24, 0.14, 0.07, 0.45), false, 1)
 	draw_string(ThemeDB.fallback_font, Vector2(cx + 12 + btn_w / 2 - 22, btn_y + 30),
 		"Cancel", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#2a1810"))
 	# Confirm
-	draw_rect(Rect2(cx + cw - btn_w - 12, btn_y, btn_w, btn_h), Color("#c65540"), true, -1, 23)
+	draw_rect(Rect2(cx + cw - btn_w - 12, btn_y, btn_w, btn_h), Color("#c65540"), true)
 	draw_string(ThemeDB.fallback_font, Vector2(cx + cw - btn_w - 12 + btn_w / 2 - 18, btn_y + 30),
 		"Reset", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
 

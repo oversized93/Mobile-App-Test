@@ -7,8 +7,10 @@ var moss_patches: Array = []
 var grass_tufts: Array = []
 var pebbles: Array = []
 
+var _needs_rebake: bool = true
+
 func _ready():
-	_bake_decorations()
+	get_viewport().size_changed.connect(func(): _needs_rebake = true)
 
 func _bake_decorations():
 	var rng = RandomNumberGenerator.new()
@@ -48,6 +50,9 @@ func _bake_decorations():
 	decorations_baked = true
 
 func _draw():
+	if _needs_rebake:
+		_bake_decorations()
+		_needs_rebake = false
 	var w = get_viewport_rect().size.x
 	var h = get_viewport_rect().size.y
 

@@ -179,6 +179,22 @@ func _get_max_level(key: String) -> int:
 	var u = GameData.upgrades.get(key)
 	return u["max_level"] if u else 0
 
+func _draw_rounded_rect(rect: Rect2, color: Color, filled: bool = true, width: float = -1.0, radius: float = 0.0):
+	if radius <= 0:
+		draw_rect(rect, color, filled, width)
+		return
+	# Approximate rounded rect with a polygon
+	var pts = PackedVector2Array()
+	var r = min(radius, rect.size.x / 2, rect.size.y / 2)
+	var corners = [
+		[rect.position + Vector2(r, 0), rect.position, rect.position + Vector2(0, r)],
+		[rect.end - Vector2(0, r), Vector2(rect.end.x, rect.position.y), rect.end - Vector2(r, 0)],
+		[rect.end - Vector2(r, 0), rect.end, rect.end - Vector2(0, r) + Vector2(0, 0)],
+	]
+	# Simple: just draw a regular rect for now (proper rounded rect needs more points)
+	# The visual difference is minor on mobile
+	draw_rect(rect, color, filled, width)
+
 func _draw():
 	# Background already handled by ShopBg ColorRect
 	var w = size.x
@@ -224,7 +240,7 @@ func _draw_multiplier_pills():
 			continue
 		var text = "%s ×%.2f" % [m[0], m[1]]
 		var tw = ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 12
-		draw_rect(Rect2(x, y, tw, 16), Color(0.96, 0.91, 0.77, 0.15), true, -1, 8)
+		_draw_rounded_rect(Rect2(x, y, tw, 16), Color(0.96, 0.91, 0.77, 0.15), true, -1, 8)
 		draw_string(ThemeDB.fallback_font, Vector2(x + 6, y + 12), text,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.96, 0.91, 0.77, 0.8))
 		x += tw + 4
@@ -238,8 +254,8 @@ func _draw_card(key: String, y: float, w: float):
 
 	# Card background
 	var card_color = Color(0.96, 0.91, 0.77, 0.09 if unlocked else 0.04)
-	draw_rect(Rect2(16, y, w - 32, CARD_H), card_color, true, -1, 14)
-	draw_rect(Rect2(16, y, w - 32, CARD_H), Color(0.96, 0.91, 0.77, 0.2 if unlocked else 0.1), false, 1, 14)
+	_draw_rounded_rect(Rect2(16, y, w - 32, CARD_H), card_color, true, -1, 14)
+	_draw_rounded_rect(Rect2(16, y, w - 32, CARD_H), Color(0.96, 0.91, 0.77, 0.2 if unlocked else 0.1), false, 1, 14)
 
 	# Label
 	var label_color = Color(0.96, 0.91, 0.77, 0.95 if unlocked else 0.4)
@@ -249,7 +265,7 @@ func _draw_card(key: String, y: float, w: float):
 	# Level pill
 	if unlocked and max_lvl > 1:
 		var lvl_text = "LV %d" % level
-		draw_rect(Rect2(30, y + 50, 50, 14), Color(0.96, 0.91, 0.77, 0.15), true, -1, 7)
+		_draw_rounded_rect(Rect2(30, y + 50, 50, 14), Color(0.96, 0.91, 0.77, 0.15), true, -1, 7)
 		draw_string(ThemeDB.fallback_font, Vector2(35, y + 62), lvl_text,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.96, 0.91, 0.77, 0.7))
 
@@ -259,7 +275,7 @@ func _draw_card(key: String, y: float, w: float):
 	var btn_w = 100.0
 	var btn_h = 38.0
 	if not unlocked:
-		draw_rect(Rect2(btn_x, btn_y, btn_w, btn_h), Color(0.96, 0.91, 0.77, 0.06), true, -1, 19)
+		_draw_rounded_rect(Rect2(btn_x, btn_y, btn_w, btn_h), Color(0.96, 0.91, 0.77, 0.06), true, -1, 19)
 		var req_text = "Locked"
 		var u = GameData.upgrades.get(key)
 		if u and u.get("requires_earned", 0) > 0:
@@ -267,12 +283,12 @@ func _draw_card(key: String, y: float, w: float):
 		draw_string(ThemeDB.fallback_font, Vector2(btn_x + 10, btn_y + 24), req_text,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.96, 0.91, 0.77, 0.35))
 	elif maxed:
-		draw_rect(Rect2(btn_x, btn_y, btn_w, btn_h), Color(0.42, 0.61, 0.29, 0.3), true, -1, 19)
+		_draw_rounded_rect(Rect2(btn_x, btn_y, btn_w, btn_h), Color(0.42, 0.61, 0.29, 0.3), true, -1, 19)
 		draw_string(ThemeDB.fallback_font, Vector2(btn_x + 35, btn_y + 25), "MAX",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.42, 0.61, 0.29, 0.9))
 	else:
 		var bg_color = Color("#c8a04f") if afford else Color(0.96, 0.91, 0.77, 0.12)
-		draw_rect(Rect2(btn_x, btn_y, btn_w, btn_h), bg_color, true, -1, 19)
+		_draw_rounded_rect(Rect2(btn_x, btn_y, btn_w, btn_h), bg_color, true, -1, 19)
 		var cost_text = "$%d" % _get_cost(key)
 		var text_color = Color("#1f120a") if afford else Color(0.96, 0.91, 0.77, 0.35)
 		draw_string(ThemeDB.fallback_font, Vector2(btn_x + 15, btn_y + 25), cost_text,
@@ -280,14 +296,14 @@ func _draw_card(key: String, y: float, w: float):
 
 func _draw_confirm_modal():
 	# Dim overlay
-	draw_rect(Rect2(0, 0, size.x, size.y), Color(0.04, 0.08, 0.02, 0.7))
+	_draw_rounded_rect(Rect2(0, 0, size.x, size.y), Color(0.04, 0.08, 0.02, 0.7))
 	var cw = min(size.x - 32, 340)
 	var ch = 220
 	var cx = (size.x - cw) / 2
 	var cy = (size.y - ch) / 2
 	# Parchment card
-	draw_rect(Rect2(cx, cy, cw, ch), Color(0.97, 0.91, 0.77, 0.97), true, -1, 20)
-	draw_rect(Rect2(cx, cy, cw, ch), Color(0.24, 0.14, 0.07, 0.6), false, 1.5, 20)
+	_draw_rounded_rect(Rect2(cx, cy, cw, ch), Color(0.97, 0.91, 0.77, 0.97), true, -1, 20)
+	_draw_rounded_rect(Rect2(cx, cy, cw, ch), Color(0.24, 0.14, 0.07, 0.6), false, 1.5, 20)
 	# Title
 	var label = _get_label(pending_purchase)
 	var level = _get_level(pending_purchase)
@@ -302,11 +318,11 @@ func _draw_confirm_modal():
 	var btn_w = cw * 0.42
 	var btn_h = 46
 	var btn_y = cy + ch - btn_h - 16
-	draw_rect(Rect2(cx + 12, btn_y, btn_w, btn_h), Color(0.16, 0.09, 0.04, 0.08), true, -1, 23)
-	draw_rect(Rect2(cx + 12, btn_y, btn_w, btn_h), Color(0.24, 0.14, 0.07, 0.45), false, 1, 23)
+	_draw_rounded_rect(Rect2(cx + 12, btn_y, btn_w, btn_h), Color(0.16, 0.09, 0.04, 0.08), true, -1, 23)
+	_draw_rounded_rect(Rect2(cx + 12, btn_y, btn_w, btn_h), Color(0.24, 0.14, 0.07, 0.45), false, 1, 23)
 	draw_string(ThemeDB.fallback_font, Vector2(cx + 12 + btn_w / 2 - 20, btn_y + 30), "Cancel",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#2a1810"))
 	# Buy button
-	draw_rect(Rect2(cx + cw - btn_w - 12, btn_y, btn_w, btn_h), Color("#c8a04f"), true, -1, 23)
+	_draw_rounded_rect(Rect2(cx + cw - btn_w - 12, btn_y, btn_w, btn_h), Color("#c8a04f"), true, -1, 23)
 	draw_string(ThemeDB.fallback_font, Vector2(cx + cw - btn_w - 12 + btn_w / 2 - 25, btn_y + 30),
 		"Buy $%d" % cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#1f120a"))

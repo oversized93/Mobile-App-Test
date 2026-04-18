@@ -17,6 +17,10 @@ var rocks: Array = []  # [{ "path_t": float }, ...]
 signal animal_reached_pond(animal_type: String, base_value: float, flow_time: float)
 signal test_flow_complete(flow_time: float)
 
+func _ready():
+	# Restore saved rocks
+	rocks = GameData.rock_positions.duplicate()
+
 # ---- Animal type rolling (uses unlock weights from GameData) ----
 func _get_spawn_weights() -> Dictionary:
 	var weights = { "fish": 1.0 }

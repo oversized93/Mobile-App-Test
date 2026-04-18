@@ -12,6 +12,9 @@ var total_earned: float = 0.0
 var prestige_level: int = 0
 var round_started: bool = false
 var rock_inventory: int = 0
+var river_points: PackedVector2Array = PackedVector2Array()
+var river_width: float = 66.0
+var rock_positions: Array = []  # [{ "path_t": float }, ...]
 
 # ---- Upgrade definitions ----
 var upgrades: Dictionary = {
@@ -231,6 +234,9 @@ func save_game():
 		"prestige_level": prestige_level,
 		"round_started": round_started,
 		"rock_inventory": rock_inventory,
+		"river_points": _points_to_arrays(river_points),
+		"river_width": river_width,
+		"rock_positions": rock_positions,
 		"upgrades": upgrade_state,
 		"tree_levels": tree_levels,
 		"last_milestone_at": last_milestone_at,
@@ -257,6 +263,9 @@ func load_game():
 	round_started = data.get("round_started", false)
 	rock_inventory = data.get("rock_inventory", 0)
 	last_milestone_at = data.get("last_milestone_at", 0.0)
+	river_points = _arrays_to_points(data.get("river_points", []))
+	river_width = data.get("river_width", 66.0)
+	rock_positions = data.get("rock_positions", [])
 	var saved_upgrades = data.get("upgrades", {})
 	for key in saved_upgrades:
 		if upgrades.has(key):
@@ -278,8 +287,24 @@ func reset_all():
 		upgrades[key]["level"] = 0
 	for key in tree_levels:
 		tree_levels[key] = 0
+	river_points = PackedVector2Array()
+	river_width = 66.0
+	rock_positions = []
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(SAVE_PATH)
+
+func _points_to_arrays(pts: PackedVector2Array) -> Array:
+	var arr = []
+	for p in pts:
+		arr.append([p.x, p.y])
+	return arr
+
+func _arrays_to_points(arr: Array) -> PackedVector2Array:
+	var pts = PackedVector2Array()
+	for a in arr:
+		if a is Array and a.size() >= 2:
+			pts.append(Vector2(a[0], a[1]))
+	return pts
 
 func _ready():
 	load_game()

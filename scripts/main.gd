@@ -54,7 +54,7 @@ func _ready():
 	if start_round_btn: start_round_btn.pressed.connect(_on_start_round)
 	if menu_begin_btn: menu_begin_btn.pressed.connect(_on_menu_begin)
 	if menu_reset_btn: menu_reset_btn.pressed.connect(func(): _change_state(State.RESET_CONFIRM))
-	if shop_ui: shop_ui.close_requested.connect(func(): _change_state(State.PLAY_RUNNING if GameData.round_started else State.PLAY_PREROUND))
+	if shop_ui: shop_ui.close_requested.connect(_on_shop_close)
 	if shop_ui: shop_ui.purchase_confirmed.connect(_on_shop_purchase)
 	if reset_confirm:
 		reset_confirm.confirmed.connect(_on_reset_confirmed)
@@ -278,10 +278,20 @@ func _try_place_rock(pos: Vector2):
 	rock.setup(best_t, river_drawer)
 	if obstacles_node:
 		obstacles_node.add_child(rock)
-	# Store for flow slowdown
-	flow_manager.rocks.append({ "path_t": best_t })
+	# Store for flow slowdown + persistence
+	var rock_data = { "path_t": best_t }
+	flow_manager.rocks.append(rock_data)
+	GameData.rock_positions.append(rock_data)
 	GameData.save_game()
 	_show_notification("Rock placed")
+
+func _on_shop_close():
+	if not river_drawer.has_river:
+		_change_state(State.PLAY_DRAWING)
+	elif GameData.round_started:
+		_change_state(State.PLAY_RUNNING)
+	else:
+		_change_state(State.PLAY_PREROUND)
 
 # ---- Shop purchase handler ----
 func _on_shop_purchase(id: String):

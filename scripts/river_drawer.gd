@@ -20,6 +20,13 @@ var has_river: bool = false
 @onready var bank_line_left: Line2D = $BankLineLeft
 @onready var bank_line_right: Line2D = $BankLineRight
 
+func _ready():
+	# Restore saved river from GameData
+	if GameData.river_points.size() >= 3:
+		river_points = GameData.river_points
+		has_river = true
+		_rebuild_river_mesh()
+
 func get_river_width() -> float:
 	return base_width * GameData.get_view_scale() * GameData.get_river_width_bonus()
 
@@ -59,6 +66,10 @@ func finish_drawing(pond_rect: Rect2) -> bool:
 	draft_points = PackedVector2Array()
 	has_river = true
 	_rebuild_river_mesh()
+	# Persist to GameData
+	GameData.river_points = river_points
+	GameData.river_width = get_river_width()
+	GameData.save_game()
 	emit_signal("river_committed", river_points)
 	return true
 
@@ -77,6 +88,9 @@ func clear_river():
 		bank_line_left.clear_points()
 	if bank_line_right:
 		bank_line_right.clear_points()
+	GameData.river_points = PackedVector2Array()
+	GameData.rock_positions = []
+	GameData.save_game()
 	emit_signal("river_cleared")
 
 # ---- River total length ----
