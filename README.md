@@ -47,16 +47,24 @@ All running on the GPU at 60fps with zero CPU overhead.
 
 ## Current Status
 
-Work-in-progress port. Core systems ported:
-- [x] Economy / upgrade data (game_data.gd — all 16 upgrades, 5 trees, prestige)
+The Godot port is feature-complete at the script level. All gameplay systems from the HTML5 version are ported:
+
+- [x] Economy / upgrade data (game_data.gd — all 16 upgrades, 5 trees, prestige, milestones, save/load)
 - [x] River drawing with Chaikin smoothing + self-intersection prevention
 - [x] River polygon mesh with proper UVs for the water shader
-- [x] Water shader (flow, waves, caustics, foam)
-- [x] Animal system (11 species, per-species colors, swim + lilypad styles)
-- [ ] Animal spawning + flow manager
-- [ ] HUD (money, $/sec, buttons)
-- [ ] Shop screen with confirm modal
-- [ ] Menu + reset screens
-- [ ] Touch input wiring
+- [x] Water shader (flow, waves, caustics, foam — GPU-accelerated)
+- [x] Animal system (11 species, per-species colors, swim + lilypad styles, smooth position lerp)
+- [x] Flow manager (spawn timer, double spawn, passive income, test droplet)
+- [x] Background renderer (grass gradient, moss, grass tufts, pebbles, maple silhouettes)
+- [x] Spring + pond decorations (animated sparkle + ripples)
+- [x] Full state machine (menu → draw → pre-round → running → shop)
+- [x] Touch + mouse input routing
+- [x] HUD (animated money counter, $/sec, notification system)
+- [x] Shop UI (scrollable tiered cards, confirm purchase modal, multiplier breakdown pills)
+- [x] Menu screen (title, begin/continue, reset)
+- [ ] Shop UI wired into the scene tree (needs a Control node added to ShopLayer)
+- [ ] Reset confirmation modal
+- [ ] Rock placement input
+- [ ] Collection particle effects + float text
 - [ ] Sound effects
-- [ ] Mobile export testing
+- [ ] Web export testing on phone
