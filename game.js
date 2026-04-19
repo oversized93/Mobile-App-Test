@@ -806,9 +806,10 @@ function onTouchStart(sx, sy) {
         // to accept the auto-placed aim without any drag at all.
         const canTakeShot = !dragBackMode && !ball.moving && !holeComplete && !flyoverActive && terrainAt(ball.x, ball.y) !== T.GREEN;
         if (canTakeShot) {
-            const shootBtnW = shotLocked ? W() * 0.55 : W() - 28;
             const shootBtnH = 44;
-            const shootBtnX = 14, shootBtnY = H() - 56;
+            const shootBtnX = 102;
+            const shootBtnY = H() - 100 + (100 - shootBtnH) / 2;
+            const shootBtnW = W() - 204;
             if (hitBtn(sx, sy, shootBtnX, shootBtnY, shootBtnW, shootBtnH)) {
                 // Lock from current aim if not already locked
                 if (!shotLocked) {
@@ -835,27 +836,30 @@ function onTouchStart(sx, sy) {
                 meterSpeed = (0.75 + (CLUBS[selectedClub].maxPower / 500) * 0.75);
                 return;
             }
-            // Cancel button — only when the player has manually locked an aim
+            // Cancel button — right slot of tray when locked
             if (shotLocked) {
-                const cancelW = W() * 0.28, cancelH = 44;
-                const cancelX = W() - cancelW - 14, cancelY = H() - 56;
+                const cancelX = W() - 92, cancelW = 82, cancelH = 44;
+                const cancelY = H() - 100 + (100 - cancelH) / 2;
                 if (hitBtn(sx, sy, cancelX, cancelY, cancelW, cancelH)) {
                     shotLocked = false;
                     return;
                 }
             }
         }
-        // Club switching — left side stack (up/down arrows)
-        const csX = 6, csY = H() - 140;
-        if (!shotLocked && !dragBackMode && sx < 70) {
-            if (sy >= csY && sy <= csY + 28) { cycleClub(-1); updateTargetFromClub(); return; }
-            if (sy >= csY + 88 && sy <= csY + 116) { cycleClub(1); updateTargetFromClub(); return; }
+        // Club switching — left slot of tray (up/down arrows)
+        const onGreenTap = terrainAt(ball.x, ball.y) === T.GREEN;
+        const trayY = H() - 100;
+        if (!shotLocked && !dragBackMode && !onGreenTap && !ball.moving && !flyoverActive) {
+            const cardX = 10, cardW = 82;
+            if (sx >= cardX && sx <= cardX + cardW) {
+                if (sy >= trayY + 4 && sy <= trayY + 26) { cycleClub(-1); updateTargetFromClub(); return; }
+                if (sy >= trayY + 74 && sy <= trayY + 96) { cycleClub(1); updateTargetFromClub(); return; }
+            }
         }
-        // Spin control
-        const spinY = shotLocked ? H() - 290 : H() - 190;
-        if (!flyoverActive && !dragBackMode) {
-            const spX = W() - 60, spR = 28;
-            const sdx = sx - spX, sdy = sy - spinY;
+        // Spin control — right slot of tray
+        if (!flyoverActive && !dragBackMode && !shotLocked && !onGreenTap) {
+            const spX = W() - 50, spY = trayY + 100 / 2 - 4, spR = 26;
+            const sdx = sx - spX, sdy = sy - spY;
             if (sdx * sdx + sdy * sdy < (spR + 10) * (spR + 10)) {
                 spinAdjusting = true;
                 spin.side = Math.max(-1, Math.min(1, sdx / (spR * 0.8)));
@@ -863,6 +867,9 @@ function onTouchStart(sx, sy) {
                 return;
             }
         }
+
+        // Absorb stray taps inside the tray so they don't start a camera pan
+        if (!onGreenTap && sy >= trayY && !flyoverActive) return;
 
         // ---- Camera pan (fallback — any touch that wasn't caught above) ----
         scouting = true;
@@ -874,7 +881,7 @@ function onTouchStart(sx, sy) {
 function onTouchMove(sx, sy) {
     if (state === 'builder' && builderState.painting) { builderPaint(sx, sy); return; }
     if (state === 'playing' && spinAdjusting) {
-        const spX = W() - 60, spY = shotLocked ? H() - 290 : H() - 190, spR = 28;
+        const spX = W() - 50, spY = (H() - 100) + 100 / 2 - 4, spR = 26;
         spin.side = Math.max(-1, Math.min(1, (sx - spX) / (spR * 0.8)));
         spin.top = Math.max(-1, Math.min(1, -(sy - spY) / (spR * 0.8)));
         return;
@@ -2086,50 +2093,60 @@ function drawPlaying() {
     ctx.textAlign = 'left';
     ctx.fillText(TERRAIN_NAMES[ter] || '', 10, 34);
 
-    // Club selector — compact left-side stack
-    if (!ball.moving && !holeComplete && !shotLocked && !meterActive) {
-        const club = CLUBS[selectedClub];
-        const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
-        const csX = 6, csY = H() - 140;
-
-        // Up arrow
-        if (!onGreen) {
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            roundRect(csX, csY, 58, 28, 8);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.6)';
-            ctx.font = '14px -apple-system,sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('\u25B2', csX + 29, csY + 19);
-        }
-
-        // Club icon + name
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        roundRect(csX, csY + 32, 58, 52, 10);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(100,160,255,0.3)';
+    // ---- Unified bottom tray (CR-style: club card • take shot • spin) ----
+    const onGreenNow = terrainAt(ball.x, ball.y) === T.GREEN;
+    const showTray = !ball.moving && !holeComplete && !flyoverActive && !meterActive && !dragBackMode && !onGreenNow;
+    const TRAY_H = 100;
+    const TRAY_Y = H() - TRAY_H;
+    if (showTray) {
+        // Tray background — dark frosted gradient with top highlight
+        const trayGrad = ctx.createLinearGradient(0, TRAY_Y, 0, H());
+        trayGrad.addColorStop(0, 'rgba(0,0,0,0.55)');
+        trayGrad.addColorStop(1, 'rgba(0,0,0,0.82)');
+        ctx.fillStyle = trayGrad;
+        ctx.fillRect(0, TRAY_Y, W(), TRAY_H);
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
         ctx.lineWidth = 1;
-        roundRect(csX, csY + 32, 58, 52, 10);
-        ctx.stroke();
-        // Club icon placeholder
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px -apple-system,sans-serif';
+        ctx.beginPath(); ctx.moveTo(0, TRAY_Y); ctx.lineTo(W(), TRAY_Y); ctx.stroke();
+    }
+
+    // Club card (left of tray)
+    if (showTray && !shotLocked) {
+        const club = CLUBS[selectedClub];
+        const cardX = 10, cardW = 82;
+        // Up arrow
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        roundRect(cardX, TRAY_Y + 4, cardW, 22, 8);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.font = '12px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(club.name.split(' ')[0], csX + 29, csY + 55);
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText('\u25B2', cardX + cardW / 2, TRAY_Y + 20);
+
+        // Card body
+        ctx.fillStyle = 'rgba(20,40,70,0.85)';
+        roundRect(cardX, TRAY_Y + 30, cardW, 40, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(100,160,255,0.35)';
+        ctx.lineWidth = 1;
+        roundRect(cardX, TRAY_Y + 30, cardW, 40, 10);
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 15px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(club.name.split(' ')[0], cardX + cardW / 2, TRAY_Y + 49);
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
         ctx.font = '10px -apple-system,sans-serif';
-        ctx.fillText(club.maxYds + 'y', csX + 29, csY + 72);
+        ctx.fillText(club.maxYds + 'y', cardX + cardW / 2, TRAY_Y + 63);
 
         // Down arrow
-        if (!onGreen) {
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            roundRect(csX, csY + 88, 58, 28, 8);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.6)';
-            ctx.font = '14px -apple-system,sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('\u25BC', csX + 29, csY + 107);
-        }
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        roundRect(cardX, TRAY_Y + 74, cardW, 22, 8);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.font = '12px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('\u25BC', cardX + cardW / 2, TRAY_Y + 90);
     }
 
     // Power meter (when dragging to aim in Step 1)
@@ -2167,31 +2184,20 @@ function drawPlaying() {
 
     }
 
-    // ---- Step 2: Shot locked — sleek bottom bar ----
-    // TAKE SHOT bar: show whenever the player can fire (locked OR free-aim with auto-target)
-    const showTakeShot = !meterActive && !dragBackMode && !draggingTarget && !ball.moving && !holeComplete && !flyoverActive && terrainAt(ball.x, ball.y) !== T.GREEN && (shotLocked || (aimPower > 5));
+    // ---- TAKE SHOT (center of tray) + Cancel (right slot when locked) ----
+    const showTakeShot = !meterActive && !dragBackMode && !draggingTarget && !ball.moving && !holeComplete && !flyoverActive && !onGreenNow && (shotLocked || (aimPower > 5));
     if (showTakeShot) {
-        // Frosted glass bottom bar
-        const barGrad = ctx.createLinearGradient(0, H() - 65, 0, H());
-        barGrad.addColorStop(0, 'rgba(0,0,0,0.6)');
-        barGrad.addColorStop(1, 'rgba(0,0,0,0.8)');
-        ctx.fillStyle = barGrad;
-        ctx.fillRect(0, H() - 65, W(), 65);
-        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(0, H() - 65); ctx.lineTo(W(), H() - 65); ctx.stroke();
-
-        // TAKE SHOT — vibrant gradient button (full-width when not locked, narrower when locked to leave room for Cancel)
-        const shootBtnW = shotLocked ? W() * 0.55 : W() - 28;
         const shootBtnH = 44;
-        const shootBtnX = 14, shootBtnY = H() - 56;
+        const shootBtnX = 102;
+        const shootBtnY = TRAY_Y + (TRAY_H - shootBtnH) / 2;
+        const shootBtnW = W() - 204; // leave 102 on each side for club + spin/cancel slots
         const shootGrad = ctx.createLinearGradient(shootBtnX, shootBtnY, shootBtnX + shootBtnW, shootBtnY);
         shootGrad.addColorStop(0, '#ff6d00');
         shootGrad.addColorStop(1, '#ff3d00');
         ctx.fillStyle = shootGrad;
         roundRect(shootBtnX, shootBtnY, shootBtnW, shootBtnH, 22);
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
         ctx.lineWidth = 1;
         roundRect(shootBtnX, shootBtnY, shootBtnW, shootBtnH, 22);
         ctx.stroke();
@@ -2200,18 +2206,17 @@ function drawPlaying() {
         ctx.textAlign = 'center';
         ctx.fillText('TAKE SHOT', shootBtnX + shootBtnW / 2, shootBtnY + shootBtnH / 2 + 6);
 
-        // Cancel — only after the player has made a manual aim
+        // Cancel — right slot when locked (replaces spin puck)
         if (shotLocked) {
-            const cancelW = W() * 0.28, cancelH = 44;
-            const cancelX = W() - cancelW - 14, cancelY = H() - 56;
+            const cancelX = W() - 92, cancelY = shootBtnY, cancelW = 82, cancelH = shootBtnH;
             ctx.fillStyle = 'rgba(255,255,255,0.08)';
-            roundRect(cancelX, cancelY, cancelW, cancelH, 22);
+            roundRect(cancelX, cancelY, cancelW, cancelH, 14);
             ctx.fill();
-            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-            roundRect(cancelX, cancelY, cancelW, cancelH, 22);
+            ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+            roundRect(cancelX, cancelY, cancelW, cancelH, 14);
             ctx.stroke();
-            ctx.fillStyle = 'rgba(255,255,255,0.6)';
-            ctx.font = '15px -apple-system,sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.font = '14px -apple-system,sans-serif';
             ctx.fillText('Cancel', cancelX + cancelW / 2, cancelY + cancelH / 2 + 5);
         }
     }
@@ -2477,10 +2482,10 @@ function drawPlaying() {
         ctx.fillText('RELEASE ON WHITE', W() / 2, arcCy - arcR - 20);
     }
 
-    // ---- Spin control (shown when not moving, not in meter mode) ----
-    const showSpin = !ball.moving && !holeComplete && !flyoverActive && !meterActive && !shotLocked && !dragBackMode && terrainAt(ball.x, ball.y) !== T.GREEN;
+    // ---- Spin control (right slot of bottom tray) ----
+    const showSpin = !ball.moving && !holeComplete && !flyoverActive && !meterActive && !shotLocked && !dragBackMode && !onGreenNow;
     if (showSpin) {
-        const spX = W() - 52, spY = H() - 185, spR = 30;
+        const spX = W() - 50, spY = TRAY_Y + TRAY_H / 2 - 4, spR = 26;
 
         // Glass background
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -2530,65 +2535,64 @@ function drawPlaying() {
         ctx.font = '8px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.fillText('\u25B2', spX, spY - spR - 4);  // ▲ top
-        ctx.fillText('\u25BC', spX, spY + spR + 10);  // ▼ back
-
-        // "SPIN" label pill
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        roundRect(spX - 18, spY + spR + 14, 36, 16, 8);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.font = '9px -apple-system,sans-serif';
-        ctx.fillText('SPIN', spX, spY + spR + 25);
+        ctx.fillText('\u25B2', spX, spY - spR - 3);  // ▲ top
+        ctx.fillText('\u25BC', spX, spY + spR + 8);  // ▼ back
     }
 
-    // Hint text
+    // Hint text — sits just above the tray so it doesn't collide with tray contents
     if (flyoverActive) {
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.font = '14px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Tap to skip', W() / 2, H() - 30);
+        ctx.fillText('Tap to skip', W() / 2, H() - 116);
     } else if (!ball.moving && !holeComplete) {
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.font = '12px -apple-system,sans-serif';
+        ctx.font = '11px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         const onGreen = terrainAt(ball.x, ball.y) === T.GREEN;
+        const hintY = onGreen ? H() - 24 : H() - 110;
         if (meterActive) {
             // shown on the meter itself
         } else if (shotLocked) {
-            // hint is in the bottom bar now
+            // button label speaks for itself
         } else if (onGreen) {
             if (!putting) {
-                ctx.fillText('Drag back from ball to putt \u2022 Release on white', W() / 2, H() - 24);
+                ctx.fillText('Drag back from ball to putt \u2022 Release on white', W() / 2, hintY);
             }
-        } else if (!aiming) {
-            ctx.fillText('Drag target to aim \u2022 Drag elsewhere to pan \u2022 Arrows: club', W() / 2, H() - 24);
+        } else if (!aiming && !showTakeShot) {
+            ctx.fillText('Drag target to aim \u2022 Drag elsewhere to pan', W() / 2, hintY);
         }
     }
 
-    // Camera control pills (left side) — glass circles
+    // Camera control rail (left side) — single unified pill with 5 icons
     if (!ball.moving && !flyoverActive && !shotLocked && !meterActive && !dragBackMode) {
-        const btns = [
-            { y: 68, label: '+' },
-            { y: 102, label: '\u2212' },
-            { y: 140, label: '\u21BB' },
-            { y: 174, label: '\u21BA' },
-            { y: 212, label: '\u25CE' }
-        ];
-        for (const b of btns) {
-            ctx.fillStyle = 'rgba(0,0,0,0.4)';
-            ctx.beginPath();
-            ctx.arc(24, b.y, 16, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.arc(24, b.y, 16, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        const railX = 8, railW = 32;
+        const railY = 104, railH = 172; // sits just below wind indicator
+        // Rail background
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        roundRect(railX, railY, railW, railH, 16);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 1;
+        roundRect(railX, railY, railW, railH, 16);
+        ctx.stroke();
+
+        const icons = ['+', '\u2212', '\u21BB', '\u21BA', '\u25CE'];
+        const slot = railH / icons.length; // 34.4 per slot
+        ctx.textAlign = 'center';
+        for (let i = 0; i < icons.length; i++) {
+            const cy = railY + slot * (i + 0.5);
+            // Subtle divider between icons
+            if (i > 0) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                ctx.beginPath();
+                ctx.moveTo(railX + 6, railY + slot * i);
+                ctx.lineTo(railX + railW - 6, railY + slot * i);
+                ctx.stroke();
+            }
+            ctx.fillStyle = 'rgba(255,255,255,0.78)';
             ctx.font = '15px -apple-system,sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(b.label, 24, b.y + 5);
+            ctx.fillText(icons[i], railX + railW / 2, cy + 5);
         }
     }
 
@@ -2900,39 +2904,38 @@ function checkPlayingUI(sx, sy) {
         else { state = 'menu'; }
         return true;
     }
-    // Zoom buttons
+    // Camera rail buttons — 5 evenly-spaced slots inside a unified pill
     if (!ball.moving && !flyoverActive) {
-        if (hitBtn(sx, sy, 8, 66, 32, 28)) {
-            cam.targetZoom = Math.min(cam.targetZoom * 1.4, 8);
-            manualZoom = true;
-            return true;
-        }
-        if (hitBtn(sx, sy, 8, 98, 32, 28)) {
-            cam.targetZoom = Math.max(cam.targetZoom / 1.4, 0.3);
-            manualZoom = true;
-            return true;
-        }
-        if (hitBtn(sx, sy, 8, 134, 32, 28)) {
-            cam.targetRot += Math.PI / 4;
-            if (scene3dReady && typeof orbitCamera3D === 'function') {
-                orbitCamera3D(Math.PI / 4, ball.x, ball.y);
-                manualZoom = true;
+        const railX = 8, railW = 32, railY = 104, railH = 172;
+        const slot = railH / 5;
+        if (sx >= railX && sx <= railX + railW) {
+            const idx = Math.floor((sy - railY) / slot);
+            if (idx >= 0 && idx < 5) {
+                if (idx === 0) {
+                    cam.targetZoom = Math.min(cam.targetZoom * 1.4, 8);
+                    manualZoom = true;
+                } else if (idx === 1) {
+                    cam.targetZoom = Math.max(cam.targetZoom / 1.4, 0.3);
+                    manualZoom = true;
+                } else if (idx === 2) {
+                    cam.targetRot += Math.PI / 4;
+                    if (scene3dReady && typeof orbitCamera3D === 'function') {
+                        orbitCamera3D(Math.PI / 4, ball.x, ball.y);
+                        manualZoom = true;
+                    }
+                } else if (idx === 3) {
+                    cam.targetRot -= Math.PI / 4;
+                    if (scene3dReady && typeof orbitCamera3D === 'function') {
+                        orbitCamera3D(-Math.PI / 4, ball.x, ball.y);
+                        manualZoom = true;
+                    }
+                } else {
+                    centerCamOnBall();
+                    cam.targetRot = 0;
+                    manualZoom = false;
+                }
+                return true;
             }
-            return true;
-        }
-        if (hitBtn(sx, sy, 8, 166, 32, 28)) {
-            cam.targetRot -= Math.PI / 4;
-            if (scene3dReady && typeof orbitCamera3D === 'function') {
-                orbitCamera3D(-Math.PI / 4, ball.x, ball.y);
-                manualZoom = true;
-            }
-            return true;
-        }
-        if (hitBtn(sx, sy, 8, 202, 32, 28)) {
-            centerCamOnBall();
-            cam.targetRot = 0;
-            manualZoom = false;
-            return true;
         }
     }
     return false;
@@ -2945,14 +2948,21 @@ function drawNotification(dt) {
     const alpha = Math.min(1, notification.timer / 0.5);
 
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    const tw = ctx.measureText(notification.text).width;
-    roundRect(W() / 2 - tw / 2 - 16, H() * 0.4 - 18, tw + 32, 40, 12);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 18px -apple-system,sans-serif';
+    // Small pill just under the top bar so it doesn't cover the play field
+    ctx.font = '12px -apple-system,sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(notification.text, W() / 2, H() * 0.4 + 8);
+    const tw = ctx.measureText(notification.text).width;
+    const pillH = 22;
+    const pillY = 52;
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    roundRect(W() / 2 - tw / 2 - 10, pillY, tw + 20, pillH, 11);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    roundRect(W() / 2 - tw / 2 - 10, pillY, tw + 20, pillH, 11);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillText(notification.text, W() / 2, pillY + 15);
     ctx.globalAlpha = 1;
 }
 
@@ -3024,12 +3034,6 @@ function gameLoop(time) {
             const tdx = lockedDirX, tdy = lockedDirY;
             const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
             setCameraBehindBall(ball.x, ball.y, ball.x + tdx / tlen * 80, ball.y + tdy / tlen * 80, 28);
-        } else if (onGreenNow && !ball.moving) {
-            if (!scouting && !manualZoom) {
-                const hx = (currentHole.hole.x + 0.5) * CELL;
-                const hy = (currentHole.hole.y + 0.5) * CELL;
-                setCameraBehindBall(ball.x, ball.y, hx, hy, 22);
-            }
         } else if (ball.moving) {
             manualZoom = false;
             // Low-angle chase cam that follows the ball's trajectory

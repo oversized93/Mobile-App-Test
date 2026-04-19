@@ -601,18 +601,17 @@ function setCameraBehindBall(bx, bz, targetX, targetZ, distance) {
     const dx = targetX - bx, dz = targetZ - bz;
     const len = Math.sqrt(dx * dx + dz * dz) || 1;
     const nx = dx / len, nz = dz / len;
-    // Much closer to the ball — immersive first-person feel
+    // Raised and tilted down — horizon sits at upper ~20% so play field fills frame
     const dist = distance || 24;
-    // Very low — eye-level of someone standing behind the ball
-    const height = 10;
+    const height = 28;
 
     cam3dTarget.x = bx - nx * dist;
     cam3dTarget.y = height;
     cam3dTarget.z = bz - nz * dist;
-    // Look at a point high and far — horizon sits at upper third of screen
-    cam3dLookAt.x = bx + nx * 300;
-    cam3dLookAt.y = 40;
-    cam3dLookAt.z = bz + nz * 300;
+    // Look closer to the ground so less sky, more fairway
+    cam3dLookAt.x = bx + nx * 40;
+    cam3dLookAt.y = 6;
+    cam3dLookAt.z = bz + nz * 40;
 }
 
 // Follow-ball camera — low angle chase cam
