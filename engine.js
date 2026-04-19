@@ -222,6 +222,10 @@ canvas.addEventListener('touchstart', (e) => {
         }
         cam._lastPinchDx = 0; cam._lastPinchDy = 0;
         cam._lastPinchRot = 0;
+        // Accumulated twist tracking — prevents atan2 wrap-around when the
+        // user rotates past the ±π boundary mid-gesture.
+        cam._pinchLastAngle = pinchStartAngle;
+        cam._pinchAccumRot = 0;
         return;
     }
     const t = e.touches[0];
@@ -255,8 +259,15 @@ canvas.addEventListener('touchmove', (e) => {
             // spread. This avoids the "camera dives down toward ground pivot"
             // feel that comes from dolly-zoom on an orbit camera.
             if (typeof setCameraFov === 'function') setCameraFov(baseFov / scale);
-            // Yaw — twist gesture rotates by the absolute angle delta
-            const newYaw = baseYaw + (angle - pinchStartAngle);
+            // Yaw — accumulate frame-to-frame angle delta, normalizing across
+            // the ±π boundary so twisting past 180° in one gesture doesn't
+            // snap back the wrong direction.
+            let frameRot = angle - (cam._pinchLastAngle != null ? cam._pinchLastAngle : angle);
+            if (frameRot > Math.PI)  frameRot -= 2 * Math.PI;
+            if (frameRot < -Math.PI) frameRot += 2 * Math.PI;
+            cam._pinchAccumRot = (cam._pinchAccumRot || 0) + frameRot;
+            cam._pinchLastAngle = angle;
+            const newYaw = baseYaw + cam._pinchAccumRot;
             // Pitch — midpoint vertical drag; finger down pushes cam overhead
             const midDy = midY - pinchStartMidY;
             const newPitch = basePitch + midDy * 0.004;
