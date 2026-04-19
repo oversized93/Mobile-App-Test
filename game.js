@@ -18,6 +18,55 @@ const RESORT_DEFAULT = {
 };
 let resort = Object.assign({}, RESORT_DEFAULT, loadData('resort', {}));
 
+// ---- Overworld Course Data Model ----
+// A Course is the player's entire resort world. Instead of each hole owning
+// its own grid, the whole resort lives on one big terrain and holes are
+// records that reference regions inside it (tee+pin + bounding box).
+const COURSE_SIZE = 100; // cells per side — tuned so the terrain mesh renders fast
+
+function makeStarterCourse() {
+    const cols = COURSE_SIZE, rows = COURSE_SIZE;
+    const grid = [];
+    for (let r = 0; r < rows; r++) {
+        grid[r] = [];
+        for (let c = 0; c < cols; c++) grid[r][c] = T.ROUGH;
+    }
+    // Seed a small fairway patch near the middle so the overworld reads as
+    // "playable grass," not just undifferentiated rough.
+    const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
+    for (let r = cy - 8; r <= cy + 8; r++)
+        for (let c = cx - 14; c <= cx + 14; c++)
+            if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = T.FAIRWAY;
+    return {
+        id: 'course_1',
+        name: 'My Resort',
+        biome: 'meadows',
+        cols, rows,
+        grid,
+        holes: [],      // future: { id, par, tee:{x,y}, pin:{x,y}, bbox }
+        facilities: [], // future: { type, x, y, rot }
+        scenery: []     // future: { type, x, y }
+    };
+}
+
+let worldCourse = loadData('course', null) || makeStarterCourse();
+function saveWorldCourse() { saveData('course', worldCourse); }
+
+function enterOverworld() {
+    state = 'overworld';
+    // Build a fresh 3D terrain from the Course — buildTerrain3D is happy with
+    // anything shaped like { grid, cols, rows }, so the Course works directly.
+    if (scene3dReady) buildTerrain3D(worldCourse);
+    // Park the camera over the center of the course, zoomed out far enough to
+    // see the whole map.
+    cam.x = cam.targetX = worldCourse.cols * CELL / 2;
+    cam.y = cam.targetY = worldCourse.rows * CELL / 2;
+    cam.zoom = cam.targetZoom = 0.22;
+    cam.rot = cam.targetRot = 0;
+    manualZoom = true;
+    scouting = false;
+}
+
 const AMENITIES = [
     { id: 'clubhouse', name: 'Clubhouse', icon: '\u{1F3DB}\uFE0F', cost: 200, memberBoost: 10,
       desc: 'Somewhere for golfers to relax after a round.' }
@@ -813,6 +862,7 @@ let charColorIdx = 0;
 function onTouchStart(sx, sy) {
     if (state === 'menu') { menuTouchStart(sx, sy); return; }
     if (state === 'manage') { manageTouchStart(sx, sy); return; }
+    if (state === 'overworld') { overworldTouchStart(sx, sy); return; }
     if (state === 'character') { charTouchStart(sx, sy); return; }
     if (state === 'career') { careerTouchStart(sx, sy); return; }
     if (state === 'builder') {
@@ -983,6 +1033,7 @@ function onTouchStart(sx, sy) {
 
 function onTouchMove(sx, sy) {
     if (state === 'builder' && builderState.painting) { builderPaint(sx, sy); return; }
+    if (state === 'overworld') { overworldTouchMove(sx, sy); return; }
     if (state === 'playing' && spinAdjusting) {
         const spX = W() - 50, spY = (H() - 100) + 100 / 2 - 4, spR = 26;
         spin.side = Math.max(-1, Math.min(1, (sx - spX) / (spR * 0.8)));
@@ -1063,6 +1114,7 @@ function onTouchMove(sx, sy) {
 
 function onTouchEnd(sx, sy) {
     if (state === 'builder') { builderState.painting = false; return; }
+    if (state === 'overworld') { overworldTouchEnd(); return; }
     if (state === 'playing' && spinAdjusting) { spinAdjusting = false; return; }
     if (state === 'playing' && scouting) {
         scouting = false;
@@ -1611,16 +1663,17 @@ function manageLayout() {
     const playerY = statsY + statsH + 10;
     const playerH = 72;
 
-    // Content area: amenity list + bottom actions row (side-by-side)
+    // Content area: amenity list + bottom actions row (3 buttons side-by-side)
     const amenityLabelY = contentY + 4;
     const amenityStartY = contentY + 28;
     const amenityH = 86;
     const amenityGap = 10;
     const actionsRowH = 52;
     const actionsY = contentY + contentH - actionsRowH;
-    const actionBw = (contentW - 10) / 2;
-    const simX = contentX;
-    const playX = contentX + actionBw + 10;
+    const actionBw = (contentW - 20) / 3;
+    const resortX = contentX;
+    const simX = contentX + (actionBw + 10);
+    const playX = contentX + (actionBw + 10) * 2;
 
     // Close (X) button in top-right of content
     const closeSize = 36;
@@ -1633,7 +1686,7 @@ function manageLayout() {
         contentX, contentY, contentW, contentH,
         moneyY, moneyH, statsY, statsH, playerY, playerH,
         amenityLabelY, amenityStartY, amenityH, amenityGap,
-        actionsY, actionsRowH, actionBw, simX, playX,
+        actionsY, actionsRowH, actionBw, resortX, simX, playX,
         closeSize, closeX, closeY
     };
 }
@@ -1807,7 +1860,19 @@ function drawManage() {
         }
     }
 
-    // Actions row — Simulate (left) + Play (right) side by side
+    // Actions row — Enter Resort / Simulate / Play
+    // Primary: Enter Your Resort (blue → flies you into the 3D overworld)
+    const resortGrad = ctx.createLinearGradient(L.resortX, L.actionsY, L.resortX + L.actionBw, L.actionsY);
+    resortGrad.addColorStop(0, '#1565c0');
+    resortGrad.addColorStop(1, '#0d47a1');
+    ctx.fillStyle = resortGrad;
+    roundRect(L.resortX, L.actionsY, L.actionBw, L.actionsRowH, L.actionsRowH / 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u{1F3D6}\uFE0F  Enter Resort', L.resortX + L.actionBw / 2, L.actionsY + L.actionsRowH / 2 + 6);
+
     const simGrad = ctx.createLinearGradient(L.simX, L.actionsY, L.simX + L.actionBw, L.actionsY);
     simGrad.addColorStop(0, '#ff6d00');
     simGrad.addColorStop(1, '#ff3d00');
@@ -1815,9 +1880,7 @@ function drawManage() {
     roundRect(L.simX, L.actionsY, L.actionBw, L.actionsRowH, L.actionsRowH / 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 15px -apple-system,sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('\u25B6  Simulate Round', L.simX + L.actionBw / 2, L.actionsY + L.actionsRowH / 2 + 6);
+    ctx.fillText('\u25B6  Simulate', L.simX + L.actionBw / 2, L.actionsY + L.actionsRowH / 2 + 6);
 
     const playGrad = ctx.createLinearGradient(L.playX, L.actionsY, L.playX + L.actionBw, L.actionsY);
     playGrad.addColorStop(0, '#2e7d32');
@@ -1826,7 +1889,7 @@ function drawManage() {
     roundRect(L.playX, L.actionsY, L.actionBw, L.actionsRowH, L.actionsRowH / 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.fillText('\u26F3  Play a Round', L.playX + L.actionBw / 2, L.actionsY + L.actionsRowH / 2 + 6);
+    ctx.fillText('\u26F3  Play', L.playX + L.actionBw / 2, L.actionsY + L.actionsRowH / 2 + 6);
 }
 
 function manageTouchStart(sx, sy) {
@@ -1853,6 +1916,14 @@ function manageTouchStart(sx, sy) {
         }
     }
 
+    // Enter Your Resort — flies into the 3D overworld
+    if (hitBtn(sx, sy, L.resortX, L.actionsY, L.actionBw, L.actionsRowH)) {
+        resort.lastTickMs = Date.now();
+        saveResort();
+        enterOverworld();
+        return;
+    }
+
     // Simulate Round — picks the first unlocked course for now
     if (hitBtn(sx, sy, L.simX, L.actionsY, L.actionBw, L.actionsRowH)) {
         const idx = (player.unlocked && player.unlocked.length) ? player.unlocked[0] : 0;
@@ -1872,6 +1943,110 @@ function manageTouchStart(sx, sy) {
         state = 'career';
         return;
     }
+}
+
+// ---- Overworld Screen (Phase 2 — 3D scene + pan/zoom HUD) ----
+function overworldLayout() {
+    const pad = 10;
+    const topBarH = 44;
+    const closeSize = 36;
+    const closeX = W() - pad - closeSize;
+    const closeY = pad;
+    return { pad, topBarH, closeSize, closeX, closeY };
+}
+
+function drawOverworld() {
+    // 3D terrain fills the screen behind this HUD overlay.
+    // Reset transform + clear the 2D canvas so only the HUD shows here.
+    const d = window.devicePixelRatio || 1;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.clearRect(0, 0, W(), H());
+
+    const L = overworldLayout();
+
+    // Top bar — course name + balance pill
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W(), L.topBarH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, L.topBarH); ctx.lineTo(W(), L.topBarH); ctx.stroke();
+
+    // Course name
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(worldCourse.name, L.pad + 6, 28);
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '11px -apple-system,sans-serif';
+    const subtitle = worldCourse.holes.length + ' holes \u2022 '
+        + worldCourse.facilities.length + ' facilities \u2022 '
+        + worldCourse.cols + 'x' + worldCourse.rows;
+    ctx.fillText(subtitle, L.pad + 6 + ctx.measureText(worldCourse.name).width + 10, 28);
+
+    // Balance pill (top center)
+    const bpW = 120, bpH = 28;
+    const bpX = (W() - bpW) / 2, bpY = (L.topBarH - bpH) / 2;
+    ctx.fillStyle = 'rgba(255,179,0,0.18)';
+    roundRect(bpX, bpY, bpW, bpH, bpH / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,179,0,0.4)';
+    roundRect(bpX, bpY, bpW, bpH, bpH / 2);
+    ctx.stroke();
+    ctx.fillStyle = '#ffb300';
+    ctx.font = 'bold 14px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('$ ' + Math.floor(resort.coins).toLocaleString(), W() / 2, bpY + bpH / 2 + 5);
+
+    // Close X
+    ctx.fillStyle = 'rgba(255,70,70,0.85)';
+    roundRect(L.closeX, L.closeY, L.closeSize, L.closeSize, 10);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u2715', L.closeX + L.closeSize / 2, L.closeY + L.closeSize / 2 + 6);
+
+    // Bottom hint strip — temporary (removed once placement tools land)
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    const hintH = 28;
+    roundRect(W() / 2 - 160, H() - hintH - 10, 320, hintH, hintH / 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '12px -apple-system,sans-serif';
+    ctx.fillText('Drag to pan \u2022 Pinch to zoom \u2022 Placement tools coming soon',
+                 W() / 2, H() - hintH - 10 + hintH / 2 + 4);
+}
+
+function overworldTouchStart(sx, sy) {
+    const L = overworldLayout();
+    // Close X → back to Manage
+    if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) {
+        saveWorldCourse();
+        enterManage();
+        return;
+    }
+    // Anything else → start a camera pan
+    scouting = true;
+    scoutLastX = sx;
+    scoutLastY = sy;
+}
+
+function overworldTouchMove(sx, sy) {
+    if (!scouting) return;
+    const dx = sx - scoutLastX;
+    const dy = sy - scoutLastY;
+    scoutLastX = sx;
+    scoutLastY = sy;
+    if (scene3dReady && typeof panCamera3D === 'function') {
+        panCamera3D(dx, dy);
+    } else {
+        cam.targetX -= dx / cam.zoom;
+        cam.targetY -= dy / cam.zoom;
+    }
+}
+
+function overworldTouchEnd() {
+    scouting = false;
 }
 
 // ---- Gameplay Drawing ----
@@ -3449,10 +3624,24 @@ function gameLoop(time) {
         }
     }
 
-    // 3D rendering for gameplay states
-    const use3D = scene3dReady && (state === 'playing' || state === 'holeDone');
+    // 3D rendering for gameplay states AND overworld
+    const use3D = scene3dReady && (state === 'playing' || state === 'holeDone' || state === 'overworld');
     if (use3D) {
         show3D();
+
+        // Overworld branch — render the course, park ball + target off-screen,
+        // and drive the camera purely from cam.x/y/zoom (user pans/pinches).
+        if (state === 'overworld') {
+            if (ballMesh) ballMesh.visible = false;
+            updateTarget3D(0, 0, false);
+            // zoom here is "smaller number = further away" (height = 500 / zoom)
+            setCameraOverhead(cam.x, cam.y, cam.zoom);
+            if (typeof cam3dSkipLerp !== 'undefined') cam3dSkipLerp = scouting;
+            updateCamera3D(dt);
+            render3D();
+            canvas.style.background = 'transparent';
+        } else {
+        if (ballMesh) ballMesh.visible = true;
         // Update 3D ball position
         updateBall3D(ball.x, ball.y, ball.z, player.ballColor, terrainHeightAt(ball.x, ball.y));
         // Update 3D target
@@ -3481,6 +3670,7 @@ function gameLoop(time) {
         render3D();
         // Make 2D canvas transparent for HUD overlay
         canvas.style.background = 'transparent';
+        } // end playing/holeDone sub-branch
     } else {
         hide3D();
         canvas.style.background = '';
@@ -3493,6 +3683,7 @@ function gameLoop(time) {
     switch (state) {
         case 'menu': drawMenu(); break;
         case 'manage': drawManage(); break;
+        case 'overworld': drawOverworld(); break;
         case 'character': drawCharacter(); break;
         case 'career': drawCareer(); break;
         case 'builder': builderDraw(); break;

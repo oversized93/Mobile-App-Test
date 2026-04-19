@@ -532,26 +532,32 @@ function buildTerrain3D(hole) {
         dummy.scale.set(1, 1, 1);
     }
 
-    // Flag pole + flag — sits on terrain elevation
-    const flagX = (hole.hole.x + 0.5) * cellSize;
-    const flagZ = (hole.hole.y + 0.5) * cellSize;
-    const flagH = (hole.heights && hole.heights[hole.hole.y]) ? (hole.heights[hole.hole.y][hole.hole.x] || 0) : 0;
+    // Flag pole + flag — sits on terrain elevation. Skipped when rendering
+    // an overworld course that has no active hole.
+    if (hole.hole) {
+        const flagX = (hole.hole.x + 0.5) * cellSize;
+        const flagZ = (hole.hole.y + 0.5) * cellSize;
+        const flagH = (hole.heights && hole.heights[hole.hole.y]) ? (hole.heights[hole.hole.y][hole.hole.x] || 0) : 0;
 
-    const poleGeo = new THREE.CylinderGeometry(0.3, 0.3, 28, 8);
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(flagX, 14 + flagH, flagZ);
-    pole.castShadow = true;
-    flagGroup.add(pole);
+        const poleGeo = new THREE.CylinderGeometry(0.3, 0.3, 28, 8);
+        const poleMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+        const pole = new THREE.Mesh(poleGeo, poleMat);
+        pole.position.set(flagX, 14 + flagH, flagZ);
+        pole.castShadow = true;
+        flagGroup.add(pole);
 
-    const flagGeo = new THREE.PlaneGeometry(8, 5);
-    const flagMat = new THREE.MeshStandardMaterial({ color: 0xee2222, side: THREE.DoubleSide });
-    const flag = new THREE.Mesh(flagGeo, flagMat);
-    flag.position.set(flagX + 4, 25 + flagH, flagZ);
-    flagGroup.add(flag);
+        const flagGeo = new THREE.PlaneGeometry(8, 5);
+        const flagMat = new THREE.MeshStandardMaterial({ color: 0xee2222, side: THREE.DoubleSide });
+        const flag = new THREE.Mesh(flagGeo, flagMat);
+        flag.position.set(flagX + 4, 25 + flagH, flagZ);
+        flagGroup.add(flag);
 
-    // Position hole (raised to terrain height)
-    holeMesh.position.set(flagX, flagH + 0.1, flagZ);
+        // Position hole (raised to terrain height)
+        holeMesh.position.set(flagX, flagH + 0.1, flagZ);
+    } else if (holeMesh) {
+        // Park the cup far off-screen so it doesn't show during overworld view
+        holeMesh.position.set(-100000, -1000, -100000);
+    }
 }
 
 function getTerrainHeight(t) {
