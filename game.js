@@ -1137,6 +1137,40 @@ function onTouchEnd(sx, sy) {
 }
 
 // ---- Menu Screen ----
+// Landscape two-column menu: left = title + player card, right = button list
+const MENU_BTNS = [
+    { id: 'manage',  label: 'Manage Resort',  icon: '\u{1F3DB}\uFE0F', colors: ['#ff6d00', '#e64a19'] },
+    { id: 'career',  label: 'Play Career',    icon: '\u26F3',          colors: ['#2e7d32', '#1b5e20'] },
+    { id: 'builder', label: 'Course Builder', icon: '\u{1F3D7}\uFE0F', colors: ['#1565c0', '#0d47a1'] },
+    { id: 'custom',  label: 'Custom Courses', icon: '\u{1F3CC}\uFE0F', colors: ['#6a1b9a', '#4a148c'] },
+    { id: 'char',    label: 'Character',      icon: '\u{1F464}',       colors: ['#e65100', '#bf360c'] },
+];
+
+function menuLayout() {
+    const pad = 20;
+    const leftW = Math.min(360, W() * 0.42);
+    const leftX = pad;
+    const rightX = leftW + pad * 2;
+    const rightW = W() - rightX - pad;
+
+    // Button column — fit all buttons between y=pad+12 and H-pad
+    const btnCount = MENU_BTNS.length;
+    const btnH = Math.min(52, Math.max(38, (H() - pad * 2 - 20) / btnCount - 10));
+    const btnGap = 10;
+    const totalH = btnCount * btnH + (btnCount - 1) * btnGap;
+    const btnStartY = (H() - totalH) / 2;
+    const btnW = Math.min(rightW, 320);
+    const btnX = rightX + (rightW - btnW) / 2;
+
+    // Player card on left — large avatar
+    const pcW = Math.min(leftW - 20, 240);
+    const pcH = 96;
+    const pcX = leftX + (leftW - pcW) / 2;
+    const pcY = H() * 0.58;
+
+    return { pad, leftX, leftW, rightX, rightW, btnH, btnGap, btnW, btnX, btnStartY, pcX, pcY, pcW, pcH };
+}
+
 function drawMenu() {
     // Rich gradient background
     const bg = ctx.createLinearGradient(0, 0, 0, H());
@@ -1146,114 +1180,110 @@ function drawMenu() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W(), H());
 
-    // Decorative pattern — subtle golf-themed circles
-    for (let i = 0; i < 20; i++) {
+    // Decorative pattern
+    for (let i = 0; i < 18; i++) {
         const px = ((i * 97 + 33) % W());
-        const py = ((i * 149 + 77) % (H() * 0.4));
-        const size = 15 + (i % 5) * 12;
+        const py = ((i * 149 + 77) % H());
+        const size = 20 + (i % 5) * 18;
         ctx.strokeStyle = `rgba(255,255,255,${0.02 + (i % 3) * 0.01})`;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(px, py + 40, size, 0, Math.PI * 2);
+        ctx.arc(px, py, size, 0, Math.PI * 2);
         ctx.stroke();
     }
 
-    // Title area — large elegant text
+    const L = menuLayout();
+    const leftCX = L.leftX + L.leftW / 2;
+
+    // Title — big, left column top
     ctx.textAlign = 'center';
-    // Title shadow
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.font = '800 44px -apple-system,sans-serif';
-    ctx.fillText('GOLF TYCOON', W() / 2 + 2, H() * 0.16 + 2);
-    // Title
+    ctx.font = '800 42px -apple-system,sans-serif';
+    ctx.fillText('GOLF TYCOON', leftCX + 2, H() * 0.22 + 2);
     ctx.fillStyle = '#fff';
-    ctx.fillText('GOLF TYCOON', W() / 2, H() * 0.16);
-    // Accent line under title
-    const lineW = 120;
-    const lineGrad = ctx.createLinearGradient(W() / 2 - lineW / 2, 0, W() / 2 + lineW / 2, 0);
+    ctx.fillText('GOLF TYCOON', leftCX, H() * 0.22);
+
+    // Accent line
+    const lineW = 140;
+    const lineGrad = ctx.createLinearGradient(leftCX - lineW / 2, 0, leftCX + lineW / 2, 0);
     lineGrad.addColorStop(0, 'rgba(76,175,80,0)');
     lineGrad.addColorStop(0.5, 'rgba(76,175,80,0.8)');
     lineGrad.addColorStop(1, 'rgba(76,175,80,0)');
     ctx.strokeStyle = lineGrad;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(W() / 2 - lineW / 2, H() * 0.16 + 12);
-    ctx.lineTo(W() / 2 + lineW / 2, H() * 0.16 + 12);
+    ctx.moveTo(leftCX - lineW / 2, H() * 0.22 + 12);
+    ctx.lineTo(leftCX + lineW / 2, H() * 0.22 + 12);
     ctx.stroke();
 
     // Subtitle
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = '300 15px -apple-system,sans-serif';
-    ctx.fillText('Build courses. Play career. Be a legend.', W() / 2, H() * 0.16 + 36);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '300 13px -apple-system,sans-serif';
+    ctx.fillText('Build courses. Run a resort. Be a legend.', leftCX, H() * 0.22 + 36);
 
-    // Player card — glass panel
-    const pcW = 160, pcH = 80;
-    const pcX = (W() - pcW) / 2, pcY = H() * 0.26;
+    // Player card
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    roundRect(pcX, pcY, pcW, pcH, 20);
+    roundRect(L.pcX, L.pcY, L.pcW, L.pcH, 18);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 1;
-    roundRect(pcX, pcY, pcW, pcH, 20);
+    roundRect(L.pcX, L.pcY, L.pcW, L.pcH, 18);
     ctx.stroke();
-    // Ball
-    drawBall(W() / 2, pcY + 30, 16, player.ballColor);
-    // Name
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = '14px -apple-system,sans-serif';
-    ctx.fillText(player.name, W() / 2, pcY + 65);
+    drawBall(L.pcX + 40, L.pcY + L.pcH / 2, 24, player.ballColor);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.fillText(player.name, L.pcX + 78, L.pcY + 42);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.fillText('$ ' + Math.floor(resort.coins).toLocaleString() + '  \u2022  ' + resort.members + ' members',
+                 L.pcX + 78, L.pcY + 62);
 
-    // Menu buttons — modern gradient pills
-    const bw = Math.min(W() - 48, 300);
-    const bx = (W() - bw) / 2;
-    const bh = 52;
-    const gap = 10;
-    let by = H() * 0.40;
-
-    const menuBtns = [
-        { label: 'Manage Resort', icon: '\u{1F3DB}\uFE0F', colors: ['#ff6d00', '#e64a19'] },
-        { label: 'Play Career', icon: '\u26F3', colors: ['#2e7d32', '#1b5e20'] },
-        { label: 'Course Builder', icon: '\u{1F3D7}\uFE0F', colors: ['#1565c0', '#0d47a1'] },
-        { label: 'Custom Courses', icon: '\u{1F3CC}\uFE0F', colors: ['#6a1b9a', '#4a148c'] },
-        { label: 'Character', icon: '\u{1F464}', colors: ['#e65100', '#bf360c'] },
-    ];
-
-    for (const btn of menuBtns) {
-        const btnGrad = ctx.createLinearGradient(bx, by, bx + bw, by);
+    // Right column — buttons
+    let by = L.btnStartY;
+    for (const btn of MENU_BTNS) {
+        const btnGrad = ctx.createLinearGradient(L.btnX, by, L.btnX + L.btnW, by);
         btnGrad.addColorStop(0, btn.colors[0]);
         btnGrad.addColorStop(1, btn.colors[1]);
         ctx.fillStyle = btnGrad;
-        roundRect(bx, by, bw, bh, bh / 2);
+        roundRect(L.btnX, by, L.btnW, L.btnH, L.btnH / 2);
         ctx.fill();
-        // Subtle top highlight
         ctx.strokeStyle = 'rgba(255,255,255,0.12)';
         ctx.lineWidth = 1;
-        roundRect(bx, by, bw, bh, bh / 2);
+        roundRect(L.btnX, by, L.btnW, L.btnH, L.btnH / 2);
         ctx.stroke();
-        // Icon + label
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 18px -apple-system,sans-serif';
+        ctx.font = 'bold 17px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(btn.icon + '  ' + btn.label, W() / 2, by + bh / 2 + 6);
-        by += bh + gap;
+        ctx.fillText(btn.icon + '  ' + btn.label, L.btnX + L.btnW / 2, by + L.btnH / 2 + 6);
+        by += L.btnH + L.btnGap;
     }
 
-    // Version — subtle
+    // Version — bottom right
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.font = '11px -apple-system,sans-serif';
-    ctx.fillText('v0.1', W() / 2, H() - 20);
+    ctx.textAlign = 'right';
+    ctx.fillText('v0.2', W() - 12, H() - 12);
 }
 
 function menuTouchStart(sx, sy) {
-    const bw = Math.min(W() - 48, 300);
-    const bx = (W() - bw) / 2;
-    const bh = 52, gap = 10;
-    let by = H() * 0.40;
-
-    if (hitBtn(sx, sy, bx, by, bw, bh)) { enterManage(); return; } by += bh + gap;
-    if (hitBtn(sx, sy, bx, by, bw, bh)) { state = 'career'; return; } by += bh + gap;
-    if (hitBtn(sx, sy, bx, by, bw, bh)) { builderInit(); state = 'builder'; return; } by += bh + gap;
-    if (hitBtn(sx, sy, bx, by, bw, bh)) { playCustomCourses(); return; } by += bh + gap;
-    if (hitBtn(sx, sy, bx, by, bw, bh)) { charColorIdx = charColors.indexOf(player.ballColor); if (charColorIdx < 0) charColorIdx = 0; state = 'character'; return; }
+    const L = menuLayout();
+    let by = L.btnStartY;
+    for (const btn of MENU_BTNS) {
+        if (hitBtn(sx, sy, L.btnX, by, L.btnW, L.btnH)) {
+            if (btn.id === 'manage') enterManage();
+            else if (btn.id === 'career') state = 'career';
+            else if (btn.id === 'builder') { builderInit(); state = 'builder'; }
+            else if (btn.id === 'custom') playCustomCourses();
+            else if (btn.id === 'char') {
+                charColorIdx = charColors.indexOf(player.ballColor);
+                if (charColorIdx < 0) charColorIdx = 0;
+                state = 'character';
+            }
+            return;
+        }
+        by += L.btnH + L.btnGap;
+    }
 }
 
 function playCustomCourses() {
@@ -1415,7 +1445,21 @@ function charTouchStart(sx, sy) {
     }
 }
 
-// ---- Career Select ----
+// ---- Career Select (landscape: cards side-by-side) ----
+function careerLayout() {
+    const pad = 14;
+    const topH = 84;
+    const bottomH = 60;
+    const cols = CAREER_COURSES.length;
+    const totalGap = (cols - 1) * 12;
+    const cardW = Math.min(280, (W() - pad * 2 - totalGap) / cols);
+    const cardH = Math.min(H() - topH - bottomH - pad, 260);
+    const rowW = cardW * cols + totalGap;
+    const startX = (W() - rowW) / 2;
+    const cy = topH + (H() - topH - bottomH - cardH) / 2;
+    return { pad, topH, bottomH, cardW, cardH, startX, cy };
+}
+
 function drawCareer() {
     const bg = ctx.createLinearGradient(0, 0, 0, H());
     bg.addColorStop(0, '#0d2818');
@@ -1431,17 +1475,17 @@ function drawCareer() {
     ctx.font = '13px -apple-system,sans-serif';
     ctx.fillText('Choose a course', W() / 2, 66);
 
-    const cardW = Math.min(W() - 28, 340);
-    const cardH = 110;
-    const gap = 12;
-    const startX = (W() - cardW) / 2;
-    let cy = 84;
+    const L = careerLayout();
+    const cardW = L.cardW;
+    const cardH = L.cardH;
+    const cy = L.cy;
 
     for (let i = 0; i < CAREER_COURSES.length; i++) {
+        const startX = L.startX + i * (cardW + 12);
         const course = CAREER_COURSES[i];
         const unlocked = player.unlocked.includes(i);
 
-        // Card background — glass with colored left accent
+        // Card background — glass with colored top accent
         ctx.fillStyle = unlocked ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.2)';
         roundRect(startX, cy, cardW, cardH, 18);
         ctx.fill();
@@ -1450,44 +1494,45 @@ function drawCareer() {
         roundRect(startX, cy, cardW, cardH, 18);
         ctx.stroke();
 
-        // Left color accent bar
+        // Top color accent bar (portrait card style)
         if (unlocked) {
             ctx.fillStyle = course.color;
-            roundRect(startX, cy, 5, cardH, 3);
+            roundRect(startX, cy, cardW, 5, 3);
             ctx.fill();
         }
 
-        // Icon — large
-        ctx.font = '36px -apple-system,sans-serif';
-        ctx.textAlign = 'left';
-        if (unlocked) ctx.fillText(course.icon, startX + 16, cy + 50);
+        const cardCx = startX + cardW / 2;
+
+        // Large icon centered at top
+        ctx.font = '56px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        if (unlocked) ctx.fillText(course.icon, cardCx, cy + 80);
 
         // Name
         ctx.fillStyle = unlocked ? '#fff' : 'rgba(255,255,255,0.25)';
-        ctx.font = '600 18px -apple-system,sans-serif';
-        ctx.fillText(course.name, startX + 62, cy + 32);
+        ctx.font = '600 20px -apple-system,sans-serif';
+        ctx.fillText(course.name, cardCx, cy + 118);
 
         // Description
         ctx.fillStyle = unlocked ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)';
-        ctx.font = '13px -apple-system,sans-serif';
-        ctx.fillText(course.desc, startX + 62, cy + 52);
+        ctx.font = '12px -apple-system,sans-serif';
+        ctx.fillText(course.desc, cardCx, cy + 140);
 
         // Holes + par
         const totalPar = course.holes.reduce((s, h) => s + h.par, 0);
         ctx.fillStyle = unlocked ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)';
         ctx.font = '12px -apple-system,sans-serif';
-        ctx.fillText(course.holes.length + ' holes  \u2022  Par ' + totalPar, startX + 62, cy + 72);
+        ctx.fillText(course.holes.length + ' holes  \u2022  Par ' + totalPar, cardCx, cy + cardH - 40);
 
         // Best score pill
         const best = loadData('best_' + i, null);
         if (best !== null && unlocked) {
-            ctx.textAlign = 'right';
             ctx.fillStyle = 'rgba(255,235,59,0.12)';
-            roundRect(startX + cardW - 80, cy + 82, 66, 20, 10);
+            roundRect(cardCx - 42, cy + cardH - 28, 84, 20, 10);
             ctx.fill();
             ctx.fillStyle = '#ffeb3b';
             ctx.font = 'bold 11px -apple-system,sans-serif';
-            ctx.fillText('Best: ' + best, startX + cardW - 16, cy + 96);
+            ctx.fillText('Best: ' + best, cardCx, cy + cardH - 14);
         }
 
         // Locked overlay
@@ -1496,39 +1541,34 @@ function drawCareer() {
             roundRect(startX, cy, cardW, cardH, 18);
             ctx.fill();
             ctx.fillStyle = 'rgba(255,255,255,0.2)';
-            ctx.font = '28px -apple-system,sans-serif';
+            ctx.font = '36px -apple-system,sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('\u{1F512}', startX + cardW / 2, cy + cardH / 2 + 10);
+            ctx.fillText('\u{1F512}', cardCx, cy + cardH / 2 + 14);
         }
-
-        cy += cardH + gap;
     }
 
-    // Back button — ghost style
+    // Back button — ghost style at bottom
     const bw = Math.min(W() - 48, 280);
     const bx = (W() - bw) / 2;
+    const by = H() - L.bottomH + 6;
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    roundRect(bx, cy + 12, bw, 48, 24);
+    roundRect(bx, by, bw, 44, 22);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
     ctx.lineWidth = 1;
-    roundRect(bx, cy + 12, bw, 48, 24);
+    roundRect(bx, by, bw, 44, 22);
     ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '15px -apple-system,sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Back', W() / 2, cy + 42);
+    ctx.fillText('Back', W() / 2, by + 28);
 }
 
 function careerTouchStart(sx, sy) {
-    const cardW = Math.min(W() - 28, 340);
-    const cardH = 110;
-    const gap = 12;
-    const startX = (W() - cardW) / 2;
-    let cy = 84;
-
+    const L = careerLayout();
     for (let i = 0; i < CAREER_COURSES.length; i++) {
-        if (hitBtn(sx, sy, startX, cy, cardW, cardH) && player.unlocked.includes(i)) {
+        const startX = L.startX + i * (L.cardW + 12);
+        if (hitBtn(sx, sy, startX, L.cy, L.cardW, L.cardH) && player.unlocked.includes(i)) {
             currentCourse = CAREER_COURSES[i];
             currentHoleIdx = 0;
             holeStrokes = [];
@@ -1537,44 +1577,64 @@ function careerTouchStart(sx, sy) {
             state = 'playing';
             return;
         }
-        cy += cardH + gap;
     }
 
     // Back
     const bw = Math.min(W() - 48, 280);
-    if (hitBtn(sx, sy, (W() - bw) / 2, cy + 12, bw, 48)) state = 'menu';
+    const bx = (W() - bw) / 2;
+    const by = H() - L.bottomH + 6;
+    if (hitBtn(sx, sy, bx, by, bw, 44)) state = 'menu';
 }
 
 // ---- Manage Resort Screen (Tycoon MVP) ----
-// Layout helper so draw and tap agree on button positions.
+// Landscape layout: left sidebar (money + stats + player card) + right content
+// area (amenities + actions). Mirrors the reference tycoon UI.
 function manageLayout() {
-    const pad = 16;
-    const cardW = Math.min(W() - pad * 2, 360);
-    const cardX = (W() - cardW) / 2;
+    const pad = 12;
+    const topBarH = 40;
 
-    // Stats row — coins / members / rate
-    const statsY = 70;
-    const statsH = 70;
+    const sidebarW = Math.min(240, Math.max(200, W() * 0.28));
+    const sidebarX = pad;
+    const sidebarY = topBarH + 8;
+    const sidebarH = H() - sidebarY - pad;
 
-    // Amenity cards
-    const amenityY = statsY + statsH + 18;
-    const amenityH = 96;
-    const amenityGap = 12;
+    const contentX = sidebarX + sidebarW + pad;
+    const contentY = sidebarY;
+    const contentW = W() - contentX - pad;
+    const contentH = sidebarH;
 
-    // Action buttons at bottom
-    const actionBw = cardW;
-    const actionBh = 52;
-    const actionBx = cardX;
-    const simBy = amenityY + (amenityH + amenityGap) * AMENITIES.length + 8;
-    const playBy = simBy + actionBh + 10;
-    const backBy = playBy + actionBh + 10;
+    // Sidebar stacked items
+    const moneyY = sidebarY;
+    const moneyH = 56;
+    const statsY = moneyY + moneyH + 10;
+    const statsH = 108;
+    const playerY = statsY + statsH + 10;
+    const playerH = 72;
+
+    // Content area: amenity list + bottom actions row (side-by-side)
+    const amenityLabelY = contentY + 4;
+    const amenityStartY = contentY + 28;
+    const amenityH = 86;
+    const amenityGap = 10;
+    const actionsRowH = 52;
+    const actionsY = contentY + contentH - actionsRowH;
+    const actionBw = (contentW - 10) / 2;
+    const simX = contentX;
+    const playX = contentX + actionBw + 10;
+
+    // Close (X) button in top-right of content
+    const closeSize = 36;
+    const closeX = W() - pad - closeSize;
+    const closeY = pad;
 
     return {
-        pad, cardW, cardX,
-        statsY, statsH,
-        amenityY, amenityH, amenityGap,
-        actionBx, actionBw, actionBh,
-        simBy, playBy, backBy
+        pad, topBarH,
+        sidebarX, sidebarY, sidebarW, sidebarH,
+        contentX, contentY, contentW, contentH,
+        moneyY, moneyH, statsY, statsH, playerY, playerH,
+        amenityLabelY, amenityStartY, amenityH, amenityGap,
+        actionsY, actionsRowH, actionBw, simX, playX,
+        closeSize, closeX, closeY
     };
 }
 
@@ -1589,154 +1649,204 @@ function drawManage() {
 
     const L = manageLayout();
 
-    // Header
-    ctx.textAlign = 'center';
+    // ---- Top bar (title left, close right) ----
+    ctx.textAlign = 'left';
     ctx.fillStyle = '#fff';
-    ctx.font = '800 26px -apple-system,sans-serif';
-    ctx.fillText('Clubhouse', W() / 2, 42);
+    ctx.font = '800 20px -apple-system,sans-serif';
+    ctx.fillText('Clubhouse', L.pad + 6, 28);
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = '12px -apple-system,sans-serif';
-    ctx.fillText('Run your resort • Grow your members', W() / 2, 58);
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.fillText('Run your resort \u2022 Grow your members', L.pad + 6 + 110, 28);
 
-    // Stats card — glass panel with three pills
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    roundRect(L.cardX, L.statsY, L.cardW, L.statsH, 16);
+    // Close X
+    ctx.fillStyle = 'rgba(255,70,70,0.85)';
+    roundRect(L.closeX, L.closeY, L.closeSize, L.closeSize, 10);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u2715', L.closeX + L.closeSize / 2, L.closeY + L.closeSize / 2 + 6);
+
+    // ---- LEFT SIDEBAR ----
+    // Money pill (big, like reference)
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(L.sidebarX, L.moneyY, L.sidebarW, L.moneyH, 14);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 1;
-    roundRect(L.cardX, L.statsY, L.cardW, L.statsH, 16);
+    roundRect(L.sidebarX, L.moneyY, L.sidebarW, L.moneyH, 14);
     ctx.stroke();
-
-    const colW = L.cardW / 3;
-    const stats = [
-        { label: 'COINS', value: Math.floor(resort.coins), color: '#ffd54f' },
-        { label: 'MEMBERS', value: resort.members, color: '#81d4fa' },
-        { label: 'COINS/SEC', value: (resort.members * 0.2).toFixed(1), color: '#a5d6a7' }
-    ];
-    for (let i = 0; i < stats.length; i++) {
-        const sx = L.cardX + colW * i;
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.font = '10px -apple-system,sans-serif';
-        ctx.fillText(stats[i].label, sx + colW / 2, L.statsY + 22);
-        ctx.fillStyle = stats[i].color;
-        ctx.font = 'bold 24px -apple-system,sans-serif';
-        ctx.fillText(String(stats[i].value), sx + colW / 2, L.statsY + 50);
-        // Divider line between columns
-        if (i < stats.length - 1) {
-            ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-            ctx.beginPath();
-            ctx.moveTo(sx + colW, L.statsY + 14);
-            ctx.lineTo(sx + colW, L.statsY + L.statsH - 14);
-            ctx.stroke();
-        }
-    }
-
-    // Amenities section label
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '11px -apple-system,sans-serif';
+    // Coin icon circle
+    ctx.fillStyle = '#ffb300';
+    ctx.beginPath();
+    ctx.arc(L.sidebarX + 28, L.moneyY + L.moneyH / 2, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#6d4c00';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('$', L.sidebarX + 28, L.moneyY + L.moneyH / 2 + 6);
+    // Balance text
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 22px -apple-system,sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('AMENITIES', L.cardX + 4, L.amenityY - 6);
+    ctx.fillText(Math.floor(resort.coins).toLocaleString(), L.sidebarX + 56, L.moneyY + L.moneyH / 2 + 7);
 
-    // Amenity cards
+    // Stats card — MEMBERS & COINS/SEC stacked
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    roundRect(L.sidebarX, L.statsY, L.sidebarW, L.statsH, 14);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    roundRect(L.sidebarX, L.statsY, L.sidebarW, L.statsH, 14);
+    ctx.stroke();
+    const halfH = L.statsH / 2;
+    // Members row
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '10px -apple-system,sans-serif';
+    ctx.fillText('MEMBERS', L.sidebarX + 14, L.statsY + 18);
+    ctx.fillStyle = '#81d4fa';
+    ctx.font = 'bold 22px -apple-system,sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(String(resort.members), L.sidebarX + L.sidebarW - 14, L.statsY + 38);
+    // Divider
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath();
+    ctx.moveTo(L.sidebarX + 14, L.statsY + halfH);
+    ctx.lineTo(L.sidebarX + L.sidebarW - 14, L.statsY + halfH);
+    ctx.stroke();
+    // Coins/sec row
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '10px -apple-system,sans-serif';
+    ctx.fillText('COINS / SEC', L.sidebarX + 14, L.statsY + halfH + 20);
+    ctx.fillStyle = '#a5d6a7';
+    ctx.font = 'bold 22px -apple-system,sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText((resort.members * 0.2).toFixed(1), L.sidebarX + L.sidebarW - 14, L.statsY + halfH + 40);
+
+    // Player card (Mayor-style)
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    roundRect(L.sidebarX, L.playerY, L.sidebarW, L.playerH, 14);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    roundRect(L.sidebarX, L.playerY, L.sidebarW, L.playerH, 14);
+    ctx.stroke();
+    // Ball avatar
+    drawBall(L.sidebarX + 36, L.playerY + L.playerH / 2, 22, player.ballColor);
+    // Player name + subtitle
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 15px -apple-system,sans-serif';
+    ctx.fillText(player.name, L.sidebarX + 72, L.playerY + 32);
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.fillText('Club Owner', L.sidebarX + 72, L.playerY + 52);
+
+    // ---- RIGHT CONTENT ----
+    // Section label
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = 'bold 11px -apple-system,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('AMENITIES', L.contentX + 4, L.amenityLabelY + 14);
+
+    // Amenity cards (full-width of content area, stacked)
     for (let i = 0; i < AMENITIES.length; i++) {
         const a = AMENITIES[i];
-        const y = L.amenityY + (L.amenityH + L.amenityGap) * i;
+        const y = L.amenityStartY + (L.amenityH + L.amenityGap) * i;
         const owned = !!resort.amenities[a.id];
         const canAfford = resort.coins >= a.cost;
 
-        // Card bg
         ctx.fillStyle = owned ? 'rgba(46,125,50,0.22)' : 'rgba(255,255,255,0.06)';
-        roundRect(L.cardX, y, L.cardW, L.amenityH, 16);
+        roundRect(L.contentX, y, L.contentW, L.amenityH, 14);
         ctx.fill();
         ctx.strokeStyle = owned ? 'rgba(129,199,132,0.35)' : 'rgba(255,255,255,0.08)';
         ctx.lineWidth = 1;
-        roundRect(L.cardX, y, L.cardW, L.amenityH, 16);
+        roundRect(L.contentX, y, L.contentW, L.amenityH, 14);
         ctx.stroke();
 
         // Icon
         ctx.textAlign = 'center';
-        ctx.font = '34px -apple-system,sans-serif';
-        ctx.fillText(a.icon, L.cardX + 38, y + 54);
+        ctx.font = '32px -apple-system,sans-serif';
+        ctx.fillText(a.icon, L.contentX + 38, y + 50);
 
-        // Name + desc
+        // Name + desc + boost
         ctx.textAlign = 'left';
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 16px -apple-system,sans-serif';
-        ctx.fillText(a.name, L.cardX + 76, y + 28);
+        ctx.fillText(a.name, L.contentX + 76, y + 26);
         ctx.fillStyle = 'rgba(255,255,255,0.55)';
         ctx.font = '11px -apple-system,sans-serif';
-        ctx.fillText(a.desc, L.cardX + 76, y + 48);
+        ctx.fillText(a.desc, L.contentX + 76, y + 46);
         ctx.fillStyle = '#81d4fa';
         ctx.font = '11px -apple-system,sans-serif';
-        ctx.fillText('+' + a.memberBoost + ' members', L.cardX + 76, y + 68);
+        ctx.fillText('+' + a.memberBoost + ' members', L.contentX + 76, y + 66);
 
-        // Buy / Owned button
-        const btnW = 80, btnH = 34;
-        const btnX = L.cardX + L.cardW - btnW - 12;
-        const btnY = y + L.amenityH - btnH - 12;
+        // Buy / Owned button on the right
+        const btnW = 100, btnH = 36;
+        const btnX = L.contentX + L.contentW - btnW - 12;
+        const btnY = y + (L.amenityH - btnH) / 2;
         if (owned) {
             ctx.fillStyle = 'rgba(129,199,132,0.25)';
-            roundRect(btnX, btnY, btnW, btnH, 17);
+            roundRect(btnX, btnY, btnW, btnH, 18);
             ctx.fill();
             ctx.fillStyle = '#a5d6a7';
-            ctx.font = 'bold 12px -apple-system,sans-serif';
+            ctx.font = 'bold 13px -apple-system,sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('OWNED', btnX + btnW / 2, btnY + 22);
+            ctx.fillText('OWNED', btnX + btnW / 2, btnY + 23);
         } else {
             const g = ctx.createLinearGradient(btnX, btnY, btnX + btnW, btnY);
             if (canAfford) { g.addColorStop(0, '#ffb300'); g.addColorStop(1, '#ff8f00'); }
             else { g.addColorStop(0, '#555'); g.addColorStop(1, '#333'); }
             ctx.fillStyle = g;
-            roundRect(btnX, btnY, btnW, btnH, 17);
+            roundRect(btnX, btnY, btnW, btnH, 18);
             ctx.fill();
             ctx.fillStyle = canAfford ? '#fff' : 'rgba(255,255,255,0.5)';
-            ctx.font = 'bold 13px -apple-system,sans-serif';
+            ctx.font = 'bold 14px -apple-system,sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(a.cost + ' \u{1FA99}', btnX + btnW / 2, btnY + 22);
+            ctx.fillText('$ ' + a.cost, btnX + btnW / 2, btnY + 23);
         }
     }
 
-    // Actions — Simulate Round (primary)
-    const simGrad = ctx.createLinearGradient(L.actionBx, L.simBy, L.actionBx + L.actionBw, L.simBy);
+    // Actions row — Simulate (left) + Play (right) side by side
+    const simGrad = ctx.createLinearGradient(L.simX, L.actionsY, L.simX + L.actionBw, L.actionsY);
     simGrad.addColorStop(0, '#ff6d00');
     simGrad.addColorStop(1, '#ff3d00');
     ctx.fillStyle = simGrad;
-    roundRect(L.actionBx, L.simBy, L.actionBw, L.actionBh, L.actionBh / 2);
+    roundRect(L.simX, L.actionsY, L.actionBw, L.actionsRowH, L.actionsRowH / 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.font = 'bold 15px -apple-system,sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('\u25B6  Simulate Round', W() / 2, L.simBy + L.actionBh / 2 + 6);
+    ctx.fillText('\u25B6  Simulate Round', L.simX + L.actionBw / 2, L.actionsY + L.actionsRowH / 2 + 6);
 
-    // Play Career
-    const playGrad = ctx.createLinearGradient(L.actionBx, L.playBy, L.actionBx + L.actionBw, L.playBy);
+    const playGrad = ctx.createLinearGradient(L.playX, L.actionsY, L.playX + L.actionBw, L.actionsY);
     playGrad.addColorStop(0, '#2e7d32');
     playGrad.addColorStop(1, '#1b5e20');
     ctx.fillStyle = playGrad;
-    roundRect(L.actionBx, L.playBy, L.actionBw, L.actionBh, L.actionBh / 2);
+    roundRect(L.playX, L.actionsY, L.actionBw, L.actionsRowH, L.actionsRowH / 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.fillText('\u26F3  Play a Round', W() / 2, L.playBy + L.actionBh / 2 + 6);
-
-    // Back
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    roundRect(L.actionBx, L.backBy, L.actionBw, L.actionBh, L.actionBh / 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = '15px -apple-system,sans-serif';
-    ctx.fillText('Back', W() / 2, L.backBy + L.actionBh / 2 + 5);
+    ctx.fillText('\u26F3  Play a Round', L.playX + L.actionBw / 2, L.actionsY + L.actionsRowH / 2 + 6);
 }
 
 function manageTouchStart(sx, sy) {
     const L = manageLayout();
 
+    // Close X → back to menu
+    if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) {
+        resort.lastTickMs = Date.now();
+        saveResort();
+        state = 'menu';
+        return;
+    }
+
     // Amenity buy buttons
     for (let i = 0; i < AMENITIES.length; i++) {
         const a = AMENITIES[i];
-        const y = L.amenityY + (L.amenityH + L.amenityGap) * i;
-        const btnW = 80, btnH = 34;
-        const btnX = L.cardX + L.cardW - btnW - 12;
-        const btnY = y + L.amenityH - btnH - 12;
+        const y = L.amenityStartY + (L.amenityH + L.amenityGap) * i;
+        const btnW = 100, btnH = 36;
+        const btnX = L.contentX + L.contentW - btnW - 12;
+        const btnY = y + (L.amenityH - btnH) / 2;
         if (!resort.amenities[a.id] && hitBtn(sx, sy, btnX, btnY, btnW, btnH)) {
             buyAmenity(a.id);
             return;
@@ -1744,30 +1854,22 @@ function manageTouchStart(sx, sy) {
     }
 
     // Simulate Round — picks the first unlocked course for now
-    if (hitBtn(sx, sy, L.actionBx, L.simBy, L.actionBw, L.actionBh)) {
+    if (hitBtn(sx, sy, L.simX, L.actionsY, L.actionBw, L.actionsRowH)) {
         const idx = (player.unlocked && player.unlocked.length) ? player.unlocked[0] : 0;
         const course = CAREER_COURSES[idx];
         const res = simulateRound(course);
         awardCoins(res.coins);
         const diff = res.totalStrokes - res.totalPar;
         const label = (diff === 0 ? 'E' : (diff > 0 ? '+' + diff : String(diff)));
-        notify(course.name + ' simulated: ' + res.totalStrokes + ' (' + label + ') • +' + res.coins + ' coins');
+        notify(course.name + ' simulated: ' + res.totalStrokes + ' (' + label + ') \u2022 +' + res.coins + ' coins');
         return;
     }
 
     // Play a Round
-    if (hitBtn(sx, sy, L.actionBx, L.playBy, L.actionBw, L.actionBh)) {
+    if (hitBtn(sx, sy, L.playX, L.actionsY, L.actionBw, L.actionsRowH)) {
         resort.lastTickMs = Date.now();
         saveResort();
         state = 'career';
-        return;
-    }
-
-    // Back
-    if (hitBtn(sx, sy, L.actionBx, L.backBy, L.actionBw, L.actionBh)) {
-        resort.lastTickMs = Date.now();
-        saveResort();
-        state = 'menu';
         return;
     }
 }

@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Golf Tycoon">
+<meta name="screen-orientation" content="landscape">
+<meta name="x5-orientation" content="landscape">
 <title>Golf Tycoon</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -13,6 +15,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a472a;touch-action
 #container{position:relative;width:100%;height:100%}
 #three-canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none}
 #c{position:absolute;top:0;left:0;width:100%;height:100%}
+
+/* Rotate-to-landscape overlay. Shown only when viewport is taller than wide. */
+#rotate-overlay{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  display:none;align-items:center;justify-content:center;flex-direction:column;
+  background:linear-gradient(180deg,#0b2a1c 0%,#144f33 50%,#08170f 100%);
+  color:#fff;text-align:center;z-index:1000;padding:24px;
+}
+@media (orientation: portrait){ #rotate-overlay{display:flex} }
+#rotate-overlay .icon{
+  font-size:64px;margin-bottom:16px;
+  animation:rotateHint 2s ease-in-out infinite;
+}
+#rotate-overlay h1{font-size:22px;font-weight:800;margin-bottom:8px}
+#rotate-overlay p{font-size:14px;opacity:.7;max-width:280px;line-height:1.5}
+@keyframes rotateHint{
+  0%,100%{transform:rotate(0deg)}
+  50%{transform:rotate(90deg)}
+}
 </style>
 </head>
 <body>
@@ -20,6 +41,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a472a;touch-action
 <canvas id="three-canvas"></canvas>
 <canvas id="c"></canvas>
 </div>
+<div id="rotate-overlay">
+  <div class="icon">&#x1F4F1;</div>
+  <h1>Please rotate your device</h1>
+  <p>Golf Tycoon is designed for landscape. Turn your phone sideways to start playing.</p>
+</div>
+<script>
+  // Best-effort orientation lock — browsers ignore this unless fullscreen,
+  // which is why we also show the rotate-overlay via CSS.
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock('landscape').catch(() => {});
+  }
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="engine.js"></script>
 <script src="courses.js"></script>
