@@ -2303,6 +2303,21 @@ function drawBrushGhost(cc, cr, size, tool) {
 // Finger hover during idle — we remember the last tap cell for ghost
 let owLastGhostCell = null;
 
+// Which camera control button is currently being held down (null when none).
+// While set, the game loop applies a continuous rotate/tilt every frame so
+// the player can spin through any angle instead of tapping 15° at a time.
+let owHeldCamBtn = null;
+const OW_ROT_SPEED = Math.PI * 1.1;    // rad/sec — full spin in ~1.8s
+const OW_TILT_SPEED = Math.PI * 0.55;  // rad/sec — horizon-to-top in ~2.8s
+
+function tickOverworldCamera(dt) {
+    if (!owHeldCamBtn) return;
+    if (owHeldCamBtn === 'rotL')     rotateCameraOrbit(-OW_ROT_SPEED * dt);
+    else if (owHeldCamBtn === 'rotR') rotateCameraOrbit(OW_ROT_SPEED * dt);
+    else if (owHeldCamBtn === 'tiltUp')   tiltCameraOrbit(-OW_TILT_SPEED * dt);
+    else if (owHeldCamBtn === 'tiltDown') tiltCameraOrbit(OW_TILT_SPEED * dt);
+}
+
 // ---- Placed hole visualization ----
 function drawPlacedHole(hole) {
     const pts = [hole.tee, ...hole.waypoints, hole.pin];
@@ -2565,15 +2580,16 @@ function overworldTouchStart(sx, sy) {
     if (hit === 'close') { exitOverworld(); return; }
     if (hit && hit.startsWith('cam:')) {
         const op = hit.slice(4);
-        if (op === 'tiltUp')   tiltCameraOrbit(-Math.PI / 18);    // 10° up
-        else if (op === 'tiltDown') tiltCameraOrbit(Math.PI / 18);
-        else if (op === 'rotL') rotateCameraOrbit(-Math.PI / 12); // 15° left
-        else if (op === 'rotR') rotateCameraOrbit(Math.PI / 12);
-        else if (op === 'reset') {
+        if (op === 'reset') {
             const cx = worldCourse.cols * CELL / 2;
             const cz = worldCourse.rows * CELL / 2;
             setCameraOrbit(cx, cz, 2600, Math.PI / 180 * 50, 0);
             if (typeof resetCameraFov === 'function') resetCameraFov();
+        } else {
+            // Start holding — game loop will rotate/tilt continuously until
+            // touchend. This replaces the old 15° step so players can spin
+            // through any 360° freely by holding the button.
+            owHeldCamBtn = op;
         }
         return;
     }
@@ -2683,6 +2699,8 @@ function overworldTouchMove(sx, sy) {
 }
 
 function overworldTouchEnd() {
+    // Release any held camera-control button so continuous rotate/tilt stops
+    owHeldCamBtn = null;
     if (holeWizard && holeWizard.draggingIdx >= 0) {
         holeWizard.draggingIdx = -1;
         return;
@@ -4286,6 +4304,8 @@ function gameLoop(time) {
         if (state === 'overworld') {
             if (ballMesh) ballMesh.visible = false;
             updateTarget3D(0, 0, false);
+            // Continuous rotate/tilt while a HUD button is held
+            tickOverworldCamera(dt);
             if (typeof cam3dSkipLerp !== 'undefined') cam3dSkipLerp = scouting || owDragPainting;
             updateCamera3D(dt);
             render3D();
