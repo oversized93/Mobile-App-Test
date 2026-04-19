@@ -5,6 +5,102 @@
 // ---- Game State ----
 let state = 'menu';
 let player = loadData('player', { name: 'Golfer', ballColor: '#fff', unlocked: [0] });
+
+// ---- Tycoon / Resort State ----
+// MVP loop: play or simulate a hole → earn coins → buy amenities → amenities
+// add members → members generate passive income while the resort screen is open.
+const RESORT_DEFAULT = {
+    coins: 100,
+    members: 5,
+    amenities: {},      // id -> true when built
+    lastTickMs: 0,      // unix ms at last income tick (for offline-style catch-up)
+    coinsFrac: 0        // fractional accumulator so we don't lose sub-1 ticks
+};
+let resort = Object.assign({}, RESORT_DEFAULT, loadData('resort', {}));
+
+const AMENITIES = [
+    { id: 'clubhouse', name: 'Clubhouse', icon: '\u{1F3DB}\uFE0F', cost: 200, memberBoost: 10,
+      desc: 'Somewhere for golfers to relax after a round.' }
+];
+
+function saveResort() { saveData('resort', resort); }
+
+function coinsForScore(par, strokes) {
+    // base scales with membership size; great scores reward more, bad scores less
+    const diff = strokes - par;
+    const base = 30 + resort.members * 2;
+    const bonus = Math.max(0, -diff) * 20;
+    const penalty = Math.max(0, diff) * 6;
+    return Math.max(5, Math.round(base + bonus - penalty));
+}
+
+function awardCoins(n) {
+    if (n <= 0) return;
+    resort.coins += n;
+    saveResort();
+}
+
+function simulateHole(par) {
+    const r = Math.random();
+    let strokes;
+    if (r < 0.05) strokes = Math.max(1, par - 2);      // eagle
+    else if (r < 0.25) strokes = Math.max(1, par - 1); // birdie
+    else if (r < 0.65) strokes = par;                   // par
+    else if (r < 0.9) strokes = par + 1;                // bogey
+    else strokes = par + 2;                             // double
+    return { strokes, par };
+}
+
+function simulateRound(course) {
+    let totalStrokes = 0, totalPar = 0, coins = 0;
+    for (const hole of course.holes) {
+        const r = simulateHole(hole.par);
+        totalStrokes += r.strokes;
+        totalPar += r.par;
+        coins += coinsForScore(r.par, r.strokes);
+    }
+    return { totalStrokes, totalPar, coins };
+}
+
+function buyAmenity(id) {
+    const a = AMENITIES.find(x => x.id === id);
+    if (!a) return;
+    if (resort.amenities[id]) return;
+    if (resort.coins < a.cost) { notify('Not enough coins'); return; }
+    resort.coins -= a.cost;
+    resort.amenities[id] = true;
+    resort.members += a.memberBoost;
+    saveResort();
+    notify('Built ' + a.name + '! +' + a.memberBoost + ' members');
+}
+
+// Passive income: members * 0.2 coins/sec while Manage screen is open.
+// On re-entry, we catch up offline time capped at 1 hour so you can't farm too
+// hard by leaving it open.
+function enterManage() {
+    const now = Date.now();
+    if (resort.lastTickMs) {
+        const elapsed = Math.min((now - resort.lastTickMs) / 1000, 3600);
+        const income = Math.floor(resort.members * elapsed * 0.2);
+        if (income > 0) { resort.coins += income; notify('+' + income + ' coins while away'); }
+    }
+    resort.lastTickMs = now;
+    resort.coinsFrac = 0;
+    saveResort();
+    state = 'manage';
+}
+
+function tickResortIncome(dt) {
+    if (state !== 'manage') return;
+    resort.coinsFrac = (resort.coinsFrac || 0) + resort.members * 0.2 * dt;
+    if (resort.coinsFrac >= 1) {
+        const whole = Math.floor(resort.coinsFrac);
+        resort.coins += whole;
+        resort.coinsFrac -= whole;
+    }
+    resort.lastTickMs = Date.now();
+}
+
 let currentCourse = null;
 let currentHoleIdx = 0;
 let currentHole = null;
@@ -545,7 +641,13 @@ function onHoleComplete() {
     if (strokes === 1) notify('HOLE IN ONE!!!');
     else notify(name);
     holeStrokes.push(strokes);
+    // Tycoon payout — manual play always pays better than auto-sim
+    const coins = Math.round(coinsForScore(currentHole.par, strokes) * 1.5);
+    awardCoins(coins);
+    lastHoleCoinReward = coins;
 }
+
+let lastHoleCoinReward = 0;
 
 // ---- Fire shot from meter results ----
 function fireFromMeter(dirX, dirY, powerPct, accuracy, curlAmt) {
@@ -710,6 +812,7 @@ let charColorIdx = 0;
 
 function onTouchStart(sx, sy) {
     if (state === 'menu') { menuTouchStart(sx, sy); return; }
+    if (state === 'manage') { manageTouchStart(sx, sy); return; }
     if (state === 'character') { charTouchStart(sx, sy); return; }
     if (state === 'career') { careerTouchStart(sx, sy); return; }
     if (state === 'builder') {
@@ -1102,11 +1205,12 @@ function drawMenu() {
     // Menu buttons — modern gradient pills
     const bw = Math.min(W() - 48, 300);
     const bx = (W() - bw) / 2;
-    const bh = 56;
-    const gap = 12;
-    let by = H() * 0.44;
+    const bh = 52;
+    const gap = 10;
+    let by = H() * 0.40;
 
     const menuBtns = [
+        { label: 'Manage Resort', icon: '\u{1F3DB}\uFE0F', colors: ['#ff6d00', '#e64a19'] },
         { label: 'Play Career', icon: '\u26F3', colors: ['#2e7d32', '#1b5e20'] },
         { label: 'Course Builder', icon: '\u{1F3D7}\uFE0F', colors: ['#1565c0', '#0d47a1'] },
         { label: 'Custom Courses', icon: '\u{1F3CC}\uFE0F', colors: ['#6a1b9a', '#4a148c'] },
@@ -1142,9 +1246,10 @@ function drawMenu() {
 function menuTouchStart(sx, sy) {
     const bw = Math.min(W() - 48, 300);
     const bx = (W() - bw) / 2;
-    const bh = 56, gap = 12;
-    let by = H() * 0.44;
+    const bh = 52, gap = 10;
+    let by = H() * 0.40;
 
+    if (hitBtn(sx, sy, bx, by, bw, bh)) { enterManage(); return; } by += bh + gap;
     if (hitBtn(sx, sy, bx, by, bw, bh)) { state = 'career'; return; } by += bh + gap;
     if (hitBtn(sx, sy, bx, by, bw, bh)) { builderInit(); state = 'builder'; return; } by += bh + gap;
     if (hitBtn(sx, sy, bx, by, bw, bh)) { playCustomCourses(); return; } by += bh + gap;
@@ -1438,6 +1543,233 @@ function careerTouchStart(sx, sy) {
     // Back
     const bw = Math.min(W() - 48, 280);
     if (hitBtn(sx, sy, (W() - bw) / 2, cy + 12, bw, 48)) state = 'menu';
+}
+
+// ---- Manage Resort Screen (Tycoon MVP) ----
+// Layout helper so draw and tap agree on button positions.
+function manageLayout() {
+    const pad = 16;
+    const cardW = Math.min(W() - pad * 2, 360);
+    const cardX = (W() - cardW) / 2;
+
+    // Stats row — coins / members / rate
+    const statsY = 70;
+    const statsH = 70;
+
+    // Amenity cards
+    const amenityY = statsY + statsH + 18;
+    const amenityH = 96;
+    const amenityGap = 12;
+
+    // Action buttons at bottom
+    const actionBw = cardW;
+    const actionBh = 52;
+    const actionBx = cardX;
+    const simBy = amenityY + (amenityH + amenityGap) * AMENITIES.length + 8;
+    const playBy = simBy + actionBh + 10;
+    const backBy = playBy + actionBh + 10;
+
+    return {
+        pad, cardW, cardX,
+        statsY, statsH,
+        amenityY, amenityH, amenityGap,
+        actionBx, actionBw, actionBh,
+        simBy, playBy, backBy
+    };
+}
+
+function drawManage() {
+    // Warm resort-y gradient
+    const bg = ctx.createLinearGradient(0, 0, 0, H());
+    bg.addColorStop(0, '#0b2a1c');
+    bg.addColorStop(0.5, '#144f33');
+    bg.addColorStop(1, '#08170f');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W(), H());
+
+    const L = manageLayout();
+
+    // Header
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.font = '800 26px -apple-system,sans-serif';
+    ctx.fillText('Clubhouse', W() / 2, 42);
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '12px -apple-system,sans-serif';
+    ctx.fillText('Run your resort • Grow your members', W() / 2, 58);
+
+    // Stats card — glass panel with three pills
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    roundRect(L.cardX, L.statsY, L.cardW, L.statsH, 16);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    roundRect(L.cardX, L.statsY, L.cardW, L.statsH, 16);
+    ctx.stroke();
+
+    const colW = L.cardW / 3;
+    const stats = [
+        { label: 'COINS', value: Math.floor(resort.coins), color: '#ffd54f' },
+        { label: 'MEMBERS', value: resort.members, color: '#81d4fa' },
+        { label: 'COINS/SEC', value: (resort.members * 0.2).toFixed(1), color: '#a5d6a7' }
+    ];
+    for (let i = 0; i < stats.length; i++) {
+        const sx = L.cardX + colW * i;
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '10px -apple-system,sans-serif';
+        ctx.fillText(stats[i].label, sx + colW / 2, L.statsY + 22);
+        ctx.fillStyle = stats[i].color;
+        ctx.font = 'bold 24px -apple-system,sans-serif';
+        ctx.fillText(String(stats[i].value), sx + colW / 2, L.statsY + 50);
+        // Divider line between columns
+        if (i < stats.length - 1) {
+            ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+            ctx.beginPath();
+            ctx.moveTo(sx + colW, L.statsY + 14);
+            ctx.lineTo(sx + colW, L.statsY + L.statsH - 14);
+            ctx.stroke();
+        }
+    }
+
+    // Amenities section label
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('AMENITIES', L.cardX + 4, L.amenityY - 6);
+
+    // Amenity cards
+    for (let i = 0; i < AMENITIES.length; i++) {
+        const a = AMENITIES[i];
+        const y = L.amenityY + (L.amenityH + L.amenityGap) * i;
+        const owned = !!resort.amenities[a.id];
+        const canAfford = resort.coins >= a.cost;
+
+        // Card bg
+        ctx.fillStyle = owned ? 'rgba(46,125,50,0.22)' : 'rgba(255,255,255,0.06)';
+        roundRect(L.cardX, y, L.cardW, L.amenityH, 16);
+        ctx.fill();
+        ctx.strokeStyle = owned ? 'rgba(129,199,132,0.35)' : 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        roundRect(L.cardX, y, L.cardW, L.amenityH, 16);
+        ctx.stroke();
+
+        // Icon
+        ctx.textAlign = 'center';
+        ctx.font = '34px -apple-system,sans-serif';
+        ctx.fillText(a.icon, L.cardX + 38, y + 54);
+
+        // Name + desc
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 16px -apple-system,sans-serif';
+        ctx.fillText(a.name, L.cardX + 76, y + 28);
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = '11px -apple-system,sans-serif';
+        ctx.fillText(a.desc, L.cardX + 76, y + 48);
+        ctx.fillStyle = '#81d4fa';
+        ctx.font = '11px -apple-system,sans-serif';
+        ctx.fillText('+' + a.memberBoost + ' members', L.cardX + 76, y + 68);
+
+        // Buy / Owned button
+        const btnW = 80, btnH = 34;
+        const btnX = L.cardX + L.cardW - btnW - 12;
+        const btnY = y + L.amenityH - btnH - 12;
+        if (owned) {
+            ctx.fillStyle = 'rgba(129,199,132,0.25)';
+            roundRect(btnX, btnY, btnW, btnH, 17);
+            ctx.fill();
+            ctx.fillStyle = '#a5d6a7';
+            ctx.font = 'bold 12px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('OWNED', btnX + btnW / 2, btnY + 22);
+        } else {
+            const g = ctx.createLinearGradient(btnX, btnY, btnX + btnW, btnY);
+            if (canAfford) { g.addColorStop(0, '#ffb300'); g.addColorStop(1, '#ff8f00'); }
+            else { g.addColorStop(0, '#555'); g.addColorStop(1, '#333'); }
+            ctx.fillStyle = g;
+            roundRect(btnX, btnY, btnW, btnH, 17);
+            ctx.fill();
+            ctx.fillStyle = canAfford ? '#fff' : 'rgba(255,255,255,0.5)';
+            ctx.font = 'bold 13px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(a.cost + ' \u{1FA99}', btnX + btnW / 2, btnY + 22);
+        }
+    }
+
+    // Actions — Simulate Round (primary)
+    const simGrad = ctx.createLinearGradient(L.actionBx, L.simBy, L.actionBx + L.actionBw, L.simBy);
+    simGrad.addColorStop(0, '#ff6d00');
+    simGrad.addColorStop(1, '#ff3d00');
+    ctx.fillStyle = simGrad;
+    roundRect(L.actionBx, L.simBy, L.actionBw, L.actionBh, L.actionBh / 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u25B6  Simulate Round', W() / 2, L.simBy + L.actionBh / 2 + 6);
+
+    // Play Career
+    const playGrad = ctx.createLinearGradient(L.actionBx, L.playBy, L.actionBx + L.actionBw, L.playBy);
+    playGrad.addColorStop(0, '#2e7d32');
+    playGrad.addColorStop(1, '#1b5e20');
+    ctx.fillStyle = playGrad;
+    roundRect(L.actionBx, L.playBy, L.actionBw, L.actionBh, L.actionBh / 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText('\u26F3  Play a Round', W() / 2, L.playBy + L.actionBh / 2 + 6);
+
+    // Back
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(L.actionBx, L.backBy, L.actionBw, L.actionBh, L.actionBh / 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '15px -apple-system,sans-serif';
+    ctx.fillText('Back', W() / 2, L.backBy + L.actionBh / 2 + 5);
+}
+
+function manageTouchStart(sx, sy) {
+    const L = manageLayout();
+
+    // Amenity buy buttons
+    for (let i = 0; i < AMENITIES.length; i++) {
+        const a = AMENITIES[i];
+        const y = L.amenityY + (L.amenityH + L.amenityGap) * i;
+        const btnW = 80, btnH = 34;
+        const btnX = L.cardX + L.cardW - btnW - 12;
+        const btnY = y + L.amenityH - btnH - 12;
+        if (!resort.amenities[a.id] && hitBtn(sx, sy, btnX, btnY, btnW, btnH)) {
+            buyAmenity(a.id);
+            return;
+        }
+    }
+
+    // Simulate Round — picks the first unlocked course for now
+    if (hitBtn(sx, sy, L.actionBx, L.simBy, L.actionBw, L.actionBh)) {
+        const idx = (player.unlocked && player.unlocked.length) ? player.unlocked[0] : 0;
+        const course = CAREER_COURSES[idx];
+        const res = simulateRound(course);
+        awardCoins(res.coins);
+        const diff = res.totalStrokes - res.totalPar;
+        const label = (diff === 0 ? 'E' : (diff > 0 ? '+' + diff : String(diff)));
+        notify(course.name + ' simulated: ' + res.totalStrokes + ' (' + label + ') • +' + res.coins + ' coins');
+        return;
+    }
+
+    // Play a Round
+    if (hitBtn(sx, sy, L.actionBx, L.playBy, L.actionBw, L.actionBh)) {
+        resort.lastTickMs = Date.now();
+        saveResort();
+        state = 'career';
+        return;
+    }
+
+    // Back
+    if (hitBtn(sx, sy, L.actionBx, L.backBy, L.actionBw, L.actionBh)) {
+        resort.lastTickMs = Date.now();
+        saveResort();
+        state = 'menu';
+        return;
+    }
 }
 
 // ---- Gameplay Drawing ----
@@ -3052,9 +3384,13 @@ function gameLoop(time) {
         canvas.style.background = '';
     }
 
+    // Tick tycoon passive income whenever Manage screen is open
+    if (state === 'manage') tickResortIncome(dt);
+
     // Draw 2D based on state (HUD overlay when 3D, full render when not)
     switch (state) {
         case 'menu': drawMenu(); break;
+        case 'manage': drawManage(); break;
         case 'character': drawCharacter(); break;
         case 'career': drawCareer(); break;
         case 'builder': builderDraw(); break;
