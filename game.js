@@ -21,50 +21,206 @@ let resort = Object.assign({}, RESORT_DEFAULT, loadData('resort', {}));
 // ---- Overworld Course Data Model ----
 // A Course is the player's entire resort world. Instead of each hole owning
 // its own grid, the whole resort lives on one big terrain and holes are
-// records that reference regions inside it (tee+pin + bounding box).
-const COURSE_SIZE = 100; // cells per side — tuned so the terrain mesh renders fast
+// records that reference regions inside it (tee+pin + waypoints polyline).
+const COURSE_COLS = 120;
+const COURSE_ROWS = 80;
 
 function makeStarterCourse() {
-    const cols = COURSE_SIZE, rows = COURSE_SIZE;
+    const cols = COURSE_COLS, rows = COURSE_ROWS;
     const grid = [];
+    // Border thickness of OOB around the playable rectangle
+    const border = 4;
     for (let r = 0; r < rows; r++) {
         grid[r] = [];
-        for (let c = 0; c < cols; c++) grid[r][c] = T.ROUGH;
+        for (let c = 0; c < cols; c++) {
+            const inBounds = r >= border && r < rows - border
+                          && c >= border && c < cols - border;
+            grid[r][c] = inBounds ? T.ROUGH : T.OOB;
+        }
     }
-    // Seed a small fairway patch near the middle so the overworld reads as
-    // "playable grass," not just undifferentiated rough.
-    const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
-    for (let r = cy - 8; r <= cy + 8; r++)
-        for (let c = cx - 14; c <= cx + 14; c++)
-            if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = T.FAIRWAY;
+    // Entrance pad: 5x3 paved patch straddling the south boundary
+    const entranceCx = Math.floor(cols / 2);
+    const entranceR0 = rows - border;
+    for (let r = entranceR0 - 1; r <= entranceR0 + 1; r++)
+        for (let c = entranceCx - 2; c <= entranceCx + 2; c++)
+            if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = T.PATH;
+    // Starter path heading north from entrance ~12 cells
+    for (let r = entranceR0 - 12; r < entranceR0 - 1; r++)
+        for (let c = entranceCx - 1; c <= entranceCx + 1; c++)
+            if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = T.PATH;
     return {
         id: 'course_1',
         name: 'My Resort',
         biome: 'meadows',
-        cols, rows,
+        cols, rows, border,
         grid,
-        holes: [],      // future: { id, par, tee:{x,y}, pin:{x,y}, bbox }
+        holes: [],      // { id, par, tee:{x,y}, pin:{x,y}, waypoints:[{x,y}] }
         facilities: [], // future: { type, x, y, rot }
         scenery: []     // future: { type, x, y }
     };
 }
 
-let worldCourse = loadData('course', null) || makeStarterCourse();
+let worldCourse = loadData('course', null);
+// Invalidate any saved course that predates the bounded-rectangle schema.
+// These old saves were 100x100 open fields without a border — start fresh.
+if (!worldCourse || worldCourse.cols !== COURSE_COLS || worldCourse.rows !== COURSE_ROWS) {
+    worldCourse = makeStarterCourse();
+}
 function saveWorldCourse() { saveData('course', worldCourse); }
 
 function enterOverworld() {
     state = 'overworld';
-    // Build a fresh 3D terrain from the Course — buildTerrain3D is happy with
-    // anything shaped like { grid, cols, rows }, so the Course works directly.
-    if (scene3dReady) buildTerrain3D(worldCourse);
-    // Park the camera over the center of the course, zoomed out far enough to
-    // see the whole map.
+    if (scene3dReady) {
+        buildTerrain3D(worldCourse);
+        // Place the camera once at entry; subsequent pan/zoom drives
+        // cam3dTarget directly via panCamera3D/zoomCamera3D.
+        const cx = worldCourse.cols * CELL / 2;
+        const cy = worldCourse.rows * CELL / 2;
+        setCameraOverhead(cx, cy, 0.22);
+        // Snap the camera instead of lerping so the entry is instant
+        if (typeof camera3d !== 'undefined' && camera3d) {
+            camera3d.position.x = cam3dTarget.x;
+            camera3d.position.y = cam3dTarget.y;
+            camera3d.position.z = cam3dTarget.z;
+        }
+    }
     cam.x = cam.targetX = worldCourse.cols * CELL / 2;
     cam.y = cam.targetY = worldCourse.rows * CELL / 2;
     cam.zoom = cam.targetZoom = 0.22;
     cam.rot = cam.targetRot = 0;
     manualZoom = true;
     scouting = false;
+    owTool = 'path';
+    owBrushSize = 3;
+    holeWizard = null;
+    owDragPainting = false;
+    owDragLastCell = null;
+    owNeedsRebuild = false;
+    owLastGhostCell = null;
+}
+
+// ---- Overworld Builder State ----
+// Brush-based placement: every tool paints cells inside an NxN footprint.
+// Objects that are conceptually 1x1 (Tee, Pin) lock to size=1 while selected.
+const OW_TOOLS = [
+    // Surface brushes
+    { id: 'fairway', label: 'Fairway', icon: '\u{1F7E2}', color: '#4caf50', terrain: T.FAIRWAY },
+    { id: 'green',   label: 'Green',   icon: '\u{1F3CC}', color: '#66cc66', terrain: T.GREEN },
+    { id: 'rough',   label: 'Rough',   icon: '\u{1F33F}', color: '#1e6b35', terrain: T.ROUGH },
+    { id: 'sand',    label: 'Sand',    icon: '\u{1F3D6}', color: '#e8d68c', terrain: T.SAND },
+    { id: 'water',   label: 'Water',   icon: '\u{1F4A7}', color: '#3399cc', terrain: T.WATER },
+    { id: 'trees',   label: 'Trees',   icon: '\u{1F332}', color: '#1a5c2a', terrain: T.TREE },
+    { id: 'path',    label: 'Path',    icon: '\u{1F6B6}', color: '#c8b888', terrain: T.PATH },
+    { id: 'erase',   label: 'Erase',   icon: '\u{267B}',  color: '#888',    terrain: T.ROUGH },
+    // Wizard tool
+    { id: 'hole',    label: 'New Hole',icon: '\u{26F3}',  color: '#ff6d00', wizard: true },
+];
+const OW_BRUSH_SIZES = [1, 3, 5, 7, 9, 11];
+
+let owTool = 'path';                // currently selected tool id
+let owBrushSize = 3;                // current brush diameter (from OW_BRUSH_SIZES)
+let owDragPainting = false;         // we are mid-stroke
+let owDragLastCell = null;          // {c, r} of last painted cell to avoid redundant work
+let owNeedsRebuild = false;         // grid was edited this frame → rebuild terrain mesh
+
+// Hole creation wizard — null when idle. Active shape is a polyline from tee
+// through waypoints to pin; par is derived from total length.
+let holeWizard = null;
+// Shape = { step, tee, pin, waypoints[], draggingIdx, holeId }
+// step: 'tee' | 'pin' | 'shape'
+
+// ---- Overworld helpers ----
+function screenToCell(sx, sy) {
+    const wp = (scene3dReady && typeof screenToWorld3D === 'function')
+        ? screenToWorld3D(sx, sy)
+        : screenToWorld(sx, sy);
+    if (!wp) return null;
+    const c = Math.floor(wp.x / CELL);
+    const r = Math.floor(wp.y / CELL);
+    if (c < 0 || c >= worldCourse.cols || r < 0 || r >= worldCourse.rows) return null;
+    return { c, r };
+}
+
+function cellCenterScreen(c, r) {
+    const wx = (c + 0.5) * CELL;
+    const wy = (r + 0.5) * CELL;
+    return (scene3dReady && typeof worldToScreen3D === 'function')
+        ? worldToScreen3D(wx, wy)
+        : worldToScreen(wx, wy);
+}
+
+function currentTool() {
+    return OW_TOOLS.find(t => t.id === owTool) || OW_TOOLS[0];
+}
+
+// Paint a brush footprint centered on (cc, cr). Skips OOB border so the
+// player can't accidentally extend the playable rectangle.
+function paintBrushAt(cc, cr, size, terrain) {
+    const half = Math.floor(size / 2);
+    let changed = false;
+    const border = worldCourse.border || 0;
+    for (let dr = -half; dr <= half; dr++) {
+        for (let dc = -half; dc <= half; dc++) {
+            const r = cr + dr, c = cc + dc;
+            if (r < border || r >= worldCourse.rows - border) continue;
+            if (c < border || c >= worldCourse.cols - border) continue;
+            if (worldCourse.grid[r][c] !== terrain) {
+                worldCourse.grid[r][c] = terrain;
+                changed = true;
+            }
+        }
+    }
+    if (changed) owNeedsRebuild = true;
+    return changed;
+}
+
+// ---- Hole wizard helpers ----
+function startHoleWizard() {
+    const nextId = (worldCourse.holes.reduce((m, h) => Math.max(m, h.id || 0), 0) || 0) + 1;
+    holeWizard = {
+        step: 'tee',
+        tee: null,
+        pin: null,
+        waypoints: [],
+        draggingIdx: -1,
+        holeId: nextId
+    };
+}
+
+function cancelHoleWizard() { holeWizard = null; }
+
+function polylineLengthYards(w) {
+    if (!w.tee || !w.pin) return 0;
+    const pts = [w.tee, ...w.waypoints, w.pin];
+    let dist = 0;
+    for (let i = 1; i < pts.length; i++) {
+        const dx = (pts[i].x - pts[i - 1].x) * CELL;
+        const dy = (pts[i].y - pts[i - 1].y) * CELL;
+        dist += Math.sqrt(dx * dx + dy * dy);
+    }
+    return dist / YDS_TO_WORLD;
+}
+
+function parFromYards(yds) {
+    if (yds < 200) return 3;
+    if (yds < 430) return 4;
+    return 5;
+}
+
+function finalizeHole() {
+    if (!holeWizard || !holeWizard.tee || !holeWizard.pin) return;
+    const yds = polylineLengthYards(holeWizard);
+    const par = parFromYards(yds);
+    worldCourse.holes.push({
+        id: holeWizard.holeId,
+        par,
+        tee: { x: holeWizard.tee.x, y: holeWizard.tee.y },
+        pin: { x: holeWizard.pin.x, y: holeWizard.pin.y },
+        waypoints: holeWizard.waypoints.map(w => ({ x: w.x, y: w.y }))
+    });
+    saveWorldCourse();
+    notify('Hole ' + holeWizard.holeId + ' created \u2022 Par ' + par + ' \u2022 ' + Math.round(yds) + 'y');
+    holeWizard = null;
 }
 
 const AMENITIES = [
@@ -1945,14 +2101,27 @@ function manageTouchStart(sx, sy) {
     }
 }
 
-// ---- Overworld Screen (Phase 2 — 3D scene + pan/zoom HUD) ----
+// ---- Overworld Screen (Phase 3 — builder with brush tools + hole wizard) ----
 function overworldLayout() {
     const pad = 10;
     const topBarH = 44;
     const closeSize = 36;
     const closeX = W() - pad - closeSize;
     const closeY = pad;
-    return { pad, topBarH, closeSize, closeX, closeY };
+    // Left tool rail
+    const railX = pad;
+    const railW = 42;
+    const railSlot = 40; // per-icon vertical slot
+    const railY = topBarH + 8;
+    const railH = OW_TOOLS.length * railSlot + 8;
+    // Brush size picker — bottom strip
+    const sizesW = 240;
+    const sizesH = 36;
+    const sizesX = (W() - sizesW) / 2;
+    const sizesY = H() - sizesH - pad;
+    return { pad, topBarH, closeSize, closeX, closeY,
+             railX, railY, railW, railH, railSlot,
+             sizesX, sizesY, sizesW, sizesH };
 }
 
 function drawOverworld() {
@@ -1964,24 +2133,36 @@ function drawOverworld() {
 
     const L = overworldLayout();
 
-    // Top bar — course name + balance pill
+    // ---- Placed holes: dotted polyline + tee/pin markers on the 3D scene ----
+    for (const hole of worldCourse.holes) drawPlacedHole(hole);
+
+    // ---- Active hole wizard overlay (if any) ----
+    if (holeWizard) drawHoleWizardOverlay();
+
+    // ---- Brush ghost at current finger position (if we are painting) ----
+    if (!holeWizard && owDragLastCell && (owDragPainting || owLastGhostCell)) {
+        drawBrushGhost(owDragLastCell.c, owDragLastCell.r, owBrushSize, currentTool());
+    }
+
+    // ---- Top bar ----
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, W(), L.topBarH);
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, L.topBarH); ctx.lineTo(W(), L.topBarH); ctx.stroke();
 
-    // Course name
+    // Course name (left) + subtitle directly to its right — measured so they
+    // never overlap
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 16px -apple-system,sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(worldCourse.name, L.pad + 6, 28);
+    const nameW = ctx.measureText(worldCourse.name).width;
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '11px -apple-system,sans-serif';
     const subtitle = worldCourse.holes.length + ' holes \u2022 '
-        + worldCourse.facilities.length + ' facilities \u2022 '
-        + worldCourse.cols + 'x' + worldCourse.rows;
-    ctx.fillText(subtitle, L.pad + 6 + ctx.measureText(worldCourse.name).width + 10, 28);
+        + worldCourse.facilities.length + ' facilities';
+    ctx.fillText(subtitle, L.pad + 6 + nameW + 12, 28);
 
     // Balance pill (top center)
     const bpW = 120, bpH = 28;
@@ -2006,46 +2187,459 @@ function drawOverworld() {
     ctx.textAlign = 'center';
     ctx.fillText('\u2715', L.closeX + L.closeSize / 2, L.closeY + L.closeSize / 2 + 6);
 
-    // Bottom hint strip — temporary (removed once placement tools land)
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    const hintH = 28;
-    roundRect(W() / 2 - 160, H() - hintH - 10, 320, hintH, hintH / 2);
+    // ---- Left tool rail ----
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    roundRect(L.railX, L.railY, L.railW, L.railH, 14);
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = '12px -apple-system,sans-serif';
-    ctx.fillText('Drag to pan \u2022 Pinch to zoom \u2022 Placement tools coming soon',
-                 W() / 2, H() - hintH - 10 + hintH / 2 + 4);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    roundRect(L.railX, L.railY, L.railW, L.railH, 14);
+    ctx.stroke();
+    for (let i = 0; i < OW_TOOLS.length; i++) {
+        const tool = OW_TOOLS[i];
+        const iy = L.railY + 4 + i * L.railSlot;
+        const active = tool.id === owTool;
+        if (active) {
+            // Active tool highlight — colored tint matching the material
+            ctx.fillStyle = tool.color + 'aa';
+            roundRect(L.railX + 3, iy, L.railW - 6, L.railSlot - 2, 10);
+            ctx.fill();
+        }
+        ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.8)';
+        ctx.font = '20px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(tool.icon, L.railX + L.railW / 2, iy + 26);
+    }
+
+    // ---- Brush size picker (hidden during hole wizard — wizard uses its own flow) ----
+    if (!holeWizard) {
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        roundRect(L.sizesX, L.sizesY, L.sizesW, L.sizesH, 18);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        roundRect(L.sizesX, L.sizesY, L.sizesW, L.sizesH, 18);
+        ctx.stroke();
+        const slotW = L.sizesW / OW_BRUSH_SIZES.length;
+        for (let i = 0; i < OW_BRUSH_SIZES.length; i++) {
+            const s = OW_BRUSH_SIZES[i];
+            const sx = L.sizesX + slotW * i;
+            const active = s === owBrushSize;
+            if (active) {
+                ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                roundRect(sx + 3, L.sizesY + 3, slotW - 6, L.sizesH - 6, 14);
+                ctx.fill();
+            }
+            ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.55)';
+            ctx.font = active ? 'bold 14px -apple-system,sans-serif' : '14px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(String(s), sx + slotW / 2, L.sizesY + L.sizesH / 2 + 5);
+        }
+    }
+}
+
+// ---- Brush ghost in screen space ----
+function drawBrushGhost(cc, cr, size, tool) {
+    if (!tool) return;
+    const half = Math.floor(size / 2);
+    // Four corners of the NxN square in world, project to screen
+    const corners = [
+        cellCenterScreen(cc - half - 0.5, cr - half - 0.5),
+        cellCenterScreen(cc + half + 0.5, cr - half - 0.5),
+        cellCenterScreen(cc + half + 0.5, cr + half + 0.5),
+        cellCenterScreen(cc - half - 0.5, cr + half + 0.5)
+    ];
+    if (corners.some(c => c.behind)) return;
+    ctx.fillStyle = tool.color + '66';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(corners[0].x, corners[0].y);
+    ctx.lineTo(corners[1].x, corners[1].y);
+    ctx.lineTo(corners[2].x, corners[2].y);
+    ctx.lineTo(corners[3].x, corners[3].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+}
+
+// Finger hover during idle — we remember the last tap cell for ghost
+let owLastGhostCell = null;
+
+// ---- Placed hole visualization ----
+function drawPlacedHole(hole) {
+    const pts = [hole.tee, ...hole.waypoints, hole.pin];
+    const screens = pts.map(p => cellCenterScreen(p.x, p.y));
+    if (screens.some(s => s.behind)) return;
+
+    // Dotted polyline (white, drop-shadowed)
+    ctx.save();
+    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(screens[0].x, screens[0].y);
+    for (let i = 1; i < screens.length; i++) ctx.lineTo(screens[i].x, screens[i].y);
+    ctx.stroke();
+    ctx.restore();
+
+    // Tee marker (green)
+    const t = screens[0];
+    ctx.fillStyle = '#1b5e20';
+    ctx.beginPath(); ctx.arc(t.x, t.y, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('T' + hole.id, t.x, t.y + 4);
+
+    // Pin marker (red flag)
+    const p = screens[screens.length - 1];
+    ctx.strokeStyle = '#eee';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - 18);
+    ctx.stroke();
+    ctx.fillStyle = '#e53935';
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - 18);
+    ctx.lineTo(p.x + 10, p.y - 14);
+    ctx.lineTo(p.x, p.y - 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Waypoint dots
+    for (let i = 1; i < screens.length - 1; i++) {
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.beginPath(); ctx.arc(screens[i].x, screens[i].y, 5, 0, Math.PI * 2); ctx.fill();
+    }
+}
+
+// ---- Hole wizard overlay ----
+function drawHoleWizardOverlay() {
+    const w = holeWizard;
+    // Step banner (top center, below the top bar)
+    const msg = w.step === 'tee' ? 'Tap to place the Tee'
+              : w.step === 'pin' ? 'Tap to place the Pin'
+              : 'Shape the hole: drag waypoints, tap + to add, \u2714 to confirm';
+    const bannerW = Math.min(W() - 20, 420);
+    const bannerH = 32;
+    const bannerX = (W() - bannerW) / 2;
+    const bannerY = 52;
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    roundRect(bannerX, bannerY, bannerW, bannerH, bannerH / 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,109,0,0.6)';
+    ctx.lineWidth = 1.5;
+    roundRect(bannerX, bannerY, bannerW, bannerH, bannerH / 2);
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(msg, W() / 2, bannerY + bannerH / 2 + 5);
+
+    // Tee ghost (step 1) — follows finger last position
+    if (w.step === 'tee' && owLastGhostCell) {
+        drawBrushGhost(owLastGhostCell.c, owLastGhostCell.r, 1, { color: '#1b5e20' });
+    }
+
+    // Placed tee marker
+    if (w.tee) {
+        const s = cellCenterScreen(w.tee.x, w.tee.y);
+        if (!s.behind) {
+            ctx.fillStyle = '#1b5e20';
+            ctx.beginPath(); ctx.arc(s.x, s.y, 12, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('TEE', s.x, s.y + 4);
+        }
+    }
+
+    // Pin ghost (step 2)
+    if (w.step === 'pin' && owLastGhostCell) {
+        drawBrushGhost(owLastGhostCell.c, owLastGhostCell.r, 1, { color: '#e53935' });
+    }
+
+    // Placed pin
+    if (w.pin) {
+        const s = cellCenterScreen(w.pin.x, w.pin.y);
+        if (!s.behind) {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y); ctx.lineTo(s.x, s.y - 22);
+            ctx.stroke();
+            ctx.fillStyle = '#e53935';
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y - 22);
+            ctx.lineTo(s.x + 12, s.y - 18);
+            ctx.lineTo(s.x, s.y - 14);
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+
+    // Shape step — draw polyline + waypoint handles + "+" midpoints
+    if (w.step === 'shape' && w.tee && w.pin) {
+        const pts = [w.tee, ...w.waypoints, w.pin];
+        const screens = pts.map(p => cellCenterScreen(p.x, p.y));
+
+        // Polyline
+        ctx.save();
+        ctx.setLineDash([8, 6]);
+        ctx.strokeStyle = 'rgba(255,109,0,0.9)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(screens[0].x, screens[0].y);
+        for (let i = 1; i < screens.length; i++) ctx.lineTo(screens[i].x, screens[i].y);
+        ctx.stroke();
+        ctx.restore();
+
+        // Waypoint handles (draggable circles) + a "-" badge above each
+        for (let i = 1; i < screens.length - 1; i++) {
+            const s = screens[i];
+            ctx.fillStyle = 'rgba(255,109,0,0.9)';
+            ctx.beginPath(); ctx.arc(s.x, s.y, 12, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            // minus badge
+            const mx = s.x + 14, my = s.y - 14;
+            ctx.fillStyle = '#e53935';
+            ctx.beginPath(); ctx.arc(mx, my, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('\u2212', mx, my + 5);
+        }
+
+        // "+" midpoint buttons on each segment
+        for (let i = 0; i < screens.length - 1; i++) {
+            const a = screens[i], b = screens[i + 1];
+            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+            ctx.fillStyle = '#1565c0';
+            ctx.beginPath(); ctx.arc(mx, my, 12, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('+', mx, my + 6);
+        }
+
+        // Confirm + Cancel pills at bottom
+        const btnW = 120, btnH = 42, bY = H() - btnH - 12;
+        // Cancel (left)
+        ctx.fillStyle = 'rgba(40,40,40,0.85)';
+        roundRect(W() / 2 - btnW - 10, bY, btnW, btnH, btnH / 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 15px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('\u2715 Cancel', W() / 2 - btnW / 2 - 10, bY + btnH / 2 + 5);
+        // Confirm (right)
+        const g = ctx.createLinearGradient(W() / 2 + 10, bY, W() / 2 + 10 + btnW, bY);
+        g.addColorStop(0, '#2e7d32'); g.addColorStop(1, '#1b5e20');
+        ctx.fillStyle = g;
+        roundRect(W() / 2 + 10, bY, btnW, btnH, btnH / 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        const yds = Math.round(polylineLengthYards(w));
+        const par = parFromYards(yds);
+        ctx.fillText('\u2714 Par ' + par + ' \u2022 ' + yds + 'y', W() / 2 + 10 + btnW / 2, bY + btnH / 2 + 5);
+    } else {
+        // For tee / pin steps — show a Cancel pill only
+        const btnW = 120, btnH = 38, bY = H() - btnH - 12;
+        ctx.fillStyle = 'rgba(40,40,40,0.85)';
+        roundRect((W() - btnW) / 2, bY, btnW, btnH, btnH / 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('\u2715 Cancel', W() / 2, bY + btnH / 2 + 5);
+    }
+}
+
+// Pick the button under (sx, sy) if any overworld HUD button is hit. Returns
+// null if the tap should fall through to the 3D world (pan / paint / wizard).
+function overworldHUDHit(sx, sy) {
+    const L = overworldLayout();
+    if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) return 'close';
+    // Tool rail
+    for (let i = 0; i < OW_TOOLS.length; i++) {
+        const iy = L.railY + 4 + i * L.railSlot;
+        if (hitBtn(sx, sy, L.railX + 2, iy, L.railW - 4, L.railSlot - 2)) return 'tool:' + OW_TOOLS[i].id;
+    }
+    // Brush size picker (hidden during wizard)
+    if (!holeWizard && sx >= L.sizesX && sx <= L.sizesX + L.sizesW
+        && sy >= L.sizesY && sy <= L.sizesY + L.sizesH) {
+        const slotW = L.sizesW / OW_BRUSH_SIZES.length;
+        const idx = Math.floor((sx - L.sizesX) / slotW);
+        if (idx >= 0 && idx < OW_BRUSH_SIZES.length) return 'size:' + OW_BRUSH_SIZES[idx];
+    }
+    // Hole wizard buttons
+    if (holeWizard) {
+        const w = holeWizard;
+        if (w.step === 'shape' && w.tee && w.pin) {
+            const btnW = 120, btnH = 42, bY = H() - btnH - 12;
+            if (hitBtn(sx, sy, W() / 2 - btnW - 10, bY, btnW, btnH)) return 'wiz:cancel';
+            if (hitBtn(sx, sy, W() / 2 + 10, bY, btnW, btnH)) return 'wiz:confirm';
+            // - badges near each waypoint (remove)
+            const pts = [w.tee, ...w.waypoints, w.pin];
+            const screens = pts.map(p => cellCenterScreen(p.x, p.y));
+            for (let i = 1; i < screens.length - 1; i++) {
+                const s = screens[i];
+                const mx = s.x + 14, my = s.y - 14;
+                const dx = sx - mx, dy = sy - my;
+                if (dx * dx + dy * dy < 14 * 14) return 'wiz:remove:' + (i - 1);
+            }
+            // + midpoint buttons
+            for (let i = 0; i < screens.length - 1; i++) {
+                const a = screens[i], b = screens[i + 1];
+                const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+                const dx = sx - mx, dy = sy - my;
+                if (dx * dx + dy * dy < 14 * 14) return 'wiz:add:' + i;
+            }
+            // Waypoint drag handles
+            for (let i = 1; i < screens.length - 1; i++) {
+                const s = screens[i];
+                const dx = sx - s.x, dy = sy - s.y;
+                if (dx * dx + dy * dy < 14 * 14) return 'wiz:drag:' + (i - 1);
+            }
+        } else {
+            const btnW = 120, btnH = 38, bY = H() - btnH - 12;
+            if (hitBtn(sx, sy, (W() - btnW) / 2, bY, btnW, btnH)) return 'wiz:cancel';
+        }
+    }
+    return null;
 }
 
 function overworldTouchStart(sx, sy) {
-    const L = overworldLayout();
-    // Close X → back to Manage
-    if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) {
-        saveWorldCourse();
-        enterManage();
+    const hit = overworldHUDHit(sx, sy);
+    if (hit === 'close') { saveWorldCourse(); enterManage(); return; }
+    if (hit && hit.startsWith('tool:')) {
+        const id = hit.slice(5);
+        if (id === 'hole') { startHoleWizard(); return; }
+        owTool = id;
         return;
     }
-    // Anything else → start a camera pan
+    if (hit && hit.startsWith('size:')) {
+        owBrushSize = parseInt(hit.slice(5), 10);
+        return;
+    }
+    if (hit === 'wiz:cancel') { cancelHoleWizard(); return; }
+    if (hit === 'wiz:confirm') { finalizeHole(); return; }
+    if (hit && hit.startsWith('wiz:add:')) {
+        const i = parseInt(hit.slice(8), 10);
+        const w = holeWizard;
+        const pts = [w.tee, ...w.waypoints, w.pin];
+        const a = pts[i], b = pts[i + 1];
+        const mid = { x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) };
+        w.waypoints.splice(i, 0, mid);
+        return;
+    }
+    if (hit && hit.startsWith('wiz:remove:')) {
+        const i = parseInt(hit.slice(11), 10);
+        holeWizard.waypoints.splice(i, 1);
+        return;
+    }
+    if (hit && hit.startsWith('wiz:drag:')) {
+        holeWizard.draggingIdx = parseInt(hit.slice(9), 10);
+        return;
+    }
+
+    // Not a HUD hit — action depends on mode
+    const cell = screenToCell(sx, sy);
+    if (holeWizard) {
+        if (!cell) return;
+        if (holeWizard.step === 'tee') {
+            holeWizard.tee = { x: cell.c, y: cell.r };
+            holeWizard.step = 'pin';
+            owLastGhostCell = { c: cell.c, r: cell.r };
+            return;
+        }
+        if (holeWizard.step === 'pin') {
+            // Prevent placing pin exactly on tee
+            if (holeWizard.tee && holeWizard.tee.x === cell.c && holeWizard.tee.y === cell.r) return;
+            holeWizard.pin = { x: cell.c, y: cell.r };
+            holeWizard.step = 'shape';
+            owLastGhostCell = null;
+            return;
+        }
+        // Shape step with no handle hit → pan
+        scouting = true; scoutLastX = sx; scoutLastY = sy;
+        return;
+    }
+
+    // Brush mode — start a paint stroke on the current cell (if inside playable area)
+    if (cell) {
+        const tool = currentTool();
+        if (tool && !tool.wizard) {
+            owDragPainting = true;
+            owDragLastCell = cell;
+            owLastGhostCell = cell;
+            paintBrushAt(cell.c, cell.r, owBrushSize, tool.terrain);
+            return;
+        }
+    }
+
+    // Fallback: camera pan
     scouting = true;
     scoutLastX = sx;
     scoutLastY = sy;
 }
 
 function overworldTouchMove(sx, sy) {
-    if (!scouting) return;
-    const dx = sx - scoutLastX;
-    const dy = sy - scoutLastY;
-    scoutLastX = sx;
-    scoutLastY = sy;
-    if (scene3dReady && typeof panCamera3D === 'function') {
-        panCamera3D(dx, dy);
-    } else {
-        cam.targetX -= dx / cam.zoom;
-        cam.targetY -= dy / cam.zoom;
+    // Wizard waypoint drag
+    if (holeWizard && holeWizard.draggingIdx >= 0) {
+        const cell = screenToCell(sx, sy);
+        if (cell) holeWizard.waypoints[holeWizard.draggingIdx] = { x: cell.c, y: cell.r };
+        return;
+    }
+    // Brush painting
+    if (owDragPainting) {
+        const cell = screenToCell(sx, sy);
+        if (!cell) return;
+        if (!owDragLastCell || cell.c !== owDragLastCell.c || cell.r !== owDragLastCell.r) {
+            owDragLastCell = cell;
+            owLastGhostCell = cell;
+            paintBrushAt(cell.c, cell.r, owBrushSize, currentTool().terrain);
+        }
+        return;
+    }
+    // Camera pan
+    if (scouting) {
+        const dx = sx - scoutLastX;
+        const dy = sy - scoutLastY;
+        scoutLastX = sx;
+        scoutLastY = sy;
+        if (scene3dReady && typeof panCamera3D === 'function') {
+            panCamera3D(dx, dy);
+        } else {
+            cam.targetX -= dx / cam.zoom;
+            cam.targetY -= dy / cam.zoom;
+        }
     }
 }
 
 function overworldTouchEnd() {
+    if (holeWizard && holeWizard.draggingIdx >= 0) {
+        holeWizard.draggingIdx = -1;
+        return;
+    }
+    if (owDragPainting) {
+        owDragPainting = false;
+        owDragLastCell = null;
+        if (owNeedsRebuild && scene3dReady) {
+            buildTerrain3D(worldCourse);
+            owNeedsRebuild = false;
+        }
+        saveWorldCourse();
+        return;
+    }
     scouting = false;
 }
 
@@ -3629,14 +4223,13 @@ function gameLoop(time) {
     if (use3D) {
         show3D();
 
-        // Overworld branch — render the course, park ball + target off-screen,
-        // and drive the camera purely from cam.x/y/zoom (user pans/pinches).
+        // Overworld branch — cam3dTarget is driven directly by panCamera3D /
+        // zoomCamera3D from user input; we just flush any pending terrain
+        // rebuild, tick the camera lerp, and render.
         if (state === 'overworld') {
             if (ballMesh) ballMesh.visible = false;
             updateTarget3D(0, 0, false);
-            // zoom here is "smaller number = further away" (height = 500 / zoom)
-            setCameraOverhead(cam.x, cam.y, cam.zoom);
-            if (typeof cam3dSkipLerp !== 'undefined') cam3dSkipLerp = scouting;
+            if (typeof cam3dSkipLerp !== 'undefined') cam3dSkipLerp = scouting || owDragPainting;
             updateCamera3D(dt);
             render3D();
             canvas.style.background = 'transparent';
