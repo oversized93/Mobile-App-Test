@@ -89,6 +89,14 @@ function applyOrbitCamera() {
     cam3dLookAt.x = cam3dPivotX;
     cam3dLookAt.y = 0;
     cam3dLookAt.z = cam3dPivotZ;
+    // Snap the Three.js camera directly to the target every time we touch
+    // orbit state. This makes every pan/tilt/rotate input immediate —
+    // without this, updateCamera3D's smoothing lerp introduces a "push
+    // and release" lag where the camera drifts after the finger lifts.
+    if (cam3dOrbitMode && typeof camera3d !== 'undefined' && camera3d) {
+        camera3d.position.set(cam3dTarget.x, cam3dTarget.y, cam3dTarget.z);
+        camera3d.lookAt(cam3dLookAt.x, cam3dLookAt.y, cam3dLookAt.z);
+    }
 }
 
 function setCameraOrbit(cx, cz, distance, pitch, yaw) {
