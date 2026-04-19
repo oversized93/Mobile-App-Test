@@ -64,8 +64,10 @@ let cam3dYaw = 0;                              // radians around Y axis
 let cam3dPitch = Math.PI / 180 * 50;           // 0 = horizontal, PI/2 = top-down
 const CAM3D_PITCH_MIN = Math.PI / 180 * 12;    // not fully horizontal
 const CAM3D_PITCH_MAX = Math.PI / 180 * 88;    // almost top-down
-const CAM3D_DIST_MIN = 120;
-const CAM3D_DIST_MAX = 4500;
+// Distance range spans "finger-on-a-tee" close to "whole resort visible" far.
+// The render fog / far plane is 12000–15000, so 10000 stays well inside.
+const CAM3D_DIST_MIN = 60;
+const CAM3D_DIST_MAX = 10000;
 
 function applyOrbitCamera() {
     const d = cam3dDistance;
