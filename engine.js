@@ -210,6 +210,15 @@ canvas.addEventListener('touchstart', (e) => {
         pinchStartMidY = (t1.clientY + t2.clientY) / 2;
         pinchStartCamX = cam.targetX;
         pinchStartCamY = cam.targetY;
+        // Orbit baseline — we snapshot orbit state once so move deltas are
+        // computed as absolutes from this baseline (prevents compounding).
+        if (typeof cam3dOrbitMode !== 'undefined' && cam3dOrbitMode) {
+            cam._pinchOrbitDist  = cam3dDistance;
+            cam._pinchOrbitPitch = cam3dPitch;
+            cam._pinchOrbitYaw   = cam3dYaw;
+            cam._pinchOrbitPivotX = cam3dPivotX;
+            cam._pinchOrbitPivotZ = cam3dPivotZ;
+        }
         cam._lastPinchDx = 0; cam._lastPinchDy = 0;
         cam._lastPinchRot = 0;
         return;
@@ -229,6 +238,33 @@ canvas.addEventListener('touchmove', (e) => {
     if (pinching && e.touches.length === 2) {
         const dist = getTouchDist(e);
         const scale = dist / pinchStartDist;
+        const angle = getTouchAngle(e);
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const midX = (t1.clientX + t2.clientX) / 2;
+        const midY = (t1.clientY + t2.clientY) / 2;
+
+        // ---- Orbit mode (overworld) — recompute absolutes from pinch start ----
+        if (typeof cam3dOrbitMode !== 'undefined' && cam3dOrbitMode && typeof setCameraOrbit === 'function') {
+            const baseDist  = cam._pinchOrbitDist  || cam3dDistance;
+            const basePitch = cam._pinchOrbitPitch || cam3dPitch;
+            const baseYaw   = cam._pinchOrbitYaw   || cam3dYaw;
+            const basePivotX = cam._pinchOrbitPivotX != null ? cam._pinchOrbitPivotX : cam3dPivotX;
+            const basePivotZ = cam._pinchOrbitPivotZ != null ? cam._pinchOrbitPivotZ : cam3dPivotZ;
+            // Zoom — inverse of the finger scale (spread fingers → closer)
+            const newDist = baseDist / scale;
+            // Yaw — twist gesture rotates by the absolute angle delta
+            const newYaw = baseYaw + (angle - pinchStartAngle);
+            // Pitch — midpoint vertical drag; finger down pushes cam overhead
+            const midDy = midY - pinchStartMidY;
+            const newPitch = basePitch + midDy * 0.004;
+            setCameraOrbit(basePivotX, basePivotZ, newDist, newPitch, newYaw);
+            cam.targetZoom = Math.max(0.3, Math.min(8, pinchStartZoom * scale));
+            cam.zoom = cam.targetZoom;
+            manualZoom = true;
+            return;
+        }
+
+        // ---- Legacy (gameplay) pinch — unchanged ----
         // 3D zoom
         if (typeof zoomCamera3D === 'function' && typeof scene3dReady !== 'undefined' && scene3dReady) {
             zoomCamera3D(pinchStartZoom / (cam.targetZoom || 1));
@@ -236,43 +272,24 @@ canvas.addEventListener('touchmove', (e) => {
         cam.targetZoom = Math.max(0.3, Math.min(8, pinchStartZoom * scale));
         cam.zoom = cam.targetZoom;
         // Rotate
-        const angle = getTouchAngle(e);
         const totalRot = angle - pinchStartAngle;
-        const rotDelta = totalRot - (cam._lastPinchRot || 0);
         cam.targetRot = pinchStartRot + totalRot;
         cam.rot = cam.targetRot;
-        // In orbit mode (overworld), twist the gesture to yaw the camera
-        if (typeof rotateCameraOrbit === 'function' && typeof cam3dOrbitMode !== 'undefined' && cam3dOrbitMode) {
-            rotateCameraOrbit(rotDelta);
-        }
-        cam._lastPinchRot = totalRot;
-        // Pan (two-finger drag) — also drives pitch (orbit) via vertical
-        // midpoint delta so players can tilt by dragging both fingers up/down
-        const t1 = e.touches[0], t2 = e.touches[1];
-        const midX = (t1.clientX + t2.clientX) / 2;
-        const midY = (t1.clientY + t2.clientY) / 2;
+        // Pan (two-finger drag)
         const pdx = midX - pinchStartMidX;
         const pdy = midY - pinchStartMidY;
-        if (typeof tiltCameraOrbit === 'function' && typeof cam3dOrbitMode !== 'undefined' && cam3dOrbitMode) {
-            // Vertical midpoint delta → pitch. Positive dy (finger down) = raise
-            // the camera (lower pitch angle = look more horizontal).
-            const stepDy = pdy - (cam._lastPinchDy || 0);
-            tiltCameraOrbit(-stepDy * 0.005);
-            cam._lastPinchDy = pdy; cam._lastPinchDx = pdx;
-        } else if (typeof panCamera3D === 'function' && typeof scene3dReady !== 'undefined' && scene3dReady) {
+        if (typeof panCamera3D === 'function' && typeof scene3dReady !== 'undefined' && scene3dReady) {
             panCamera3D(pdx - (cam._lastPinchDx || 0), pdy - (cam._lastPinchDy || 0));
             cam._lastPinchDx = pdx; cam._lastPinchDy = pdy;
         }
-        // 2D fallback (legacy modes only)
-        if (typeof cam3dOrbitMode === 'undefined' || !cam3dOrbitMode) {
-            const dx = pdx / cam.zoom;
-            const dy = pdy / cam.zoom;
-            const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
-            cam.targetX = pinchStartCamX - (dx * cos - dy * sin);
-            cam.targetY = pinchStartCamY - (dx * sin + dy * cos);
-            cam.x = cam.targetX;
-            cam.y = cam.targetY;
-        }
+        // 2D fallback
+        const dx = pdx / cam.zoom;
+        const dy = pdy / cam.zoom;
+        const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
+        cam.targetX = pinchStartCamX - (dx * cos - dy * sin);
+        cam.targetY = pinchStartCamY - (dx * sin + dy * cos);
+        cam.x = cam.targetX;
+        cam.y = cam.targetY;
         manualZoom = true;
         return;
     }
