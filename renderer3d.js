@@ -68,6 +68,14 @@ const CAM3D_PITCH_MAX = Math.PI / 180 * 88;    // almost top-down
 // The render fog / far plane is 12000–15000, so 10000 stays well inside.
 const CAM3D_DIST_MIN = 60;
 const CAM3D_DIST_MAX = 10000;
+// Zoom in the overworld is FOV-driven (camera stays put, lens narrows)
+// which reads as "magnify what's in front of me" rather than "camera
+// dives down toward the ground pivot." Dolly-distance only changes via
+// the reset button.
+const CAM3D_FOV_DEFAULT = 75;
+const CAM3D_FOV_MIN = 22;  // most zoomed-in
+const CAM3D_FOV_MAX = 85;  // most zoomed-out
+let cam3dFov = CAM3D_FOV_DEFAULT;
 
 function applyOrbitCamera() {
     const d = cam3dDistance;
@@ -107,8 +115,28 @@ function panCameraOrbit(dxScreen, dyScreen) {
 }
 
 function zoomCameraOrbit(factor) {
-    cam3dDistance = Math.max(CAM3D_DIST_MIN, Math.min(CAM3D_DIST_MAX, cam3dDistance * factor));
-    applyOrbitCamera();
+    // FOV zoom — narrow lens on pinch-spread (factor<1), widen on pinch-close
+    cam3dFov = Math.max(CAM3D_FOV_MIN, Math.min(CAM3D_FOV_MAX, cam3dFov * factor));
+    if (typeof camera3d !== 'undefined' && camera3d) {
+        camera3d.fov = cam3dFov;
+        camera3d.updateProjectionMatrix();
+    }
+}
+
+// Absolute FOV setter — used by the pinch handler to apply zoom from its
+// captured start baseline (prevents compounding drift).
+function setCameraFov(fov) {
+    cam3dFov = Math.max(CAM3D_FOV_MIN, Math.min(CAM3D_FOV_MAX, fov));
+    if (typeof camera3d !== 'undefined' && camera3d) {
+        camera3d.fov = cam3dFov;
+        camera3d.updateProjectionMatrix();
+    }
+}
+
+// Restore the default FOV — called when leaving overworld so gameplay
+// cameras get their expected field of view back.
+function resetCameraFov() {
+    setCameraFov(CAM3D_FOV_DEFAULT);
 }
 
 function rotateCameraOrbit(deltaYaw) {

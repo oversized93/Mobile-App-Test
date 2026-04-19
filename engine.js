@@ -218,6 +218,7 @@ canvas.addEventListener('touchstart', (e) => {
             cam._pinchOrbitYaw   = cam3dYaw;
             cam._pinchOrbitPivotX = cam3dPivotX;
             cam._pinchOrbitPivotZ = cam3dPivotZ;
+            cam._pinchOrbitFov   = (typeof cam3dFov !== 'undefined') ? cam3dFov : 75;
         }
         cam._lastPinchDx = 0; cam._lastPinchDy = 0;
         cam._lastPinchRot = 0;
@@ -245,19 +246,21 @@ canvas.addEventListener('touchmove', (e) => {
 
         // ---- Orbit mode (overworld) — recompute absolutes from pinch start ----
         if (typeof cam3dOrbitMode !== 'undefined' && cam3dOrbitMode && typeof setCameraOrbit === 'function') {
-            const baseDist  = cam._pinchOrbitDist  || cam3dDistance;
             const basePitch = cam._pinchOrbitPitch || cam3dPitch;
             const baseYaw   = cam._pinchOrbitYaw   || cam3dYaw;
             const basePivotX = cam._pinchOrbitPivotX != null ? cam._pinchOrbitPivotX : cam3dPivotX;
             const basePivotZ = cam._pinchOrbitPivotZ != null ? cam._pinchOrbitPivotZ : cam3dPivotZ;
-            // Zoom — inverse of the finger scale (spread fingers → closer)
-            const newDist = baseDist / scale;
+            const baseFov   = (cam._pinchOrbitFov != null) ? cam._pinchOrbitFov : 75;
+            // Zoom is FOV-driven — camera stays put, lens narrows as fingers
+            // spread. This avoids the "camera dives down toward ground pivot"
+            // feel that comes from dolly-zoom on an orbit camera.
+            if (typeof setCameraFov === 'function') setCameraFov(baseFov / scale);
             // Yaw — twist gesture rotates by the absolute angle delta
             const newYaw = baseYaw + (angle - pinchStartAngle);
             // Pitch — midpoint vertical drag; finger down pushes cam overhead
             const midDy = midY - pinchStartMidY;
             const newPitch = basePitch + midDy * 0.004;
-            setCameraOrbit(basePivotX, basePivotZ, newDist, newPitch, newYaw);
+            setCameraOrbit(basePivotX, basePivotZ, cam3dDistance, newPitch, newYaw);
             cam.targetZoom = Math.max(0.3, Math.min(8, pinchStartZoom * scale));
             cam.zoom = cam.targetZoom;
             manualZoom = true;

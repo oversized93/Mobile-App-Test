@@ -76,8 +76,10 @@ function enterOverworld() {
         const cz = worldCourse.rows * CELL / 2;
         // Switch the 3D camera into orbit mode so the player has full
         // pitch/yaw/zoom control. Initial framing mimics the overhead
-        // tycoon view (~50° pitch, pointed north).
+        // tycoon view (~50° pitch, pointed north). FOV resets to default
+        // so prior session zoom doesn't leak back in.
         cam3dOrbitMode = true;
+        if (typeof resetCameraFov === 'function') resetCameraFov();
         setCameraOrbit(cx, cz, 2600, Math.PI / 180 * 50, 0);
         if (typeof camera3d !== 'undefined' && camera3d) {
             camera3d.position.x = cam3dTarget.x;
@@ -100,10 +102,11 @@ function enterOverworld() {
     owLastGhostCell = null;
 }
 
-// Called when leaving overworld back to Manage — drop orbit mode so
-// gameplay cameras (setCameraBehindBall, etc.) behave normally.
+// Called when leaving overworld back to Manage — drop orbit mode + reset
+// FOV so gameplay cameras (setCameraBehindBall, etc.) behave normally.
 function exitOverworld() {
     cam3dOrbitMode = false;
+    if (typeof resetCameraFov === 'function') resetCameraFov();
     saveWorldCourse();
     enterManage();
 }
@@ -2570,6 +2573,7 @@ function overworldTouchStart(sx, sy) {
             const cx = worldCourse.cols * CELL / 2;
             const cz = worldCourse.rows * CELL / 2;
             setCameraOrbit(cx, cz, 2600, Math.PI / 180 * 50, 0);
+            if (typeof resetCameraFov === 'function') resetCameraFov();
         }
         return;
     }
