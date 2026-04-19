@@ -211,6 +211,7 @@ canvas.addEventListener('touchstart', (e) => {
         pinchStartCamX = cam.targetX;
         pinchStartCamY = cam.targetY;
         cam._lastPinchDx = 0; cam._lastPinchDy = 0;
+        cam._lastPinchRot = 0;
         return;
     }
     const t = e.touches[0];
@@ -236,26 +237,42 @@ canvas.addEventListener('touchmove', (e) => {
         cam.zoom = cam.targetZoom;
         // Rotate
         const angle = getTouchAngle(e);
-        cam.targetRot = pinchStartRot + (angle - pinchStartAngle);
+        const totalRot = angle - pinchStartAngle;
+        const rotDelta = totalRot - (cam._lastPinchRot || 0);
+        cam.targetRot = pinchStartRot + totalRot;
         cam.rot = cam.targetRot;
-        // Pan (two-finger drag)
+        // In orbit mode (overworld), twist the gesture to yaw the camera
+        if (typeof rotateCameraOrbit === 'function' && typeof cam3dOrbitMode !== 'undefined' && cam3dOrbitMode) {
+            rotateCameraOrbit(rotDelta);
+        }
+        cam._lastPinchRot = totalRot;
+        // Pan (two-finger drag) — also drives pitch (orbit) via vertical
+        // midpoint delta so players can tilt by dragging both fingers up/down
         const t1 = e.touches[0], t2 = e.touches[1];
         const midX = (t1.clientX + t2.clientX) / 2;
         const midY = (t1.clientY + t2.clientY) / 2;
         const pdx = midX - pinchStartMidX;
         const pdy = midY - pinchStartMidY;
-        if (typeof panCamera3D === 'function' && typeof scene3dReady !== 'undefined' && scene3dReady) {
+        if (typeof tiltCameraOrbit === 'function' && typeof cam3dOrbitMode !== 'undefined' && cam3dOrbitMode) {
+            // Vertical midpoint delta → pitch. Positive dy (finger down) = raise
+            // the camera (lower pitch angle = look more horizontal).
+            const stepDy = pdy - (cam._lastPinchDy || 0);
+            tiltCameraOrbit(-stepDy * 0.005);
+            cam._lastPinchDy = pdy; cam._lastPinchDx = pdx;
+        } else if (typeof panCamera3D === 'function' && typeof scene3dReady !== 'undefined' && scene3dReady) {
             panCamera3D(pdx - (cam._lastPinchDx || 0), pdy - (cam._lastPinchDy || 0));
             cam._lastPinchDx = pdx; cam._lastPinchDy = pdy;
         }
-        // 2D fallback
-        const dx = pdx / cam.zoom;
-        const dy = pdy / cam.zoom;
-        const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
-        cam.targetX = pinchStartCamX - (dx * cos - dy * sin);
-        cam.targetY = pinchStartCamY - (dx * sin + dy * cos);
-        cam.x = cam.targetX;
-        cam.y = cam.targetY;
+        // 2D fallback (legacy modes only)
+        if (typeof cam3dOrbitMode === 'undefined' || !cam3dOrbitMode) {
+            const dx = pdx / cam.zoom;
+            const dy = pdy / cam.zoom;
+            const cos = Math.cos(-cam.rot), sin = Math.sin(-cam.rot);
+            cam.targetX = pinchStartCamX - (dx * cos - dy * sin);
+            cam.targetY = pinchStartCamY - (dx * sin + dy * cos);
+            cam.x = cam.targetX;
+            cam.y = cam.targetY;
+        }
         manualZoom = true;
         return;
     }

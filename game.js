@@ -72,12 +72,13 @@ function enterOverworld() {
     state = 'overworld';
     if (scene3dReady) {
         buildTerrain3D(worldCourse);
-        // Place the camera once at entry; subsequent pan/zoom drives
-        // cam3dTarget directly via panCamera3D/zoomCamera3D.
         const cx = worldCourse.cols * CELL / 2;
-        const cy = worldCourse.rows * CELL / 2;
-        setCameraOverhead(cx, cy, 0.22);
-        // Snap the camera instead of lerping so the entry is instant
+        const cz = worldCourse.rows * CELL / 2;
+        // Switch the 3D camera into orbit mode so the player has full
+        // pitch/yaw/zoom control. Initial framing mimics the overhead
+        // tycoon view (~50° pitch, pointed north).
+        cam3dOrbitMode = true;
+        setCameraOrbit(cx, cz, 2600, Math.PI / 180 * 50, 0);
         if (typeof camera3d !== 'undefined' && camera3d) {
             camera3d.position.x = cam3dTarget.x;
             camera3d.position.y = cam3dTarget.y;
@@ -86,7 +87,7 @@ function enterOverworld() {
     }
     cam.x = cam.targetX = worldCourse.cols * CELL / 2;
     cam.y = cam.targetY = worldCourse.rows * CELL / 2;
-    cam.zoom = cam.targetZoom = 0.22;
+    cam.zoom = cam.targetZoom = 1;
     cam.rot = cam.targetRot = 0;
     manualZoom = true;
     scouting = false;
@@ -97,6 +98,14 @@ function enterOverworld() {
     owDragLastCell = null;
     owNeedsRebuild = false;
     owLastGhostCell = null;
+}
+
+// Called when leaving overworld back to Manage — drop orbit mode so
+// gameplay cameras (setCameraBehindBall, etc.) behave normally.
+function exitOverworld() {
+    cam3dOrbitMode = false;
+    saveWorldCourse();
+    enterManage();
 }
 
 // ---- Overworld Builder State ----
@@ -2119,9 +2128,17 @@ function overworldLayout() {
     const sizesH = 36;
     const sizesX = (W() - sizesW) / 2;
     const sizesY = H() - sizesH - pad;
+    // Camera controls — right-edge vertical strip (pitch up / down / rotate L / R / reset)
+    const camBtnSize = 36;
+    const camBtnGap = 4;
+    const camBtns = ['tiltUp', 'tiltDown', 'rotL', 'rotR', 'reset'];
+    const camTotalH = camBtns.length * camBtnSize + (camBtns.length - 1) * camBtnGap;
+    const camX = W() - pad - camBtnSize;
+    const camY0 = (H() - camTotalH) / 2;
     return { pad, topBarH, closeSize, closeX, closeY,
              railX, railY, railW, railH, railSlot,
-             sizesX, sizesY, sizesW, sizesH };
+             sizesX, sizesY, sizesW, sizesH,
+             camX, camY0, camBtnSize, camBtnGap, camBtns };
 }
 
 function drawOverworld() {
@@ -2209,6 +2226,24 @@ function drawOverworld() {
         ctx.font = '20px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(tool.icon, L.railX + L.railW / 2, iy + 26);
+    }
+
+    // ---- Camera control rail (right edge) ----
+    const camIconLabels = { tiltUp: '\u25B2', tiltDown: '\u25BC', rotL: '\u21BA', rotR: '\u21BB', reset: '\u25CE' };
+    for (let i = 0; i < L.camBtns.length; i++) {
+        const id = L.camBtns[i];
+        const by = L.camY0 + i * (L.camBtnSize + L.camBtnGap);
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        roundRect(L.camX, by, L.camBtnSize, L.camBtnSize, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.lineWidth = 1;
+        roundRect(L.camX, by, L.camBtnSize, L.camBtnSize, 10);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = '16px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(camIconLabels[id], L.camX + L.camBtnSize / 2, by + L.camBtnSize / 2 + 6);
     }
 
     // ---- Brush size picker (hidden during hole wizard — wizard uses its own flow) ----
@@ -2468,6 +2503,11 @@ function drawHoleWizardOverlay() {
 function overworldHUDHit(sx, sy) {
     const L = overworldLayout();
     if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) return 'close';
+    // Camera control rail
+    for (let i = 0; i < L.camBtns.length; i++) {
+        const by = L.camY0 + i * (L.camBtnSize + L.camBtnGap);
+        if (hitBtn(sx, sy, L.camX, by, L.camBtnSize, L.camBtnSize)) return 'cam:' + L.camBtns[i];
+    }
     // Tool rail
     for (let i = 0; i < OW_TOOLS.length; i++) {
         const iy = L.railY + 4 + i * L.railSlot;
@@ -2519,7 +2559,20 @@ function overworldHUDHit(sx, sy) {
 
 function overworldTouchStart(sx, sy) {
     const hit = overworldHUDHit(sx, sy);
-    if (hit === 'close') { saveWorldCourse(); enterManage(); return; }
+    if (hit === 'close') { exitOverworld(); return; }
+    if (hit && hit.startsWith('cam:')) {
+        const op = hit.slice(4);
+        if (op === 'tiltUp')   tiltCameraOrbit(-Math.PI / 18);    // 10° up
+        else if (op === 'tiltDown') tiltCameraOrbit(Math.PI / 18);
+        else if (op === 'rotL') rotateCameraOrbit(-Math.PI / 12); // 15° left
+        else if (op === 'rotR') rotateCameraOrbit(Math.PI / 12);
+        else if (op === 'reset') {
+            const cx = worldCourse.cols * CELL / 2;
+            const cz = worldCourse.rows * CELL / 2;
+            setCameraOrbit(cx, cz, 2600, Math.PI / 180 * 50, 0);
+        }
+        return;
+    }
     if (hit && hit.startsWith('tool:')) {
         const id = hit.slice(5);
         if (id === 'hole') { startHoleWizard(); return; }

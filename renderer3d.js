@@ -52,6 +52,73 @@ let cam3dMode = 'overhead'; // 'overhead' | 'behind' | 'follow'
 let cam3dTarget = { x: 0, y: 0, z: 0 };
 let cam3dLookAt = { x: 0, y: 0, z: 0 };
 
+// Orbit camera state — when cam3dOrbitMode is true, pan/zoom/rotate/tilt
+// helpers manipulate a spherical-coordinate orbit around a pivot point,
+// which gives the player a fully dynamic camera (any yaw + any pitch)
+// instead of the fixed tilt the gameplay cameras use.
+let cam3dOrbitMode = false;
+let cam3dPivotX = 0;
+let cam3dPivotZ = 0;
+let cam3dDistance = 500;                       // camera-to-pivot distance
+let cam3dYaw = 0;                              // radians around Y axis
+let cam3dPitch = Math.PI / 180 * 50;           // 0 = horizontal, PI/2 = top-down
+const CAM3D_PITCH_MIN = Math.PI / 180 * 12;    // not fully horizontal
+const CAM3D_PITCH_MAX = Math.PI / 180 * 88;    // almost top-down
+const CAM3D_DIST_MIN = 120;
+const CAM3D_DIST_MAX = 4500;
+
+function applyOrbitCamera() {
+    const d = cam3dDistance;
+    const cosP = Math.cos(cam3dPitch), sinP = Math.sin(cam3dPitch);
+    const cosY = Math.cos(cam3dYaw),   sinY = Math.sin(cam3dYaw);
+    // Camera sits on a sphere of radius d around the pivot, yaw rotates
+    // around Y, pitch lifts off the ground plane
+    cam3dTarget.x = cam3dPivotX + d * cosP * sinY;
+    cam3dTarget.y = d * sinP;
+    cam3dTarget.z = cam3dPivotZ + d * cosP * cosY;
+    cam3dLookAt.x = cam3dPivotX;
+    cam3dLookAt.y = 0;
+    cam3dLookAt.z = cam3dPivotZ;
+}
+
+function setCameraOrbit(cx, cz, distance, pitch, yaw) {
+    cam3dPivotX = cx;
+    cam3dPivotZ = cz;
+    if (distance != null) cam3dDistance = Math.max(CAM3D_DIST_MIN, Math.min(CAM3D_DIST_MAX, distance));
+    if (pitch != null)    cam3dPitch    = Math.max(CAM3D_PITCH_MIN, Math.min(CAM3D_PITCH_MAX, pitch));
+    if (yaw != null)      cam3dYaw      = yaw;
+    applyOrbitCamera();
+}
+
+function panCameraOrbit(dxScreen, dyScreen) {
+    // Screen-space drag → world translation of the pivot in the yaw plane.
+    // Scale with distance so a flick feels the same at any zoom.
+    const scale = cam3dDistance * 0.0022;
+    const cosY = Math.cos(cam3dYaw), sinY = Math.sin(cam3dYaw);
+    // Screen-right axis in world space (perpendicular to view, on ground)
+    const rx =  cosY, rz = -sinY;
+    // Screen-up axis (into the scene, flattened to ground)
+    const fx =  sinY, fz =  cosY;
+    cam3dPivotX -= (dxScreen * rx + dyScreen * fx) * scale;
+    cam3dPivotZ -= (dxScreen * rz + dyScreen * fz) * scale;
+    applyOrbitCamera();
+}
+
+function zoomCameraOrbit(factor) {
+    cam3dDistance = Math.max(CAM3D_DIST_MIN, Math.min(CAM3D_DIST_MAX, cam3dDistance * factor));
+    applyOrbitCamera();
+}
+
+function rotateCameraOrbit(deltaYaw) {
+    cam3dYaw += deltaYaw;
+    applyOrbitCamera();
+}
+
+function tiltCameraOrbit(deltaPitch) {
+    cam3dPitch = Math.max(CAM3D_PITCH_MIN, Math.min(CAM3D_PITCH_MAX, cam3dPitch + deltaPitch));
+    applyOrbitCamera();
+}
+
 // ---- Color conversion ----
 function hexToThreeColor(hex) {
     return new THREE.Color(hex);
@@ -677,6 +744,9 @@ function screenToWorld3D(sx, sy) {
 
 // ---- Pan camera by screen delta ----
 function panCamera3D(dx, dy) {
+    // Orbit camera route (overworld) — move the pivot, preserve view angle
+    if (cam3dOrbitMode) { panCameraOrbit(dx, dy); return; }
+
     // Convert screen delta to world delta based on camera orientation
     const right = new THREE.Vector3();
     const forward = new THREE.Vector3();
@@ -698,6 +768,7 @@ function panCamera3D(dx, dy) {
 
 // ---- Zoom camera ----
 function zoomCamera3D(factor) {
+    if (cam3dOrbitMode) { zoomCameraOrbit(factor); return; }
     cam3dTarget.y = Math.max(30, Math.min(3000, cam3dTarget.y * factor));
 }
 
