@@ -109,10 +109,19 @@ function setCameraOrbit(cx, cz, distance, pitch, yaw) {
     applyOrbitCamera();
 }
 
+// Pan bounds — set on entering the overworld so the player can never pan
+// the resort fully off-screen and get lost.
+let cam3dPanBounds = null; // {minX, maxX, minZ, maxZ}
+function setOrbitPanBounds(minX, maxX, minZ, maxZ) {
+    cam3dPanBounds = { minX, maxX, minZ, maxZ };
+}
+
 function panCameraOrbit(dxScreen, dyScreen) {
     // Screen-space drag → world translation of the pivot in the yaw plane.
-    // Scale with distance so a flick feels the same at any zoom.
-    const scale = cam3dDistance * 0.0022;
+    // Scale with distance AND lens zoom so a flick moves the same fraction
+    // of the visible area at any zoom level (narrow FOV = slower pan).
+    const zoomScale = (typeof cam3dFov !== 'undefined') ? cam3dFov / CAM3D_FOV_DEFAULT : 1;
+    const scale = cam3dDistance * 0.0022 * zoomScale;
     const cosY = Math.cos(cam3dYaw), sinY = Math.sin(cam3dYaw);
     // Screen-right axis in world space (perpendicular to view, on ground)
     const rx =  cosY, rz = -sinY;
@@ -120,6 +129,10 @@ function panCameraOrbit(dxScreen, dyScreen) {
     const fx =  sinY, fz =  cosY;
     cam3dPivotX -= (dxScreen * rx + dyScreen * fx) * scale;
     cam3dPivotZ -= (dxScreen * rz + dyScreen * fz) * scale;
+    if (cam3dPanBounds) {
+        cam3dPivotX = Math.max(cam3dPanBounds.minX, Math.min(cam3dPanBounds.maxX, cam3dPivotX));
+        cam3dPivotZ = Math.max(cam3dPanBounds.minZ, Math.min(cam3dPanBounds.maxZ, cam3dPivotZ));
+    }
     applyOrbitCamera();
 }
 
@@ -351,6 +364,116 @@ function onResize3D() {
     renderer3d.setSize(window.innerWidth, window.innerHeight);
 }
 
+// ---- Per-vertex terrain shading — shared by the full build and the live
+// mid-stroke repaint so painting feedback is instant without a mesh rebuild.
+const TERRAIN_VERT_PRIORITY = {
+    [T.SAND]: 5,
+    [T.GREEN]: 4,
+    [T.TEE]: 4,
+    [T.FAIRWAY]: 3,
+    [T.PATH]: 3,
+    [T.ROUGH]: 2,
+    [T.TREE]: 2,
+    [T.WATER]: 1,
+    [T.OOB]: 0,
+};
+let _terrainRGBTable = null;
+function terrainRGBTable() {
+    if (_terrainRGBTable) return _terrainRGBTable;
+    const m = {};
+    for (const key in TERRAIN_COLORS) {
+        const c = new THREE.Color(TERRAIN_COLORS[key]).convertSRGBToLinear();
+        m[key] = [c.r, c.g, c.b];
+    }
+    // TREE cells get grass color underneath so land looks continuous
+    m[T.TREE] = m[T.ROUGH].slice();
+    return _terrainRGBTable = m;
+}
+
+function computeVertexColorHeight(hole, vc, vr) {
+    const terrainRGB = terrainRGBTable();
+    // 4 cells that share this vertex
+    const neighbors = [
+        { c: vc - 1, r: vr - 1 }, { c: vc, r: vr - 1 },
+        { c: vc - 1, r: vr     }, { c: vc, r: vr     }
+    ];
+    let sumH = 0;
+    let waterCount = 0;
+    let bestType = T.ROUGH;
+    let bestPriority = -1;
+    let nearSand = false;
+    let nearTree = false;
+    for (const n of neighbors) {
+        const inBounds = n.c >= 0 && n.c < hole.cols && n.r >= 0 && n.r < hole.rows;
+        const t = inBounds ? hole.grid[n.r][n.c] : T.ROUGH;
+        const h = (inBounds && hole.heights) ? hole.heights[n.r][n.c] : 0;
+        sumH += h;
+        if (t === T.WATER) waterCount++;
+        // Sand within 1 cell of a neighbor darkens the vertex (bunker lip)
+        if (inBounds) {
+            for (let dy = -1; dy <= 1 && !nearSand; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const nc = n.c + dx, nr = n.r + dy;
+                    if (nc >= 0 && nc < hole.cols && nr >= 0 && nr < hole.rows
+                        && hole.grid[nr][nc] === T.SAND) { nearSand = true; break; }
+                }
+            }
+        }
+        const pri = TERRAIN_VERT_PRIORITY[t] || 0;
+        if (pri > bestPriority) {
+            bestPriority = pri;
+            bestType = t;
+        }
+        if (t === T.TREE) nearTree = true;
+    }
+    const avgH = sumH / 4;
+    const isAllWater = (waterCount === 4);
+    const y = isAllWater ? -4 : avgH;
+
+    let rgb = terrainRGB[bestType] || [0.1, 0.3, 0.15];
+
+    // Fairway mowing stripes — alternate every 3 rows
+    if (bestType === T.FAIRWAY) {
+        const stripe = Math.floor(vr / 3) % 2;
+        const stripeMult = stripe === 0 ? 1.15 : 0.85;
+        rgb = [rgb[0] * stripeMult, rgb[1] * stripeMult, rgb[2] * stripeMult];
+    }
+    // Bunker sand lip — darken edges near sand
+    if (bestType !== T.SAND && nearSand) {
+        rgb = [rgb[0] * 0.75, rgb[1] * 0.75, rgb[2] * 0.7];
+    }
+    // Tree shadow patch — darken rough under tree canopies
+    if (nearTree && bestType === T.ROUGH) {
+        rgb = [rgb[0] * 0.65, rgb[1] * 0.7, rgb[2] * 0.65];
+    }
+    return { y, rgb };
+}
+
+// Live repaint refs — the currently-built terrain mesh + its source course
+let terrainColorAttrRef = null;
+let terrainHoleRef = null;
+
+// Recompute vertex colors around edited cells only. Heights/geometry are
+// intentionally untouched — those settle at stroke end via buildTerrain3D.
+function repaintTerrainCells(hole, cells) {
+    if (!terrainColorAttrRef || terrainHoleRef !== hole || !cells.length) return;
+    const vertCols = hole.cols + 1;
+    const seen = new Set();
+    for (const cell of cells) {
+        for (let vr = cell.r - 2; vr <= cell.r + 3; vr++) {
+            for (let vc = cell.c - 2; vc <= cell.c + 3; vc++) {
+                if (vc < 0 || vc > hole.cols || vr < 0 || vr > hole.rows) continue;
+                const i = vr * vertCols + vc;
+                if (seen.has(i)) continue;
+                seen.add(i);
+                const { rgb } = computeVertexColorHeight(hole, vc, vr);
+                terrainColorAttrRef.setXYZ(i, rgb[0], rgb[1], rgb[2]);
+            }
+        }
+    }
+    terrainColorAttrRef.needsUpdate = true;
+}
+
 // ---- Build terrain from hole grid (INSTANCED for performance) ----
 // opts.distantScenery: false skips the fake perimeter trees/hills — used by
 // the overworld, where the course IS the world and the backdrop shapes read
@@ -395,110 +518,15 @@ function buildTerrain3D(hole, opts) {
     // Translate so cell (0,0) starts at world origin
     terrainGeo.translate(holeW / 2, 0, holeH / 2);
 
-    // Helper: convert hex string color to LINEAR RGB 0-1 (see linC comment —
-    // r128 needs manual conversion so sRGB output doesn't double-lift)
-    function hexToRGB(hex) {
-        const c = new THREE.Color(hex).convertSRGBToLinear();
-        return [c.r, c.g, c.b];
-    }
-    // Pre-compute RGB for each terrain type
-    const terrainRGB = {};
-    for (const key in TERRAIN_COLORS) {
-        terrainRGB[key] = hexToRGB(TERRAIN_COLORS[key]);
-    }
-    // TREE cells get grass color underneath so the land looks continuous where trees are
-    terrainRGB[T.TREE] = hexToRGB(TERRAIN_COLORS[T.ROUGH]);
-
-    // Sample terrain at a vertex — take the 4 neighboring cells (or clamp at edges)
-    function sampleCell(c, r, field) {
-        const cc = Math.max(0, Math.min(hole.cols - 1, c));
-        const rr = Math.max(0, Math.min(hole.rows - 1, r));
-        return field[rr][cc];
-    }
-
     const posAttr = terrainGeo.getAttribute('position');
     const colors = new Float32Array(posAttr.count * 3);
     const vertCols = hole.cols + 1;
-    const vertRows = hole.rows + 1;
-
-    // Priority — higher = wins the vertex color
-    const typePriority = {
-        [T.SAND]: 5,
-        [T.GREEN]: 4,
-        [T.TEE]: 4,
-        [T.FAIRWAY]: 3,
-        [T.PATH]: 3,
-        [T.ROUGH]: 2,
-        [T.TREE]: 2,
-        [T.WATER]: 1,
-        [T.OOB]: 0,
-    };
 
     for (let i = 0; i < posAttr.count; i++) {
         const vr = Math.floor(i / vertCols);
         const vc = i - vr * vertCols;
-
-        // 4 cells that share this vertex
-        const neighbors = [
-            { c: vc - 1, r: vr - 1 }, { c: vc, r: vr - 1 },
-            { c: vc - 1, r: vr     }, { c: vc, r: vr     }
-        ];
-        let sumH = 0;
-        let waterCount = 0;
-        let bestType = T.ROUGH;
-        let bestPriority = -1;
-        let nearSand = false;
-        let nearTree = false;
-        for (const n of neighbors) {
-            const inBounds = n.c >= 0 && n.c < hole.cols && n.r >= 0 && n.r < hole.rows;
-            const t = inBounds ? hole.grid[n.r][n.c] : T.ROUGH;
-            const h = (inBounds && hole.heights) ? hole.heights[n.r][n.c] : 0;
-            sumH += h;
-            if (t === T.WATER) waterCount++;
-            // Check if sand/tree is within 2 cells for lip effect
-            if (inBounds) {
-                for (let dy = -2; dy <= 2; dy++) {
-                    for (let dx = -2; dx <= 2; dx++) {
-                        const nc = n.c + dx, nr = n.r + dy;
-                        if (nc >= 0 && nc < hole.cols && nr >= 0 && nr < hole.rows) {
-                            const nt = hole.grid[nr][nc];
-                            if (nt === T.SAND && Math.abs(dx) <= 1 && Math.abs(dy) <= 1) nearSand = true;
-                        }
-                    }
-                }
-            }
-            const pri = typePriority[t] || 0;
-            if (pri > bestPriority) {
-                bestPriority = pri;
-                bestType = t;
-            }
-            if (t === T.TREE) nearTree = true;
-        }
-        const avgH = sumH / 4;
-        const isAllWater = (waterCount === 4);
-        const y = isAllWater ? -4 : avgH;
+        const { y, rgb } = computeVertexColorHeight(hole, vc, vr);
         posAttr.setY(i, y);
-
-        let rgb = terrainRGB[bestType] || [0.1, 0.3, 0.15];
-
-        // ---- Fairway mowing stripes ----
-        if (bestType === T.FAIRWAY) {
-            // Alternate every 3 rows — light vs dark green
-            const stripe = Math.floor(vr / 3) % 2;
-            const stripeMult = stripe === 0 ? 1.15 : 0.85;
-            rgb = [rgb[0] * stripeMult, rgb[1] * stripeMult, rgb[2] * stripeMult];
-        }
-
-        // ---- Bunker sand lip — darken edges near sand ----
-        if (bestType !== T.SAND && nearSand) {
-            rgb = [rgb[0] * 0.75, rgb[1] * 0.75, rgb[2] * 0.7];
-        }
-
-        // ---- Tree shadow patch — darken rough under tree canopies ----
-        if (nearTree && bestType === T.ROUGH) {
-            rgb = [rgb[0] * 0.65, rgb[1] * 0.7, rgb[2] * 0.65];
-        }
-
         colors[i * 3]     = rgb[0];
         colors[i * 3 + 1] = rgb[1];
         colors[i * 3 + 2] = rgb[2];
@@ -521,6 +549,9 @@ function buildTerrain3D(hole, opts) {
     const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
     terrainMesh.receiveShadow = true;
     terrainGroup.add(terrainMesh);
+    // Register refs for the live mid-stroke color repaint
+    terrainColorAttrRef = terrainGeo.getAttribute('color');
+    terrainHoleRef = hole;
 
     // Water is handled directly by vertex colors on the continuous mesh
 

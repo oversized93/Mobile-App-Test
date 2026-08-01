@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'm1d';
+const BUILD_TAG = 'm1e';
 
 // ---- Game State ----
 let state = 'menu';
@@ -112,6 +112,14 @@ function enterOverworld() {
     owTool = 'hand';
     owCategory = 'surface';
     owBrushSize = 3;
+    owSelectedHole = null;
+    owStrokeDiff = null;
+    cancelOwLongPress();
+    owCoachVisible = !loadData('coachSeen', false);
+    if (typeof setOrbitPanBounds === 'function') {
+        setOrbitPanBounds(-300, worldCourse.cols * CELL + 300,
+                          -300, worldCourse.rows * CELL + 300);
+    }
     holeWizard = null;
     owDragPainting = false;
     owDragLastCell = null;
@@ -199,7 +207,7 @@ function currentTool() {
 // player can't accidentally extend the playable rectangle.
 function paintBrushAt(cc, cr, size, terrain) {
     const half = Math.floor(size / 2);
-    let changed = false;
+    const changed = [];
     const border = worldCourse.border || 0;
     for (let dr = -half; dr <= half; dr++) {
         for (let dc = -half; dc <= half; dc++) {
@@ -207,12 +215,20 @@ function paintBrushAt(cc, cr, size, terrain) {
             if (r < border || r >= worldCourse.rows - border) continue;
             if (c < border || c >= worldCourse.cols - border) continue;
             if (worldCourse.grid[r][c] !== terrain) {
+                // First touch of this cell in the stroke → remember its old
+                // value for undo
+                if (owStrokeDiff) {
+                    const key = r * worldCourse.cols + c;
+                    if (!owStrokeDiff.has(key)) {
+                        owStrokeDiff.set(key, { c, r, prev: worldCourse.grid[r][c] });
+                    }
+                }
                 worldCourse.grid[r][c] = terrain;
-                changed = true;
+                changed.push({ c, r });
             }
         }
     }
-    if (changed) owNeedsRebuild = true;
+    if (changed.length) owNeedsRebuild = true;
     return changed;
 }
 
@@ -2192,6 +2208,9 @@ function overworldLayout() {
     const closeSize = 36;
     const closeX = W() - pad - closeSize;
     const closeY = pad;
+    const undoSize = 36;
+    const undoX = closeX - 10 - undoSize;
+    const undoY = pad;
     // Sims-style bottom bar: [category tabs] [tools of active category]
     // [brush size stepper] [erase] — one strip, everything reachable.
     const barH = 58;
@@ -2216,7 +2235,7 @@ function overworldLayout() {
     const camTotalH = camBtns.length * camBtnSize + (camBtns.length - 1) * camBtnGap;
     const camX = W() - pad - camBtnSize;
     const camY0 = (H() - camTotalH) / 2;
-    return { pad, topBarH, closeSize, closeX, closeY,
+    return { pad, topBarH, closeSize, closeX, closeY, undoX, undoY, undoSize,
              barH, barY, handX, handW, catW, catGap, catX0,
              eraseX, eraseW, stepBtnW, sizeValW, plusX, sizeValX, minusX,
              toolX0, toolAvail,
@@ -2233,7 +2252,7 @@ function drawOverworld() {
     const L = overworldLayout();
 
     // ---- Placed holes: dotted polyline + tee/pin markers on the 3D scene ----
-    for (const hole of worldCourse.holes) drawPlacedHole(hole);
+    for (const hole of worldCourse.holes) drawPlacedHole(hole, hole.id === owSelectedHole);
 
     // ---- Active hole wizard overlay (if any) ----
     if (holeWizard) drawHoleWizardOverlay();
@@ -2285,6 +2304,19 @@ function drawOverworld() {
     ctx.font = 'bold 16px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('\u2715', L.closeX + L.closeSize / 2, L.closeY + L.closeSize / 2 + 6);
+
+    // Undo — dimmed when there is nothing to undo
+    ctx.fillStyle = owUndoStack.length ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.3)';
+    roundRect(L.undoX, L.undoY, L.undoSize, L.undoSize, 10);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    roundRect(L.undoX, L.undoY, L.undoSize, L.undoSize, 10);
+    ctx.stroke();
+    ctx.fillStyle = owUndoStack.length ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)';
+    ctx.font = 'bold 16px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u21A9', L.undoX + L.undoSize / 2, L.undoY + L.undoSize / 2 + 6);
 
     // ---- Entrance marker — anchors the resort's front door ----
     {
@@ -2434,6 +2466,75 @@ function drawOverworld() {
         ctx.font = eraseActive ? 'bold 7px -apple-system,sans-serif' : '7px -apple-system,sans-serif';
         ctx.fillText('ERASE', L.eraseX + L.eraseW / 2, stepY + 30);
     }
+
+    // ---- Hole inspector card (top right, GolfTopia-style) ----
+    if (owSelectedHole != null && !holeWizard) {
+        const selHole = worldCourse.holes.find(h => h.id === owSelectedHole);
+        if (!selHole) {
+            owSelectedHole = null;
+        } else {
+            const hc = holeCardLayout();
+            ctx.fillStyle = 'rgba(15,25,18,0.94)';
+            roundRect(hc.x, hc.y, hc.w, hc.h, 14);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,190,60,0.5)';
+            ctx.lineWidth = 1.5;
+            roundRect(hc.x, hc.y, hc.w, hc.h, 14);
+            ctx.stroke();
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px -apple-system,sans-serif';
+            ctx.fillText('Hole ' + selHole.id, hc.x + 14, hc.y + 26);
+            const yds = Math.round(polylineLengthYards(selHole));
+            ctx.fillStyle = 'rgba(255,255,255,0.65)';
+            ctx.font = '12px -apple-system,sans-serif';
+            ctx.fillText('Par ' + selHole.par + '  \u2022  ' + yds + ' yds', hc.x + 14, hc.y + 48);
+            ctx.fillText(selHole.waypoints.length + ' waypoint' + (selHole.waypoints.length === 1 ? '' : 's'),
+                         hc.x + 14, hc.y + 68);
+            // Delete button
+            const delGrad = ctx.createLinearGradient(hc.delX, hc.delY, hc.delX + hc.delW, hc.delY);
+            delGrad.addColorStop(0, '#c62828');
+            delGrad.addColorStop(1, '#8e0000');
+            ctx.fillStyle = delGrad;
+            roundRect(hc.delX, hc.delY, hc.delW, hc.delH, hc.delH / 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 13px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('\u{1F5D1} Delete Hole', hc.delX + hc.delW / 2, hc.delY + hc.delH / 2 + 5);
+        }
+    }
+
+    // ---- First-run coach overlay — one screen, three lines, one tap ----
+    if (owCoachVisible) {
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(0, 0, W(), H());
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
+        ctx.font = '800 24px -apple-system,sans-serif';
+        ctx.fillText('Welcome to your resort!', W() / 2, H() * 0.26);
+        ctx.font = '15px -apple-system,sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        const lines = [
+            '\u270B  Drag to move \u2022 pinch to zoom \u2022 twist to rotate',
+            '\u{1F3A8}  Pick a tool from the bottom bar to paint terrain',
+            '\u26F3  The Holes tab designs new holes \u2022 tap a marker to inspect'
+        ];
+        for (let i = 0; i < lines.length; i++) {
+            ctx.fillText(lines[i], W() / 2, H() * 0.4 + i * 30);
+        }
+        const gotW = 140, gotH = 44;
+        const gotX = (W() - gotW) / 2, gotY = H() * 0.66;
+        const g = ctx.createLinearGradient(gotX, gotY, gotX + gotW, gotY);
+        g.addColorStop(0, '#2e7d32');
+        g.addColorStop(1, '#1b5e20');
+        ctx.fillStyle = g;
+        roundRect(gotX, gotY, gotW, gotH, gotH / 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 15px -apple-system,sans-serif';
+        ctx.fillText('Got it!', W() / 2, gotY + gotH / 2 + 5);
+    }
 }
 
 // ---- Brush ghost in screen space ----
@@ -2464,6 +2565,47 @@ function drawBrushGhost(cc, cr, size, tool) {
 // Finger hover during idle — we remember the last tap cell for ghost
 let owLastGhostCell = null;
 
+// ---- Builder QOL state ----
+let owUndoStack = [];      // per-stroke cell diffs, most recent last (cap 20)
+let owStrokeDiff = null;   // Map cellKey -> {c,r,prev} while a stroke is active
+let owSelectedHole = null; // hole id whose inspector card is open
+let owCoachVisible = false;// first-run help overlay
+let owLongPress = null;    // pending eyedropper {sx, sy, timer}
+
+function cancelOwLongPress() {
+    if (owLongPress) { clearTimeout(owLongPress.timer); owLongPress = null; }
+}
+
+// Long-press on terrain in navigation mode arms that terrain's brush
+function eyedropAt(cell) {
+    owLongPress = null;
+    const t = worldCourse.grid[cell.r] && worldCourse.grid[cell.r][cell.c];
+    const tool = OW_TOOLS.find(x => x.terrain === t && x.id !== 'erase' && !x.wizard && !x.hand);
+    if (!tool) return;
+    owTool = tool.id;
+    const cat = OW_CATEGORIES.find(c => c.tools.includes(tool.id));
+    if (cat) owCategory = cat.id;
+    scouting = false; // stop the pan — arming a brush is deliberate
+    notify(tool.label + ' brush armed');
+}
+
+function undoLastStroke() {
+    const stroke = owUndoStack.pop();
+    if (!stroke) return;
+    for (const cell of stroke.cells) worldCourse.grid[cell.r][cell.c] = cell.prev;
+    refreshWorldHeights();
+    if (scene3dReady) buildTerrain3D(worldCourse, { distantScenery: false });
+    saveWorldCourse();
+    notify('Undone');
+}
+
+// Hole inspector card geometry (shared by draw + hit-test)
+function holeCardLayout() {
+    const w = 200, h = 136;
+    return { x: W() - w - 10, y: 58, w, h,
+             delX: W() - w - 10 + 12, delY: 58 + h - 44, delW: w - 24, delH: 34 };
+}
+
 // Which camera control button is currently being held down (null when none).
 // While set, the game loop applies a continuous rotate/tilt every frame so
 // the player can spin through any angle instead of tapping 15° at a time.
@@ -2480,16 +2622,16 @@ function tickOverworldCamera(dt) {
 }
 
 // ---- Placed hole visualization ----
-function drawPlacedHole(hole) {
+function drawPlacedHole(hole, selected) {
     const pts = [hole.tee, ...hole.waypoints, hole.pin];
     const screens = pts.map(p => cellCenterScreen(p.x, p.y));
     if (screens.some(s => s.behind)) return;
 
-    // Dotted polyline (white, drop-shadowed)
+    // Dotted polyline (white, drop-shadowed; amber + thicker when selected)
     ctx.save();
     ctx.setLineDash([6, 6]);
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = selected ? 'rgba(255,190,60,0.95)' : 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = selected ? 4 : 3;
     ctx.beginPath();
     ctx.moveTo(screens[0].x, screens[0].y);
     for (let i = 1; i < screens.length; i++) ctx.lineTo(screens[i].x, screens[i].y);
@@ -2682,6 +2824,7 @@ function drawHoleWizardOverlay() {
 function overworldHUDHit(sx, sy) {
     const L = overworldLayout();
     if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) return 'close';
+    if (hitBtn(sx, sy, L.undoX, L.undoY, L.undoSize, L.undoSize)) return 'undo';
     // Camera control rail
     for (let i = 0; i < L.camBtns.length; i++) {
         const by = L.camY0 + i * (L.camBtnSize + L.camBtnGap);
@@ -2751,8 +2894,15 @@ function overworldHUDHit(sx, sy) {
 }
 
 function overworldTouchStart(sx, sy) {
+    // First-run coach overlay swallows its dismissing tap
+    if (owCoachVisible) {
+        owCoachVisible = false;
+        saveData('coachSeen', true);
+        return;
+    }
     const hit = overworldHUDHit(sx, sy);
     if (hit === 'close') { exitOverworld(); return; }
+    if (hit === 'undo') { undoLastStroke(); return; }
     if (hit && hit.startsWith('cam:')) {
         const op = hit.slice(4);
         if (op === 'reset') {
@@ -2815,6 +2965,34 @@ function overworldTouchStart(sx, sy) {
         return;
     }
 
+    // ---- Hole inspector card (open) — taps inside it are handled/absorbed,
+    // taps outside close it and fall through to normal handling ----
+    if (owSelectedHole != null && !holeWizard) {
+        const hc = holeCardLayout();
+        const selHole = worldCourse.holes.find(h => h.id === owSelectedHole);
+        if (selHole && hitBtn(sx, sy, hc.x, hc.y, hc.w, hc.h)) {
+            if (hitBtn(sx, sy, hc.delX, hc.delY, hc.delW, hc.delH)) {
+                worldCourse.holes = worldCourse.holes.filter(h => h.id !== owSelectedHole);
+                owSelectedHole = null;
+                saveWorldCourse();
+                notify('Hole deleted');
+            }
+            return;
+        }
+        owSelectedHole = null;
+    }
+
+    // ---- Tap a hole marker (navigation mode) to inspect it ----
+    if (!holeWizard && owTool === 'hand') {
+        for (const hole of worldCourse.holes) {
+            const ts = cellCenterScreen(hole.tee.x, hole.tee.y);
+            const ps = cellCenterScreen(hole.pin.x, hole.pin.y);
+            const near = (pt) => pt && !pt.behind
+                && (sx - pt.x) * (sx - pt.x) + (sy - pt.y) * (sy - pt.y) < 22 * 22;
+            if (near(ts) || near(ps)) { owSelectedHole = hole.id; return; }
+        }
+    }
+
     // Not a HUD hit — action depends on mode
     const cell = screenToCell(sx, sy);
     if (holeWizard) {
@@ -2847,12 +3025,21 @@ function overworldTouchStart(sx, sy) {
             owDragPainting = true;
             owDragLastCell = cell;
             owLastGhostCell = cell;
-            paintBrushAt(cell.c, cell.r, owBrushSize, tool.terrain);
+            owStrokeDiff = new Map();
+            const changed = paintBrushAt(cell.c, cell.r, owBrushSize, tool.terrain);
+            if (changed.length && scene3dReady && typeof repaintTerrainCells === 'function') {
+                repaintTerrainCells(worldCourse, changed);
+            }
             return;
         }
     }
 
-    // Fallback: camera pan
+    // Fallback: camera pan (+ pending long-press eyedropper in nav mode)
+    cancelOwLongPress();
+    if (owTool === 'hand' && cell) {
+        const pressCell = cell;
+        owLongPress = { sx, sy, timer: setTimeout(() => eyedropAt(pressCell), 500) };
+    }
     scouting = true;
     scoutLastX = sx;
     scoutLastY = sy;
@@ -2872,12 +3059,19 @@ function overworldTouchMove(sx, sy) {
         if (!owDragLastCell || cell.c !== owDragLastCell.c || cell.r !== owDragLastCell.r) {
             owDragLastCell = cell;
             owLastGhostCell = cell;
-            paintBrushAt(cell.c, cell.r, owBrushSize, currentTool().terrain);
+            const changed = paintBrushAt(cell.c, cell.r, owBrushSize, currentTool().terrain);
+            if (changed.length && scene3dReady && typeof repaintTerrainCells === 'function') {
+                repaintTerrainCells(worldCourse, changed);
+            }
         }
         return;
     }
     // Camera pan
     if (scouting) {
+        // Moving beyond a small slop cancels the pending eyedropper
+        if (owLongPress && (Math.abs(sx - owLongPress.sx) > 8 || Math.abs(sy - owLongPress.sy) > 8)) {
+            cancelOwLongPress();
+        }
         const dx = sx - scoutLastX;
         const dy = sy - scoutLastY;
         scoutLastX = sx;
@@ -2894,6 +3088,7 @@ function overworldTouchMove(sx, sy) {
 function overworldTouchEnd() {
     // Release any held camera-control button so continuous rotate/tilt stops
     owHeldCamBtn = null;
+    cancelOwLongPress();
     if (holeWizard && holeWizard.draggingIdx >= 0) {
         holeWizard.draggingIdx = -1;
         return;
@@ -2901,6 +3096,12 @@ function overworldTouchEnd() {
     if (owDragPainting) {
         owDragPainting = false;
         owDragLastCell = null;
+        // Bank the stroke for undo
+        if (owStrokeDiff && owStrokeDiff.size) {
+            owUndoStack.push({ cells: Array.from(owStrokeDiff.values()) });
+            if (owUndoStack.length > 20) owUndoStack.shift();
+        }
+        owStrokeDiff = null;
         if (owNeedsRebuild && scene3dReady) {
             // Terrain-type flattening means painting reshapes elevation too
             // (fairway smooths hills, water sits flat) — refresh heights
