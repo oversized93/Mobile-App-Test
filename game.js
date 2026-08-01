@@ -233,6 +233,57 @@ function paintBrushAt(cc, cr, size, terrain) {
 }
 
 // ---- Hole wizard helpers ----
+// ---- Playtest a world hole (M1: unified play context) ----
+// The physics/camera/HUD all read `currentHole` as {grid, cols, rows,
+// heights, tee, hole, par, name}. World hole records store {tee, pin,
+// waypoints} against the shared course grid, so this builds a normalized
+// context pointing physics directly at the world. No copying.
+let worldPlaytest = false;
+
+function holeBounds(rec) {
+    const pts = [rec.tee, ...(rec.waypoints || []), rec.pin];
+    let minC = Infinity, minR = Infinity, maxC = -Infinity, maxR = -Infinity;
+    for (const p of pts) {
+        minC = Math.min(minC, p.x); maxC = Math.max(maxC, p.x);
+        minR = Math.min(minR, p.y); maxR = Math.max(maxR, p.y);
+    }
+    const pad = 10;
+    return { minC: minC - pad, minR: minR - pad, maxC: maxC + pad, maxR: maxR + pad };
+}
+
+function startWorldHolePlaytest(holeRec) {
+    // Gameplay cameras own the view from here — drop orbit mode
+    cam3dOrbitMode = false;
+    if (typeof resetCameraFov === 'function') resetCameraFov();
+    saveWorldCourse();
+    if (!worldCourse.heights) refreshWorldHeights();
+    worldPlaytest = true;
+    customCoursePlay = false;
+    owSelectedHole = null;
+    const ctx = {
+        grid: worldCourse.grid,
+        cols: worldCourse.cols,
+        rows: worldCourse.rows,
+        heights: worldCourse.heights,
+        tee: { x: holeRec.tee.x, y: holeRec.tee.y },
+        hole: { x: holeRec.pin.x, y: holeRec.pin.y },
+        par: holeRec.par,
+        name: 'Hole ' + holeRec.id,
+        bounds: holeBounds(holeRec),
+        worldHoleId: holeRec.id
+    };
+    currentCourse = { name: worldCourse.name, holes: [ctx] };
+    currentHoleIdx = 0;
+    holeStrokes = [];
+    startHole(ctx);
+    state = 'playing';
+}
+
+function endWorldPlaytest() {
+    worldPlaytest = false;
+    enterOverworld();
+}
+
 function startHoleWizard() {
     const nextId = (worldCourse.holes.reduce((m, h) => Math.max(m, h.id || 0), 0) || 0) + 1;
     holeWizard = {
@@ -539,8 +590,15 @@ function centerCamOnBall() {
 
 function centerCamOnHole() {
     if (!currentHole) return;
-    cam.targetX = (currentHole.cols * CELL) / 2;
-    cam.targetY = (currentHole.rows * CELL) / 2;
+    if (currentHole.bounds) {
+        // World hole — frame the tee→pin corridor, not the whole course
+        const b = currentHole.bounds;
+        cam.targetX = ((b.minC + b.maxC) / 2 + 0.5) * CELL;
+        cam.targetY = ((b.minR + b.maxR) / 2 + 0.5) * CELL;
+    } else {
+        cam.targetX = (currentHole.cols * CELL) / 2;
+        cam.targetY = (currentHole.rows * CELL) / 2;
+    }
     cam.targetZoom = calcZoom();
 }
 
@@ -2491,6 +2549,17 @@ function drawOverworld() {
             ctx.fillText('Par ' + selHole.par + '  \u2022  ' + yds + ' yds', hc.x + 14, hc.y + 48);
             ctx.fillText(selHole.waypoints.length + ' waypoint' + (selHole.waypoints.length === 1 ? '' : 's'),
                          hc.x + 14, hc.y + 68);
+            // Test Play button
+            const playGrad = ctx.createLinearGradient(hc.playX, hc.playY, hc.playX + hc.playW, hc.playY);
+            playGrad.addColorStop(0, '#2e7d32');
+            playGrad.addColorStop(1, '#1b5e20');
+            ctx.fillStyle = playGrad;
+            roundRect(hc.playX, hc.playY, hc.playW, hc.playH, hc.playH / 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 13px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('\u25B6 Test Play', hc.playX + hc.playW / 2, hc.playY + hc.playH / 2 + 5);
             // Delete button
             const delGrad = ctx.createLinearGradient(hc.delX, hc.delY, hc.delX + hc.delW, hc.delY);
             delGrad.addColorStop(0, '#c62828');
@@ -2601,9 +2670,11 @@ function undoLastStroke() {
 
 // Hole inspector card geometry (shared by draw + hit-test)
 function holeCardLayout() {
-    const w = 200, h = 136;
-    return { x: W() - w - 10, y: 58, w, h,
-             delX: W() - w - 10 + 12, delY: 58 + h - 44, delW: w - 24, delH: 34 };
+    const w = 200, h = 180;
+    const x = W() - w - 10, y = 58;
+    return { x, y, w, h,
+             playX: x + 12, playY: y + h - 88, playW: w - 24, playH: 34,
+             delX: x + 12, delY: y + h - 44, delW: w - 24, delH: 34 };
 }
 
 // Which camera control button is currently being held down (null when none).
@@ -2971,6 +3042,10 @@ function overworldTouchStart(sx, sy) {
         const hc = holeCardLayout();
         const selHole = worldCourse.holes.find(h => h.id === owSelectedHole);
         if (selHole && hitBtn(sx, sy, hc.x, hc.y, hc.w, hc.h)) {
+            if (hitBtn(sx, sy, hc.playX, hc.playY, hc.playW, hc.playH)) {
+                startWorldHolePlaytest(selHole);
+                return;
+            }
             if (hitBtn(sx, sy, hc.delX, hc.delY, hc.delW, hc.delH)) {
                 worldCourse.holes = worldCourse.holes.filter(h => h.id !== owSelectedHole);
                 owSelectedHole = null;
@@ -4354,7 +4429,7 @@ function drawHoleDone() {
 
     // Next button — gradient
     const isLast = currentHoleIdx >= currentCourse.holes.length - 1;
-    const btnLabel = isLast ? 'Finish Round' : 'Next Hole';
+    const btnLabel = worldPlaytest ? 'Back to Resort' : (isLast ? 'Finish Round' : 'Next Hole');
     const btnW = cardW - 48, btnH = 48;
     const btnX = cx + 24, btnY = cy + cardH - 65;
     const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX + btnW, btnY);
@@ -4376,6 +4451,7 @@ function holeDoneTouchStart(sx, sy) {
 
     // Next/Finish button
     if (hitBtn(sx, sy, cx + 20, cy + cardH - 60, cardW - 40, 44)) {
+        if (worldPlaytest) { endWorldPlaytest(); return; }
         const isLast = currentHoleIdx >= currentCourse.holes.length - 1;
         if (isLast) {
             state = 'roundDone';
@@ -4576,7 +4652,8 @@ function roundDoneTouchStart(sx, sy) {
 function checkPlayingUI(sx, sy) {
     // Quit button
     if (hitBtn(sx, sy, W() - 58, 62, 50, 30)) {
-        if (customCoursePlay) { state = 'builder'; }
+        if (worldPlaytest) { endWorldPlaytest(); }
+        else if (customCoursePlay) { state = 'builder'; }
         else { state = 'menu'; }
         return true;
     }
