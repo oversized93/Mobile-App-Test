@@ -18,7 +18,8 @@ const RESORT_DEFAULT = {
     members: 5,
     amenities: {},      // id -> true when built
     lastTickMs: 0,      // unix ms at last income tick (for offline-style catch-up)
-    coinsFrac: 0        // fractional accumulator so we don't lose sub-1 ticks
+    coinsFrac: 0,       // fractional accumulator so we don't lose sub-1 ticks
+    worldClock: 0       // total simulated seconds — the resort's persistent time base
 };
 let resort = Object.assign({}, RESORT_DEFAULT, loadData('resort', {}));
 
@@ -392,6 +393,13 @@ function buyAmenity(id) {
 // On re-entry, we catch up offline time capped at 1 hour so you can't farm too
 // hard by leaving it open.
 function enterManage() {
+    saveResort();
+    state = 'manage';
+}
+
+// Offline catch-up — run ONCE at boot, not per-screen: members earned
+// passively while the app was closed (capped at 1 hour).
+function applyOfflineCatchup() {
     const now = Date.now();
     if (resort.lastTickMs) {
         const elapsed = Math.min((now - resort.lastTickMs) / 1000, 3600);
@@ -401,11 +409,15 @@ function enterManage() {
     resort.lastTickMs = now;
     resort.coinsFrac = 0;
     saveResort();
-    state = 'manage';
 }
+applyOfflineCatchup();
 
-function tickResortIncome(dt) {
-    if (state !== 'manage') return;
+// The world advances on EVERY screen — economy, and later NPCs and daily
+// upkeep, all hang off this one clock. (Previously income only ticked while
+// the Manage screen was open, which made every economy feature screen-gated.)
+let _worldSaveAcc = 0;
+function tickWorld(dt) {
+    resort.worldClock = (resort.worldClock || 0) + dt;
     resort.coinsFrac = (resort.coinsFrac || 0) + resort.members * 0.2 * dt;
     if (resort.coinsFrac >= 1) {
         const whole = Math.floor(resort.coinsFrac);
@@ -413,6 +425,12 @@ function tickResortIncome(dt) {
         resort.coinsFrac -= whole;
     }
     resort.lastTickMs = Date.now();
+    // Persist at a gentle cadence so closing the app rarely loses progress
+    _worldSaveAcc += dt;
+    if (_worldSaveAcc >= 10) {
+        _worldSaveAcc = 0;
+        saveResort();
+    }
 }
 
 let currentCourse = null;
@@ -2238,15 +2256,17 @@ function manageTouchStart(sx, sy) {
         return;
     }
 
-    // Simulate Round — picks the first unlocked course for now
+    // Simulate Round — runs over the player's own resort holes
     if (hitBtn(sx, sy, L.simX, L.actionsY, L.actionBw, L.actionsRowH)) {
-        const idx = (player.unlocked && player.unlocked.length) ? player.unlocked[0] : 0;
-        const course = CAREER_COURSES[idx];
-        const res = simulateRound(course);
+        if (!worldCourse.holes.length) {
+            notify('Design some holes in your resort first!');
+            return;
+        }
+        const res = simulateRound(worldCourse);
         awardCoins(res.coins);
         const diff = res.totalStrokes - res.totalPar;
         const label = (diff === 0 ? 'E' : (diff > 0 ? '+' + diff : String(diff)));
-        notify(course.name + ' simulated: ' + res.totalStrokes + ' (' + label + ') \u2022 +' + res.coins + ' coins');
+        notify(worldCourse.name + ' simulated: ' + res.totalStrokes + ' (' + label + ') \u2022 +' + res.coins + ' coins');
         return;
     }
 
@@ -4821,8 +4841,8 @@ function gameLoop(time) {
         canvas.style.background = '';
     }
 
-    // Tick tycoon passive income whenever Manage screen is open
-    if (state === 'manage') tickResortIncome(dt);
+    // The world always ticks — economy (and later NPCs) advance on any screen
+    tickWorld(dt);
 
     // Draw 2D based on state (HUD overlay when 3D, full render when not)
     switch (state) {
