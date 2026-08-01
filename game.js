@@ -4,10 +4,27 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'm1e';
+const BUILD_TAG = 'm1f';
 
 // ---- Game State ----
 let state = 'menu';
+
+// Single transition point with per-state enter/exit hooks. Hook functions
+// are declared next to the screens they serve; function hoisting makes the
+// forward references safe.
+const STATE_HOOKS = {
+    overworld: { enter: stateEnterOverworld, exit: stateExitOverworld },
+    manage:    { enter: stateEnterManage },
+};
+
+function setState(next) {
+    if (state === next) return;
+    const prevHooks = STATE_HOOKS[state];
+    if (prevHooks && prevHooks.exit) prevHooks.exit(next);
+    state = next;
+    const nextHooks = STATE_HOOKS[next];
+    if (nextHooks && nextHooks.enter) nextHooks.enter();
+}
 let player = loadData('player', { name: 'Golfer', ballColor: '#fff', unlocked: [0] });
 
 // ---- Tycoon / Resort State ----
@@ -84,8 +101,9 @@ function saveWorldCourse() {
     saveData('course', persistable);
 }
 
-function enterOverworld() {
-    state = 'overworld';
+function enterOverworld() { setState('overworld'); }
+
+function stateEnterOverworld() {
     if (!worldCourse.heights) refreshWorldHeights();
     if (scene3dReady) {
         buildTerrain3D(worldCourse, { distantScenery: false });
@@ -128,13 +146,14 @@ function enterOverworld() {
     owLastGhostCell = null;
 }
 
-// Called when leaving overworld back to Manage — drop orbit mode + reset
-// FOV so gameplay cameras (setCameraBehindBall, etc.) behave normally.
-function exitOverworld() {
+function exitOverworld() { setState('manage'); }
+
+// Runs on ANY transition out of overworld (manage, playtest, ...): drop
+// orbit mode + reset FOV so gameplay cameras behave, and bank the course.
+function stateExitOverworld(next) {
     cam3dOrbitMode = false;
     if (typeof resetCameraFov === 'function') resetCameraFov();
     saveWorldCourse();
-    enterManage();
 }
 
 // ---- Overworld Builder State ----
@@ -253,14 +272,13 @@ function holeBounds(rec) {
 }
 
 function startWorldHolePlaytest(holeRec) {
-    // Gameplay cameras own the view from here — drop orbit mode
-    cam3dOrbitMode = false;
-    if (typeof resetCameraFov === 'function') resetCameraFov();
-    saveWorldCourse();
-    if (!worldCourse.heights) refreshWorldHeights();
     worldPlaytest = true;
     customCoursePlay = false;
     owSelectedHole = null;
+    // Transition first — the overworld exit hook drops orbit mode, resets
+    // FOV, and saves the course before startHole sets up gameplay cameras
+    setState('playing');
+    if (!worldCourse.heights) refreshWorldHeights();
     const ctx = {
         grid: worldCourse.grid,
         cols: worldCourse.cols,
@@ -277,7 +295,6 @@ function startWorldHolePlaytest(holeRec) {
     currentHoleIdx = 0;
     holeStrokes = [];
     startHole(ctx);
-    state = 'playing';
 }
 
 function endWorldPlaytest() {
@@ -392,10 +409,9 @@ function buyAmenity(id) {
 // Passive income: members * 0.2 coins/sec while Manage screen is open.
 // On re-entry, we catch up offline time capped at 1 hour so you can't farm too
 // hard by leaving it open.
-function enterManage() {
-    saveResort();
-    state = 'manage';
-}
+function enterManage() { setState('manage'); }
+
+function stateEnterManage() { saveResort(); }
 
 // Offline catch-up — run ONCE at boot, not per-screen: members earned
 // passively while the app was closed (capped at 1 hour).
@@ -1159,14 +1175,14 @@ function onTouchStart(sx, sy) {
     if (state === 'career') { careerTouchStart(sx, sy); return; }
     if (state === 'builder') {
         builderTouchAction = builderHandleTouch(sx, sy);
-        if (builderTouchAction === 'back') { state = 'menu'; return; }
+        if (builderTouchAction === 'back') { setState('menu'); return; }
         if (builderTouchAction === 'save') { const n = builderSave(); notify('Saved! (' + n + ' holes)'); return; }
         if (builderTouchAction === 'play') {
             const h = builderGetHole(3);
             if (!h.tee || !h.hole) { notify('Place tee & hole first!'); return; }
             currentCourse = { name: 'Custom', holes: [h] };
             currentHoleIdx = 0; holeStrokes = [];
-            startHole(h); customCoursePlay = true; state = 'playing'; return;
+            startHole(h); customCoursePlay = true; setState('playing'); return;
         }
         if (!builderTouchAction) { builderState.painting = true; builderPaint(sx, sy); }
         return;
@@ -1174,6 +1190,8 @@ function onTouchStart(sx, sy) {
     if (state === 'holeDone') { holeDoneTouchStart(sx, sy); return; }
     if (state === 'roundDone') { roundDoneTouchStart(sx, sy); return; }
     if (state === 'playing') {
+        // Quit + camera-rail buttons take priority over aim/pan handling
+        if (checkPlayingUI(sx, sy)) return;
         if (flyoverActive) {
             flyoverActive = false;
             centerCamOnBall();
@@ -1650,7 +1668,7 @@ function menuTouchStart(sx, sy) {
             else if (btn.id === 'char') {
                 charColorIdx = charColors.indexOf(player.ballColor);
                 if (charColorIdx < 0) charColorIdx = 0;
-                state = 'character';
+                setState('character');
             }
             return;
         }
@@ -1661,8 +1679,8 @@ function menuTouchStart(sx, sy) {
         const lx = L.btnX + i * (L.legacyBtnW + 8);
         if (hitBtn(sx, sy, lx, L.legacyY, L.legacyBtnW, L.legacyH)) {
             const id = MENU_LEGACY_BTNS[i].id;
-            if (id === 'career') state = 'career';
-            else if (id === 'builder') { builderInit(); state = 'builder'; }
+            if (id === 'career') setState('career');
+            else if (id === 'builder') { builderInit(); setState('builder'); }
             else if (id === 'custom') playCustomCourses();
             return;
         }
@@ -1677,7 +1695,7 @@ function playCustomCourses() {
     currentHoleIdx = 0; holeStrokes = [];
     startHole(saved[0]);
     customCoursePlay = true;
-    state = 'playing';
+    setState('playing');
 }
 
 // ---- Character Creator ----
@@ -1825,7 +1843,7 @@ function charTouchStart(sx, sy) {
     if (hitBtn(sx, sy, bx, H() * 0.84, bw, 48)) {
         saveData('player', player);
         notify('Saved!');
-        state = 'menu';
+        setState('menu');
     }
 }
 
@@ -1958,7 +1976,7 @@ function careerTouchStart(sx, sy) {
             holeStrokes = [];
             customCoursePlay = false;
             startHole(currentCourse.holes[0]);
-            state = 'playing';
+            setState('playing');
             return;
         }
     }
@@ -1967,7 +1985,7 @@ function careerTouchStart(sx, sy) {
     const bw = Math.min(W() - 48, 280);
     const bx = (W() - bw) / 2;
     const by = H() - L.bottomH + 6;
-    if (hitBtn(sx, sy, bx, by, bw, 44)) state = 'menu';
+    if (hitBtn(sx, sy, bx, by, bw, 44)) setState('menu');
 }
 
 // ---- Manage Resort Screen (Tycoon MVP) ----
@@ -2231,7 +2249,7 @@ function manageTouchStart(sx, sy) {
     if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) {
         resort.lastTickMs = Date.now();
         saveResort();
-        state = 'menu';
+        setState('menu');
         return;
     }
 
@@ -2274,7 +2292,7 @@ function manageTouchStart(sx, sy) {
     if (hitBtn(sx, sy, L.playX, L.actionsY, L.actionBw, L.actionsRowH)) {
         resort.lastTickMs = Date.now();
         saveResort();
-        state = 'career';
+        setState('career');
         return;
     }
 }
@@ -4474,11 +4492,11 @@ function holeDoneTouchStart(sx, sy) {
         if (worldPlaytest) { endWorldPlaytest(); return; }
         const isLast = currentHoleIdx >= currentCourse.holes.length - 1;
         if (isLast) {
-            state = 'roundDone';
+            setState('roundDone');
         } else {
             currentHoleIdx++;
             startHole(currentCourse.holes[currentHoleIdx]);
-            state = 'playing';
+            setState('playing');
         }
     }
 }
@@ -4660,11 +4678,11 @@ function roundDoneTouchStart(sx, sy) {
         // Play again
         currentHoleIdx = 0; holeStrokes = [];
         startHole(currentCourse.holes[0]);
-        state = 'playing';
+        setState('playing');
         return;
     }
     if (hitBtn(sx, sy, bx, baseY + 58, bw, 46)) {
-        state = 'menu';
+        setState('menu');
     }
 }
 
@@ -4673,8 +4691,8 @@ function checkPlayingUI(sx, sy) {
     // Quit button
     if (hitBtn(sx, sy, W() - 58, 62, 50, 30)) {
         if (worldPlaytest) { endWorldPlaytest(); }
-        else if (customCoursePlay) { state = 'builder'; }
-        else { state = 'menu'; }
+        else if (customCoursePlay) { setState('builder'); }
+        else { setState('menu'); }
         return true;
     }
     // Camera rail buttons — 5 evenly-spaced slots inside a unified pill
@@ -4783,7 +4801,7 @@ function gameLoop(time) {
             updateBall(dt);
             camLerp(dt);
             if (holeComplete && !ball.moving) {
-                state = 'holeDone';
+                setState('holeDone');
             }
         }
     }
@@ -4860,12 +4878,6 @@ function gameLoop(time) {
     drawNotification(dt);
 }
 
-// Override onTouchStart to also check quit button during play
-const _origTouchStart = onTouchStart;
-onTouchStart = function(sx, sy) {
-    if (state === 'playing' && checkPlayingUI(sx, sy)) return;
-    _origTouchStart(sx, sy);
-};
 
 // ---- Start! ----
 if (typeof init3D === 'function') init3D();

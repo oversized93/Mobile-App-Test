@@ -36,13 +36,14 @@ trailer + dev demo). Update this file when milestones ship or scope decisions ch
 ### M1 — Foundation sprint (in progress)
 - [x] Graphics config pass: sRGB + ACES tone mapping, hemisphere light,
       soft shadows, world heightmap for the overworld
-- [ ] Unify hole schema (`pin` vs `hole.hole`) + `playContext` indirection —
+- [x] Unify hole schema (`pin` vs `hole.hole`) + `playContext` indirection —
       physics becomes headless-callable, worldCourse holes become playable
-- [ ] `tickWorld(dt)` unconditional in gameLoop + persisted world clock;
+      (Test Play button on the hole inspector card)
+- [x] `tickWorld(dt)` unconditional in gameLoop + persisted world clock;
       `simulateRound` reads the player's resort, not legacy career courses
-- [ ] Save versioning + migrations (current code silently wipes resorts on
-      schema change)
-- [ ] `setState()` with enter/exit hooks; kill the onTouchStart monkey-patch
+- [x] Save versioning + migrations ({__v, data} envelope; legacy saves load
+      as v0 through per-key migration chains)
+- [x] `setState()` with enter/exit hooks; onTouchStart monkey-patch removed
 - [ ] Three.js version bump off r128 (before M3 NPC/facility investment)
 - [ ] Split game.js along section-comment seams (last, after the above)
 
