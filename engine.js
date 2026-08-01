@@ -59,11 +59,43 @@ const TERRAIN_FRICTION = {
 // ---- Cell size for terrain grid ----
 const CELL = 32;
 
-// ---- Save/Load ----
-function saveData(key, val) { localStorage.setItem('gt_' + key, JSON.stringify(val)); }
+// ---- Save/Load (versioned) ----
+// Every payload is wrapped in {__v, data}. Pre-versioning saves (raw JSON)
+// are treated as version 0 and run through the migration chain, so a schema
+// change upgrades old resorts instead of silently wiping them.
+const SAVE_VERSION = 1;
+// Per-key migration chains: SAVE_MIGRATIONS[key][n] upgrades version n → n+1.
+// Missing entries are identity (shape unchanged that version).
+// Example: SAVE_MIGRATIONS['course'] = [ (v0Data) => ({...v0Data, biome: 'meadows'}) ];
+const SAVE_MIGRATIONS = {};
+
+function migrateSave(key, fromV, data) {
+    const chain = SAVE_MIGRATIONS[key] || [];
+    let v = fromV, d = data;
+    while (v < SAVE_VERSION) {
+        const step = chain[v];
+        if (step) d = step(d);
+        v++;
+    }
+    return d;
+}
+
+function saveData(key, val) {
+    localStorage.setItem('gt_' + key, JSON.stringify({ __v: SAVE_VERSION, data: val }));
+}
+
 function loadData(key, def) {
-    try { const v = localStorage.getItem('gt_' + key); return v ? JSON.parse(v) : def; }
-    catch(e) { return def; }
+    try {
+        const raw = localStorage.getItem('gt_' + key);
+        if (!raw) return def;
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            && parsed.__v != null && 'data' in parsed) {
+            return migrateSave(key, parsed.__v, parsed.data);
+        }
+        // Legacy raw payload — migrate from version 0
+        return migrateSave(key, 0, parsed);
+    } catch (e) { return def; }
 }
 
 // ---- Drawing helpers ----
