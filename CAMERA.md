@@ -47,10 +47,11 @@ Then it **snaps** `camera3d.position` and `camera3d.lookAt()` directly — no le
 
 | Input | Intended behavior | Routes through |
 |---|---|---|
-| **One finger drag** | Pan the pivot left/right/forward/backward on the ground plane. No tilt, no zoom, no yaw change. | `overworldTouchMove → panCamera3D → panCameraOrbit → applyOrbitCamera` |
+| **One finger drag** | With the **hand tool** (default): pan the pivot on the ground plane. With a brush armed: paints — navigation requires the hand. No tilt, no zoom, no yaw change. | `overworldTouchMove → panCamera3D → panCameraOrbit → applyOrbitCamera` |
+| **Two finger drag** | **Pan** (industry-standard map gesture). Applied per-frame so it composes with twisting. | `engine.js touchmove pinch branch → panCameraOrbit(stepDx, stepDy)` |
 | **Two finger pinch (spread/close)** | Narrow / widen FOV. Camera position untouched. Spread = zoom in. | `engine.js touchmove pinch branch → setCameraFov(baseFov / scale)` |
 | **Two finger twist** | Rotate yaw freely through 360°+. Accumulated frame-by-frame, normalized for ±π wraparound. | `engine.js touchmove pinch branch → setCameraOrbit(... newYaw ...)` |
-| **Two finger parallel vertical drag** | Tilt pitch (drag down → camera lifts overhead, drag up → camera lowers toward horizon). | `engine.js touchmove pinch branch → setCameraOrbit(... newPitch ...)` via `midDy * 0.004` |
+| **Pitch / tilt** | ▲▼ hold buttons ONLY — there is no pitch gesture. (A shared two-finger gesture made accidental tilting too easy.) | `tickOverworldCamera → tiltCameraOrbit` |
 | **HUD ▲ button (hold)** | Continuously tilt camera UP (toward overhead) at ~0.55 rad/sec. | `tickOverworldCamera → tiltCameraOrbit(-OW_TILT_SPEED * dt)` |
 | **HUD ▼ button (hold)** | Continuously tilt DOWN (toward horizon). | Same, with positive sign |
 | **HUD ↺ button (hold)** | Continuously rotate yaw LEFT at ~1.1 rad/sec (full spin in ~5.7s). | `tickOverworldCamera → rotateCameraOrbit(-OW_ROT_SPEED * dt)` |
@@ -71,8 +72,9 @@ On every `touchmove`:
 - `scale = currentDist / pinchStartDist`
 - **FOV** ← `baseFov / scale` (absolute from baseline → no compounding)
 - **Yaw** ← `baseYaw + accumulatedRotation` (frame deltas normalized to [-π, π])
-- **Pitch** ← `basePitch + midDy * 0.004` where midDy is midpoint Y delta from start
-- Pivot X/Z stay at the snapshot values (two-finger pan does NOT translate pivot)
+- **Pan** ← midpoint delta applied per-frame via `panCameraOrbit` (uses the
+  current yaw each step, so pan + twist compose correctly)
+- **Pitch is never touched by gestures** — buttons only
 
 This avoids three classes of bugs:
 1. **Compounding** — applying ratios every frame instead of computing from baseline
@@ -157,7 +159,10 @@ playing → menu                      orbit state ignored
 
 1. **Pan sensitivity doesn't adapt to FOV.** At narrow FOV (zoomed-in), the visible world is small but pan speed is unchanged, so a swipe sweeps you off the visible area fast. Consider scaling pan by `cam3dFov / 75` so pan feels consistent across zoom levels.
 
-2. **Pitch via two-finger midpoint conflicts with intuition.** Many players will try to two-finger-drag to pan; in orbit mode that drags the pitch instead. Consider disabling the pitch-from-pinch gesture entirely and leaving pitch to the HUD ▲▼ buttons only.
+2. ~~Pitch via two-finger midpoint conflicts with intuition.~~ **Resolved:**
+   two-finger drag now pans; pitch is buttons-only. Also resolved: painting
+   no longer hijacks one-finger drag — the hand tool is the default and
+   brushes must be deliberately armed.
 
 3. **Hold-button speed is tuned for "spin a few times then stop" feel.** If players want to make small tweaks they have to tap-and-instantly-release, which is hard. Could add a slow-tap-mode (single tap = small fixed nudge, hold = continuous).
 

@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'm1c';
+const BUILD_TAG = 'm1d';
 
 // ---- Game State ----
 let state = 'menu';
@@ -109,8 +109,8 @@ function enterOverworld() {
     cam.rot = cam.targetRot = 0;
     manualZoom = true;
     scouting = false;
-    owTool = 'path';
-    owCategory = 'paths';
+    owTool = 'hand';
+    owCategory = 'surface';
     owBrushSize = 3;
     holeWizard = null;
     owDragPainting = false;
@@ -132,6 +132,9 @@ function exitOverworld() {
 // Brush-based placement: every tool paints cells inside an NxN footprint.
 // Objects that are conceptually 1x1 (Tee, Pin) lock to size=1 while selected.
 const OW_TOOLS = [
+    // Navigation — the default. One-finger drag pans; nothing paints until
+    // the player deliberately arms a brush.
+    { id: 'hand', label: 'Move', icon: '\u270B', color: '#90a4ae', hand: true },
     // Surface brushes
     { id: 'fairway', label: 'Fairway', icon: '\u{1F7E2}', color: '#4caf50', terrain: T.FAIRWAY },
     { id: 'green',   label: 'Green',   icon: '\u{1F3CC}', color: '#66cc66', terrain: T.GREEN },
@@ -2193,7 +2196,8 @@ function overworldLayout() {
     // [brush size stepper] [erase] — one strip, everything reachable.
     const barH = 58;
     const barY = H() - barH;
-    const catW = 48, catGap = 4, catX0 = 8;
+    const handX = 8, handW = 48;
+    const catW = 48, catGap = 4, catX0 = handX + handW + 10;
     const catRowW = OW_CATEGORIES.length * catW + (OW_CATEGORIES.length - 1) * catGap;
     // Right cluster, anchored to the right edge
     const eraseW = 46;
@@ -2213,7 +2217,7 @@ function overworldLayout() {
     const camX = W() - pad - camBtnSize;
     const camY0 = (H() - camTotalH) / 2;
     return { pad, topBarH, closeSize, closeX, closeY,
-             barH, barY, catW, catGap, catX0,
+             barH, barY, handX, handW, catW, catGap, catX0,
              eraseX, eraseW, stepBtnW, sizeValW, plusX, sizeValX, minusX,
              toolX0, toolAvail,
              camX, camY0, camBtnSize, camBtnGap, camBtns };
@@ -2329,6 +2333,26 @@ function drawOverworld() {
         ctx.strokeStyle = 'rgba(255,255,255,0.1)';
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(0, L.barY); ctx.lineTo(W(), L.barY); ctx.stroke();
+
+        // Hand / navigation button — highlighted whenever nothing is armed
+        {
+            const handActive = owTool === 'hand';
+            const hy = L.barY + 6;
+            ctx.fillStyle = handActive ? 'rgba(144,164,174,0.85)' : 'rgba(255,255,255,0.05)';
+            roundRect(L.handX, hy, L.handW, L.barH - 12, 10);
+            ctx.fill();
+            ctx.strokeStyle = handActive ? '#fff' : 'rgba(255,255,255,0.12)';
+            ctx.lineWidth = handActive ? 1.5 : 1;
+            roundRect(L.handX, hy, L.handW, L.barH - 12, 10);
+            ctx.stroke();
+            ctx.textAlign = 'center';
+            ctx.font = '16px -apple-system,sans-serif';
+            ctx.fillStyle = '#fff';
+            ctx.fillText('\u270B', L.handX + L.handW / 2, hy + 21);
+            ctx.font = handActive ? 'bold 7.5px -apple-system,sans-serif' : '7.5px -apple-system,sans-serif';
+            ctx.fillStyle = handActive ? '#fff' : 'rgba(255,255,255,0.55)';
+            ctx.fillText('MOVE', L.handX + L.handW / 2, hy + L.barH - 18);
+        }
 
         // Category tabs
         for (let i = 0; i < OW_CATEGORIES.length; i++) {
@@ -2665,6 +2689,8 @@ function overworldHUDHit(sx, sy) {
     }
     // Bottom build bar (hidden during wizard)
     if (!holeWizard && sy >= L.barY) {
+        // Hand / navigation button
+        if (hitBtn(sx, sy, L.handX, L.barY + 6, L.handW, L.barH - 12)) return 'tool:hand';
         // Category tabs
         for (let i = 0; i < OW_CATEGORIES.length; i++) {
             const cx = L.catX0 + i * (L.catW + L.catGap);
@@ -2757,7 +2783,8 @@ function overworldTouchStart(sx, sy) {
     if (hit && hit.startsWith('tool:')) {
         const id = hit.slice(5);
         if (id === 'hole') { startHoleWizard(); return; }
-        owTool = id;
+        // Tapping the already-active tool disarms back to navigation
+        owTool = (owTool === id) ? 'hand' : id;
         return;
     }
     if (hit === 'size:down' || hit === 'size:up') {
@@ -2811,10 +2838,12 @@ function overworldTouchStart(sx, sy) {
         return;
     }
 
-    // Brush mode — start a paint stroke on the current cell (if inside playable area)
+    // Brush mode — start a paint stroke on the current cell (if inside
+    // playable area). The hand tool has no terrain, so navigation falls
+    // through to the camera-pan block below.
     if (cell) {
         const tool = currentTool();
-        if (tool && !tool.wizard) {
+        if (tool && tool.terrain != null && !tool.wizard) {
             owDragPainting = true;
             owDragLastCell = cell;
             owLastGhostCell = cell;

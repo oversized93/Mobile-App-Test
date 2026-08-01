@@ -250,11 +250,8 @@ canvas.addEventListener('touchmove', (e) => {
 
         // ---- Orbit mode (overworld) — recompute absolutes from pinch start ----
         if (typeof cam3dOrbitMode !== 'undefined' && cam3dOrbitMode && typeof setCameraOrbit === 'function') {
-            const basePitch = cam._pinchOrbitPitch || cam3dPitch;
-            const baseYaw   = cam._pinchOrbitYaw   || cam3dYaw;
-            const basePivotX = cam._pinchOrbitPivotX != null ? cam._pinchOrbitPivotX : cam3dPivotX;
-            const basePivotZ = cam._pinchOrbitPivotZ != null ? cam._pinchOrbitPivotZ : cam3dPivotZ;
-            const baseFov   = (cam._pinchOrbitFov != null) ? cam._pinchOrbitFov : 75;
+            const baseYaw = (cam._pinchOrbitYaw != null) ? cam._pinchOrbitYaw : cam3dYaw;
+            const baseFov = (cam._pinchOrbitFov != null) ? cam._pinchOrbitFov : 75;
             // Zoom is FOV-driven — camera stays put, lens narrows as fingers
             // spread. This avoids the "camera dives down toward ground pivot"
             // feel that comes from dolly-zoom on an orbit camera.
@@ -267,11 +264,17 @@ canvas.addEventListener('touchmove', (e) => {
             if (frameRot < -Math.PI) frameRot += 2 * Math.PI;
             cam._pinchAccumRot = (cam._pinchAccumRot || 0) + frameRot;
             cam._pinchLastAngle = angle;
-            const newYaw = baseYaw + cam._pinchAccumRot;
-            // Pitch — midpoint vertical drag; finger down pushes cam overhead
-            const midDy = midY - pinchStartMidY;
-            const newPitch = basePitch + midDy * 0.004;
-            setCameraOrbit(basePivotX, basePivotZ, cam3dDistance, newPitch, newYaw);
+            setCameraOrbit(cam3dPivotX, cam3dPivotZ, cam3dDistance, cam3dPitch, baseYaw + cam._pinchAccumRot);
+            // Two-finger drag = pan — the industry-standard map gesture.
+            // (Pitch moved to the ▲▼ hold buttons; a shared gesture made it
+            // too easy to tilt while trying to move.) Applied per-frame so
+            // panning composes correctly with simultaneous twisting.
+            const pdx = midX - pinchStartMidX;
+            const pdy = midY - pinchStartMidY;
+            if (typeof panCameraOrbit === 'function') {
+                panCameraOrbit(pdx - (cam._lastPinchDx || 0), pdy - (cam._lastPinchDy || 0));
+            }
+            cam._lastPinchDx = pdx; cam._lastPinchDy = pdy;
             cam.targetZoom = Math.max(0.3, Math.min(8, pinchStartZoom * scale));
             cam.zoom = cam.targetZoom;
             manualZoom = true;
