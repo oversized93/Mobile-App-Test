@@ -163,12 +163,20 @@ function hexToThreeColor(hex) {
     return new THREE.Color(hex);
 }
 
+// r128 has no color management: hex colors are stored raw, and with sRGB
+// output encoding they get gamma-lifted a second time → washed-out pastels.
+// Every authored color must be converted to linear once so the renderer's
+// output conversion lands back on the intended sRGB value.
+function linC(hex) {
+    return new THREE.Color(hex).convertSRGBToLinear();
+}
+
 // ---- Initialize Three.js ----
 function init3D() {
     threeCanvas = document.getElementById('three-canvas');
     scene3d = new THREE.Scene();
-    scene3d.background = new THREE.Color('#87b8d8'); // sky blue, not teal water
-    scene3d.fog = new THREE.Fog('#87b8d8', 5000, 12000);
+    scene3d.background = linC('#87b8d8'); // sky blue, not teal water
+    scene3d.fog = new THREE.Fog(linC('#87b8d8'), 5000, 12000);
 
     // Camera
     camera3d = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 15000);
@@ -182,7 +190,7 @@ function init3D() {
     renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer3d.outputEncoding = THREE.sRGBEncoding;
     renderer3d.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer3d.toneMappingExposure = 1.1;
+    renderer3d.toneMappingExposure = 1.0;
     renderer3d.shadowMap.enabled = true;
     renderer3d.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -216,21 +224,24 @@ function init3D() {
     const skyGeo = new THREE.SphereGeometry(13000, 32, 32);
     const skyColors = [];
     const posAttr = skyGeo.getAttribute('position');
+    // Sky colors are authored in sRGB — store linear so output encoding
+    // restores them (same double-lift issue as material colors)
+    const lin = (v) => Math.pow(Math.max(0, v), 2.2);
     for (let i = 0; i < posAttr.count; i++) {
         const y = posAttr.getY(i);
         const t = (y / 2500 + 1) / 2; // 0 = bottom, 1 = top
         if (t > 0.58) {
             // Upper sky: soft blue-grey
             const p = (t - 0.58) / 0.42;
-            skyColors.push(0.45 + p * 0.15, 0.58 + p * 0.18, 0.75 + p * 0.1);
+            skyColors.push(lin(0.45 + p * 0.15), lin(0.58 + p * 0.18), lin(0.75 + p * 0.1));
         } else if (t > 0.48) {
             // Horizon: bright haze
             const p = (t - 0.48) / 0.1;
-            skyColors.push(0.85 - p * 0.4, 0.88 - p * 0.3, 0.9 - p * 0.15);
+            skyColors.push(lin(0.85 - p * 0.4), lin(0.88 - p * 0.3), lin(0.9 - p * 0.15));
         } else {
             // Below horizon: soft green haze matching ground
             const p = t / 0.48;
-            skyColors.push(0.1 + p * 0.75, 0.25 + p * 0.63, 0.12 + p * 0.78);
+            skyColors.push(lin(0.1 + p * 0.75), lin(0.25 + p * 0.63), lin(0.12 + p * 0.78));
         }
     }
     skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyColors, 3));
@@ -268,7 +279,7 @@ function init3D() {
     // Ground plane extending beyond the course — dark rough color, pushed way down
     const groundGeo = new THREE.PlaneGeometry(20000, 20000);
     const groundMat = new THREE.MeshStandardMaterial({
-        color: 0x1a4020, // dark rough green, matches rough color
+        color: linC(0x1a4020), // dark rough green, matches rough color
         roughness: 0.95,
         metalness: 0
     });
@@ -294,7 +305,7 @@ function init3D() {
 
     // Target marker (ring on ground)
     const ringGeo = new THREE.RingGeometry(4, 6, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff44, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+    const ringMat = new THREE.MeshBasicMaterial({ color: linC(0xffff44), side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
     targetMesh = new THREE.Mesh(ringGeo, ringMat);
     targetMesh.rotation.x = -Math.PI / 2;
     targetMesh.position.y = 0.2;
@@ -321,7 +332,7 @@ function init3D() {
     holeGroup.add(holeMesh);
     // Recessed cylinder for depth
     const cupGeo = new THREE.CylinderGeometry(1.2, 1.2, 2, 32, 1, true);
-    const cupMat = new THREE.MeshStandardMaterial({ color: 0x111111, side: THREE.DoubleSide });
+    const cupMat = new THREE.MeshStandardMaterial({ color: linC(0x111111), side: THREE.DoubleSide });
     const cupMesh = new THREE.Mesh(cupGeo, cupMat);
     cupMesh.position.y = -0.8;
     holeGroup.add(cupMesh);
@@ -341,7 +352,10 @@ function onResize3D() {
 }
 
 // ---- Build terrain from hole grid (INSTANCED for performance) ----
-function buildTerrain3D(hole) {
+// opts.distantScenery: false skips the fake perimeter trees/hills — used by
+// the overworld, where the course IS the world and the backdrop shapes read
+// as floating blobs from a free camera.
+function buildTerrain3D(hole, opts) {
     // Clear existing terrain
     while (terrainGroup.children.length > 0) {
         const child = terrainGroup.children[0];
@@ -381,9 +395,10 @@ function buildTerrain3D(hole) {
     // Translate so cell (0,0) starts at world origin
     terrainGeo.translate(holeW / 2, 0, holeH / 2);
 
-    // Helper: convert hex string color to RGB 0-1
+    // Helper: convert hex string color to LINEAR RGB 0-1 (see linC comment —
+    // r128 needs manual conversion so sRGB output doesn't double-lift)
     function hexToRGB(hex) {
-        const c = new THREE.Color(hex);
+        const c = new THREE.Color(hex).convertSRGBToLinear();
         return [c.r, c.g, c.b];
     }
     // Pre-compute RGB for each terrain type
@@ -524,10 +539,10 @@ function buildTerrain3D(hole) {
         // ---- Pines: tall cone on thin cylinder ----
         if (pines.length > 0) {
             const pTrunkGeo = new THREE.CylinderGeometry(1.8, 3, 30, 6);
-            const pTrunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3020 });
+            const pTrunkMat = new THREE.MeshStandardMaterial({ color: linC(0x4a3020) });
             const pTrunkInst = new THREE.InstancedMesh(pTrunkGeo, pTrunkMat, pines.length);
             const pConeGeo = new THREE.ConeGeometry(16, 44, 8);
-            const pConeMat = new THREE.MeshStandardMaterial({ color: 0x1a5228 });
+            const pConeMat = new THREE.MeshStandardMaterial({ color: linC(0x1a5228) });
             const pConeInst = new THREE.InstancedMesh(pConeGeo, pConeMat, pines.length);
             for (let i = 0; i < pines.length; i++) {
                 const { c, r } = pines[i];
@@ -553,10 +568,10 @@ function buildTerrain3D(hole) {
         // ---- Oaks: sphere canopy on thick trunk ----
         if (oaks.length > 0) {
             const oTrunkGeo = new THREE.CylinderGeometry(3, 4.5, 20, 6);
-            const oTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4030 });
+            const oTrunkMat = new THREE.MeshStandardMaterial({ color: linC(0x5a4030) });
             const oTrunkInst = new THREE.InstancedMesh(oTrunkGeo, oTrunkMat, oaks.length);
             const oSphereGeo = new THREE.SphereGeometry(18, 8, 6);
-            const oSphereMat = new THREE.MeshStandardMaterial({ color: 0x267a3a });
+            const oSphereMat = new THREE.MeshStandardMaterial({ color: linC(0x267a3a) });
             const oSphereInst = new THREE.InstancedMesh(oSphereGeo, oSphereMat, oaks.length);
             for (let i = 0; i < oaks.length; i++) {
                 const { c, r } = oaks[i];
@@ -582,7 +597,7 @@ function buildTerrain3D(hole) {
         // ---- Bushes: just a squashed sphere ----
         if (bushes.length > 0) {
             const bGeo = new THREE.SphereGeometry(10, 8, 6);
-            const bMat = new THREE.MeshStandardMaterial({ color: 0x2e7340 });
+            const bMat = new THREE.MeshStandardMaterial({ color: linC(0x2e7340) });
             const bInst = new THREE.InstancedMesh(bGeo, bMat, bushes.length);
             for (let i = 0; i < bushes.length; i++) {
                 const { c, r } = bushes[i];
@@ -602,10 +617,12 @@ function buildTerrain3D(hole) {
     }
 
     // ---- Distant scenery — rings of background trees beyond the course ----
+    const wantScenery = !(opts && opts.distantScenery === false);
     const holeCenterX = (hole.cols * cellSize) / 2;
     const holeCenterZ = (hole.rows * cellSize) / 2;
     const courseRadius = Math.max(hole.cols, hole.rows) * cellSize * 0.7;
     const distantTrees = [];
+    if (wantScenery) {
     // Two rings of fake trees around the perimeter
     for (let ring = 0; ring < 2; ring++) {
         const radius = courseRadius + 200 + ring * 400;
@@ -619,9 +636,10 @@ function buildTerrain3D(hole) {
             distantTrees.push({ x, z, ring });
         }
     }
+    } // end wantScenery tree collection
     if (distantTrees.length > 0) {
         const dtGeo = new THREE.ConeGeometry(25, 70, 7);
-        const dtMat = new THREE.MeshStandardMaterial({ color: 0x1a4828 });
+        const dtMat = new THREE.MeshStandardMaterial({ color: linC(0x1a4828) });
         const dtInst = new THREE.InstancedMesh(dtGeo, dtMat, distantTrees.length);
         for (let i = 0; i < distantTrees.length; i++) {
             const t = distantTrees[i];
@@ -639,7 +657,7 @@ function buildTerrain3D(hole) {
 
     // ---- Distant rolling hills — a few large background shapes ----
     const distantHills = [];
-    for (let i = 0; i < 8; i++) {
+    if (wantScenery) for (let i = 0; i < 8; i++) {
         const angle = (i / 8) * Math.PI * 2;
         const r = courseRadius + 1200;
         const x = holeCenterX + Math.cos(angle) * r;
@@ -648,7 +666,7 @@ function buildTerrain3D(hole) {
     }
     if (distantHills.length > 0) {
         const hillGeo = new THREE.SphereGeometry(500, 10, 6);
-        const hillMat = new THREE.MeshStandardMaterial({ color: 0x2e5e32 });
+        const hillMat = new THREE.MeshStandardMaterial({ color: linC(0x2e5e32) });
         const hillInst = new THREE.InstancedMesh(hillGeo, hillMat, distantHills.length);
         for (let i = 0; i < distantHills.length; i++) {
             const h = distantHills[i];
@@ -674,14 +692,14 @@ function buildTerrain3D(hole) {
         const flagH = (hole.heights && hole.heights[hole.hole.y]) ? (hole.heights[hole.hole.y][hole.hole.x] || 0) : 0;
 
         const poleGeo = new THREE.CylinderGeometry(0.3, 0.3, 28, 8);
-        const poleMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+        const poleMat = new THREE.MeshStandardMaterial({ color: linC(0xaaaaaa) });
         const pole = new THREE.Mesh(poleGeo, poleMat);
         pole.position.set(flagX, 14 + flagH, flagZ);
         pole.castShadow = true;
         flagGroup.add(pole);
 
         const flagGeo = new THREE.PlaneGeometry(8, 5);
-        const flagMat = new THREE.MeshStandardMaterial({ color: 0xee2222, side: THREE.DoubleSide });
+        const flagMat = new THREE.MeshStandardMaterial({ color: linC(0xee2222), side: THREE.DoubleSide });
         const flag = new THREE.Mesh(flagGeo, flagMat);
         flag.position.set(flagX + 4, 25 + flagH, flagZ);
         flagGroup.add(flag);
@@ -716,7 +734,7 @@ function updateBall3D(wx, wy, wz, color, groundY) {
     const gY = groundY || 0;
     const airHeight = Math.max(0, (wz || 0) - gY);
     ballMesh.position.set(wx, gY + airHeight * 0.5 + 1.0, wy);
-    if (color) ballMesh.material.color.set(color);
+    if (color) ballMesh.material.color.set(color).convertSRGBToLinear();
 }
 
 function updateTarget3D(wx, wy, visible) {

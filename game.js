@@ -83,7 +83,7 @@ function enterOverworld() {
     state = 'overworld';
     if (!worldCourse.heights) refreshWorldHeights();
     if (scene3dReady) {
-        buildTerrain3D(worldCourse);
+        buildTerrain3D(worldCourse, { distantScenery: false });
         const cx = worldCourse.cols * CELL / 2;
         const cz = worldCourse.rows * CELL / 2;
         // Switch the 3D camera into orbit mode so the player has full
@@ -1372,12 +1372,17 @@ function onTouchEnd(sx, sy) {
 
 // ---- Menu Screen ----
 // Landscape two-column menu: left = title + player card, right = button list
+// Primary path is the resort; the pre-overworld modes are demoted to a
+// compact "classic modes" row until they're retired (see ROADMAP.md M2.5).
 const MENU_BTNS = [
+    { id: 'resort',  label: 'My Resort',      icon: '\u{1F3D6}\uFE0F', colors: ['#2e7d32', '#1b5e20'] },
     { id: 'manage',  label: 'Manage Resort',  icon: '\u{1F3DB}\uFE0F', colors: ['#ff6d00', '#e64a19'] },
-    { id: 'career',  label: 'Play Career',    icon: '\u26F3',          colors: ['#2e7d32', '#1b5e20'] },
-    { id: 'builder', label: 'Course Builder', icon: '\u{1F3D7}\uFE0F', colors: ['#1565c0', '#0d47a1'] },
-    { id: 'custom',  label: 'Custom Courses', icon: '\u{1F3CC}\uFE0F', colors: ['#6a1b9a', '#4a148c'] },
-    { id: 'char',    label: 'Character',      icon: '\u{1F464}',       colors: ['#e65100', '#bf360c'] },
+    { id: 'char',    label: 'Character',      icon: '\u{1F464}',       colors: ['#1565c0', '#0d47a1'] },
+];
+const MENU_LEGACY_BTNS = [
+    { id: 'career',  label: 'Career' },
+    { id: 'builder', label: '2D Builder' },
+    { id: 'custom',  label: 'Custom' },
 ];
 
 function menuLayout() {
@@ -1387,14 +1392,18 @@ function menuLayout() {
     const rightX = leftW + pad * 2;
     const rightW = W() - rightX - pad;
 
-    // Button column — fit all buttons between y=pad+12 and H-pad
+    // Primary buttons + a compact legacy row underneath
     const btnCount = MENU_BTNS.length;
-    const btnH = Math.min(52, Math.max(38, (H() - pad * 2 - 20) / btnCount - 10));
-    const btnGap = 10;
-    const totalH = btnCount * btnH + (btnCount - 1) * btnGap;
+    const btnH = Math.min(54, Math.max(42, (H() - pad * 2 - 80) / btnCount - 10));
+    const btnGap = 12;
+    const legacyH = 30;
+    const legacyGapTop = 26; // includes the "CLASSIC MODES" caption
+    const totalH = btnCount * btnH + (btnCount - 1) * btnGap + legacyGapTop + legacyH;
     const btnStartY = (H() - totalH) / 2;
     const btnW = Math.min(rightW, 320);
     const btnX = rightX + (rightW - btnW) / 2;
+    const legacyY = btnStartY + btnCount * btnH + (btnCount - 1) * btnGap + legacyGapTop;
+    const legacyBtnW = (btnW - 16) / 3;
 
     // Player card on left — large avatar
     const pcW = Math.min(leftW - 20, 240);
@@ -1402,7 +1411,8 @@ function menuLayout() {
     const pcX = leftX + (leftW - pcW) / 2;
     const pcY = H() * 0.58;
 
-    return { pad, leftX, leftW, rightX, rightW, btnH, btnGap, btnW, btnX, btnStartY, pcX, pcY, pcW, pcH };
+    return { pad, leftX, leftW, rightX, rightW, btnH, btnGap, btnW, btnX, btnStartY,
+             legacyY, legacyH, legacyBtnW, pcX, pcY, pcW, pcH };
 }
 
 function drawMenu() {
@@ -1493,6 +1503,26 @@ function drawMenu() {
         by += L.btnH + L.btnGap;
     }
 
+    // Legacy modes — compact ghost row with caption
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '9px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('CLASSIC MODES', L.btnX + L.btnW / 2, L.legacyY - 8);
+    for (let i = 0; i < MENU_LEGACY_BTNS.length; i++) {
+        const lb = MENU_LEGACY_BTNS[i];
+        const lx = L.btnX + i * (L.legacyBtnW + 8);
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        roundRect(lx, L.legacyY, L.legacyBtnW, L.legacyH, L.legacyH / 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 1;
+        roundRect(lx, L.legacyY, L.legacyBtnW, L.legacyH, L.legacyH / 2);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = '11px -apple-system,sans-serif';
+        ctx.fillText(lb.label, lx + L.legacyBtnW / 2, L.legacyY + L.legacyH / 2 + 4);
+    }
+
     // Version — bottom right
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.font = '11px -apple-system,sans-serif';
@@ -1505,10 +1535,8 @@ function menuTouchStart(sx, sy) {
     let by = L.btnStartY;
     for (const btn of MENU_BTNS) {
         if (hitBtn(sx, sy, L.btnX, by, L.btnW, L.btnH)) {
-            if (btn.id === 'manage') enterManage();
-            else if (btn.id === 'career') state = 'career';
-            else if (btn.id === 'builder') { builderInit(); state = 'builder'; }
-            else if (btn.id === 'custom') playCustomCourses();
+            if (btn.id === 'resort') enterOverworld();
+            else if (btn.id === 'manage') enterManage();
             else if (btn.id === 'char') {
                 charColorIdx = charColors.indexOf(player.ballColor);
                 if (charColorIdx < 0) charColorIdx = 0;
@@ -1518,7 +1546,19 @@ function menuTouchStart(sx, sy) {
         }
         by += L.btnH + L.btnGap;
     }
+    // Legacy row
+    for (let i = 0; i < MENU_LEGACY_BTNS.length; i++) {
+        const lx = L.btnX + i * (L.legacyBtnW + 8);
+        if (hitBtn(sx, sy, lx, L.legacyY, L.legacyBtnW, L.legacyH)) {
+            const id = MENU_LEGACY_BTNS[i].id;
+            if (id === 'career') state = 'career';
+            else if (id === 'builder') { builderInit(); state = 'builder'; }
+            else if (id === 'custom') playCustomCourses();
+            return;
+        }
+    }
 }
+
 
 function playCustomCourses() {
     const saved = loadData('customHoles', []);
@@ -2134,11 +2174,14 @@ function overworldLayout() {
     const closeSize = 36;
     const closeX = W() - pad - closeSize;
     const closeY = pad;
-    // Left tool rail
+    // Left tool rail — slot height adapts so all tools always fit on screen
+    // (the fixed 40px slot overflowed the bottom edge on shorter phones)
     const railX = pad;
-    const railW = 42;
-    const railSlot = 40; // per-icon vertical slot
+    const railW = 54;
     const railY = topBarH + 8;
+    const railAvail = H() - railY - pad;
+    const railSlot = Math.max(30, Math.min(48, Math.floor((railAvail - 8) / OW_TOOLS.length)));
+    const railLabels = railSlot >= 40; // room for text under the icon
     const railH = OW_TOOLS.length * railSlot + 8;
     // Brush size picker — bottom strip
     const sizesW = 240;
@@ -2153,7 +2196,7 @@ function overworldLayout() {
     const camX = W() - pad - camBtnSize;
     const camY0 = (H() - camTotalH) / 2;
     return { pad, topBarH, closeSize, closeX, closeY,
-             railX, railY, railW, railH, railSlot,
+             railX, railY, railW, railH, railSlot, railLabels,
              sizesX, sizesY, sizesW, sizesH,
              camX, camY0, camBtnSize, camBtnGap, camBtns };
 }
@@ -2232,7 +2275,7 @@ function drawOverworld() {
     for (let i = 0; i < OW_TOOLS.length; i++) {
         const tool = OW_TOOLS[i];
         const iy = L.railY + 4 + i * L.railSlot;
-        const active = tool.id === owTool;
+        const active = tool.id === owTool || (tool.wizard && holeWizard);
         if (active) {
             // Active tool highlight — colored tint matching the material
             ctx.fillStyle = tool.color + 'aa';
@@ -2240,9 +2283,57 @@ function drawOverworld() {
             ctx.fill();
         }
         ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.8)';
-        ctx.font = '20px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(tool.icon, L.railX + L.railW / 2, iy + 26);
+        if (L.railLabels) {
+            // Icon on top, name beneath — the rail is the tool legend now
+            ctx.font = '17px -apple-system,sans-serif';
+            ctx.fillText(tool.icon, L.railX + L.railW / 2, iy + L.railSlot * 0.48);
+            ctx.font = active ? 'bold 8px -apple-system,sans-serif' : '8px -apple-system,sans-serif';
+            ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.6)';
+            ctx.fillText(tool.label.toUpperCase(), L.railX + L.railW / 2, iy + L.railSlot - 6);
+        } else {
+            ctx.font = '18px -apple-system,sans-serif';
+            ctx.fillText(tool.icon, L.railX + L.railW / 2, iy + L.railSlot / 2 + 7);
+        }
+    }
+
+    // ---- Active tool chip — always states what your finger will do ----
+    if (!holeWizard) {
+        const tool = currentTool();
+        const chipText = tool.wizard
+            ? tool.icon + '  ' + tool.label
+            : tool.icon + '  ' + tool.label + '  •  ' + owBrushSize + '×' + owBrushSize;
+        ctx.font = 'bold 12px -apple-system,sans-serif';
+        const chipW = ctx.measureText(chipText).width + 24;
+        const chipX = L.railX + L.railW + 10;
+        const chipY = L.topBarH + 8;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        roundRect(chipX, chipY, chipW, 26, 13);
+        ctx.fill();
+        ctx.strokeStyle = tool.color + 'cc';
+        ctx.lineWidth = 1.5;
+        roundRect(chipX, chipY, chipW, 26, 13);
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'left';
+        ctx.fillText(chipText, chipX + 12, chipY + 17);
+    }
+
+    // ---- Entrance marker — anchors the resort's front door ----
+    {
+        const eCol = Math.floor(worldCourse.cols / 2);
+        const eRow = worldCourse.rows - (worldCourse.border || 4);
+        const es = cellCenterScreen(eCol, eRow);
+        if (es && !es.behind && es.y > L.topBarH + 20 && es.y < H() - 20) {
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            const eW = ctx.measureText('ENTRANCE').width + 18;
+            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            roundRect(es.x - eW / 2, es.y - 11, eW, 22, 11);
+            ctx.fill();
+            ctx.fillStyle = '#1a3d1a';
+            ctx.textAlign = 'center';
+            ctx.fillText('ENTRANCE', es.x, es.y + 4);
+        }
     }
 
     // ---- Camera control rail (right edge) ----
@@ -2727,7 +2818,7 @@ function overworldTouchEnd() {
             // (fairway smooths hills, water sits flat) — refresh heights
             // before the mesh rebuild so the two never desync.
             refreshWorldHeights();
-            buildTerrain3D(worldCourse);
+            buildTerrain3D(worldCourse, { distantScenery: false });
             owNeedsRebuild = false;
         }
         saveWorldCourse();
