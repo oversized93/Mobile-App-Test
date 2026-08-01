@@ -40,6 +40,7 @@ function makeGrassTexture() {
     grassTexture = new THREE.CanvasTexture(c);
     grassTexture.wrapS = THREE.RepeatWrapping;
     grassTexture.wrapT = THREE.RepeatWrapping;
+    grassTexture.encoding = THREE.sRGBEncoding; // match renderer output encoding
     return grassTexture;
 }
 let terrainGroup, ballMesh, flagGroup, holeMesh;
@@ -174,19 +175,42 @@ function init3D() {
     camera3d.position.set(0, 300, 0);
     camera3d.lookAt(0, 0, 0);
 
-    // Renderer
+    // Renderer — sRGB output + filmic tone mapping. Without these, every
+    // hex color renders in linear space and the whole scene reads flat/milky.
     renderer3d = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true });
     renderer3d.setSize(window.innerWidth, window.innerHeight);
     renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    renderer3d.shadowMap.enabled = false;
+    renderer3d.outputEncoding = THREE.sRGBEncoding;
+    renderer3d.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer3d.toneMappingExposure = 1.1;
+    renderer3d.shadowMap.enabled = true;
+    renderer3d.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene3d.add(ambientLight);
+    // Lighting — hemisphere (sky bounce + ground bounce) sells the stylized
+    // low-poly look far better than flat ambient; sun light casts soft shadows.
+    const hemiLight = new THREE.HemisphereLight(0xbfd9ff, 0x3a7d44, 0.85);
+    scene3d.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(100, 200, 50);
+    const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.25);
+    dirLight.position.set(1400, 2200, 900);
+    dirLight.castShadow = true;
+    // Ortho shadow frustum sized to cover the 120x80-cell course (~3840x2560
+    // world units) with some margin. 2048 map ≈ 2.5 units/texel — chunky but
+    // reads as intentional soft stylized shadowing.
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.left = -2600;
+    dirLight.shadow.camera.right = 2600;
+    dirLight.shadow.camera.top = 2600;
+    dirLight.shadow.camera.bottom = -2600;
+    dirLight.shadow.camera.near = 100;
+    dirLight.shadow.camera.far = 7000;
+    dirLight.shadow.bias = -0.0005;
+    // Aim the sun at the course center (target defaults to origin; course
+    // spans positive X/Z so re-target explicitly)
+    dirLight.target.position.set(1920, 0, 1280);
     scene3d.add(dirLight);
+    scene3d.add(dirLight.target);
 
     // Skybox — gradient sky using vertex colors
     const skyGeo = new THREE.SphereGeometry(13000, 32, 32);
@@ -520,6 +544,8 @@ function buildTerrain3D(hole) {
             }
             pTrunkInst.instanceMatrix.needsUpdate = true;
             pConeInst.instanceMatrix.needsUpdate = true;
+            pTrunkInst.castShadow = true;
+            pConeInst.castShadow = true;
             terrainGroup.add(pTrunkInst);
             terrainGroup.add(pConeInst);
         }
@@ -547,6 +573,8 @@ function buildTerrain3D(hole) {
             }
             oTrunkInst.instanceMatrix.needsUpdate = true;
             oSphereInst.instanceMatrix.needsUpdate = true;
+            oTrunkInst.castShadow = true;
+            oSphereInst.castShadow = true;
             terrainGroup.add(oTrunkInst);
             terrainGroup.add(oSphereInst);
         }
@@ -567,6 +595,7 @@ function buildTerrain3D(hole) {
                 bInst.setMatrixAt(i, dummy.matrix);
             }
             bInst.instanceMatrix.needsUpdate = true;
+            bInst.castShadow = true;
             terrainGroup.add(bInst);
         }
         dummy.scale.set(1, 1, 1);

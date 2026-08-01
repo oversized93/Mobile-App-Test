@@ -66,10 +66,22 @@ let worldCourse = loadData('course', null);
 if (!worldCourse || worldCourse.cols !== COURSE_COLS || worldCourse.rows !== COURSE_ROWS) {
     worldCourse = makeStarterCourse();
 }
-function saveWorldCourse() { saveData('course', worldCourse); }
+// Heights are derived (deterministic noise flattened by terrain type), so
+// they are regenerated on load and after painting, never persisted.
+function refreshWorldHeights() {
+    worldCourse.heights = generateHeights(worldCourse);
+}
+
+function saveWorldCourse() {
+    // Strip the derived heights array before persisting — ~9,600 floats of
+    // pure noise that regenerate identically on load.
+    const { heights, ...persistable } = worldCourse;
+    saveData('course', persistable);
+}
 
 function enterOverworld() {
     state = 'overworld';
+    if (!worldCourse.heights) refreshWorldHeights();
     if (scene3dReady) {
         buildTerrain3D(worldCourse);
         const cx = worldCourse.cols * CELL / 2;
@@ -566,10 +578,12 @@ function generateHeights(hole) {
             const cc = ctrl[cy + 1][cx];
             const d = ctrl[cy + 1][cx + 1];
             let height = (a * (1 - tx) + b * tx) * (1 - ty) + (cc * (1 - tx) + d * tx) * ty;
-            // Flatten tees, greens, fairways
+            // Flatten tees, greens, fairways; paths get gentle grading so
+            // walkways don't ride raw noise bumps
             const t = hole.grid[r][c];
             if (t === T.TEE || t === T.GREEN) height *= 0.1;
             else if (t === T.FAIRWAY) height *= 0.5;
+            else if (t === T.PATH) height *= 0.35;
             // Water vertices sit at 0 so they match surrounding terrain flat
             if (t === T.WATER) height = 0;
             h[r][c] = height;
@@ -2709,6 +2723,10 @@ function overworldTouchEnd() {
         owDragPainting = false;
         owDragLastCell = null;
         if (owNeedsRebuild && scene3dReady) {
+            // Terrain-type flattening means painting reshapes elevation too
+            // (fairway smooths hills, water sits flat) — refresh heights
+            // before the mesh rebuild so the two never desync.
+            refreshWorldHeights();
             buildTerrain3D(worldCourse);
             owNeedsRebuild = false;
         }
