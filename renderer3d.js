@@ -413,12 +413,13 @@ const ASSET_SPECIES = {
     flag:  ['flag-red'],
     prop:  ['bench', 'trash', 'flowers', 'park-entrance', 'stall-food',
             'stall-drinks', 'station-fence'],
-    hero:  ['clubhouse', 'golfcart']
+    hero:  ['clubhouse', 'golfcart', 'windmill']
 };
 // Non-Kenney asset locations
 const ASSET_PATH_NAME = {
     'clubhouse': 'assets/meshy/clubhouse.glb',
-    'golfcart': 'assets/meshy/golfcart.glb'
+    'golfcart': 'assets/meshy/golfcart.glb',
+    'windmill': 'assets/meshy/windmill.glb'
 };
 // Per-model height overrides (props vary too much for one species target)
 // Sized to the world's stylized chunky proportions (realistic scale reads
@@ -426,7 +427,7 @@ const ASSET_PATH_NAME = {
 const ASSET_TARGET_H_NAME = {
     'bench': 22, 'trash': 18, 'flowers': 10, 'park-entrance': 92,
     'stall-food': 62, 'stall-drinks': 62, 'station-fence': 18,
-    'clubhouse': 148, 'golfcart': 34
+    'clubhouse': 148, 'golfcart': 34, 'windmill': 170
 };
 // Target world heights per species (CELL = 32; a good tree spans ~2 cells)
 const ASSET_TARGET_H = {
@@ -1409,6 +1410,18 @@ function buildTerrain3D(hole, opts) {
         put('clubhouse', ec - 8.5, er - 7.5, Math.PI / 2);
         // A cart parked off the path
         put('golfcart', ec + 4.2, er - 14.6, -Math.PI / 3);
+        // Windmill on the first pond's bank — classic resort landmark
+        let placedMill = false;
+        for (let r = 2; r < hole.rows - 2 && !placedMill; r++) {
+            for (let c = 2; c < hole.cols - 2 && !placedMill; c++) {
+                if (hole.grid[r][c] !== T.WATER) continue;
+                // shore cell: land to the east of water
+                if (hole.grid[r][c + 1] !== T.WATER && hole.grid[r][c + 2] !== T.WATER) {
+                    put('windmill', c + 2.6, r + 0.5, -Math.PI / 2);
+                    placedMill = true;
+                }
+            }
+        }
         // Benches + trash along the entry path
         put('bench', ec - 2.1, er - 5, Math.PI / 2);
         put('bench', ec + 2.6, er - 7.5, -Math.PI / 2);
