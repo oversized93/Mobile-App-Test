@@ -278,9 +278,9 @@ function init3D() {
             const p = (t - 0.48) / 0.1;
             skyColors.push(lin(0.85 - p * 0.4), lin(0.88 - p * 0.3), lin(0.9 - p * 0.15));
         } else {
-            // Below horizon: soft green haze matching ground
+            // Below horizon: bright sea-mist haze (island world, no dark band)
             const p = t / 0.48;
-            skyColors.push(lin(0.1 + p * 0.75), lin(0.25 + p * 0.63), lin(0.12 + p * 0.78));
+            skyColors.push(lin(0.34 + p * 0.51), lin(0.5 + p * 0.38), lin(0.52 + p * 0.38));
         }
     }
     skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyColors, 3));
@@ -1807,22 +1807,44 @@ function setupAmbientNPCs(hole) {
     npcStates = [];
     npcBodyInst = null;
     npcHeadInst = null;
-    if (npcPathCells.length < 4) return;
+
+    // Walkers on paths + golfers stationed at every hole's tee and green
+    const golfers = [];
+    if (hole.holes) {
+        for (const rec of hole.holes) {
+            golfers.push({ c: rec.tee.x + 0.9, r: rec.tee.y + 0.4 });
+            golfers.push({ c: rec.tee.x - 0.5, r: rec.tee.y + 1.1 });
+            golfers.push({ c: rec.pin.x - 0.8, r: rec.pin.y + 0.7 });
+        }
+    }
+    const walkerCount = npcPathCells.length >= 4 ? NPC_COUNT : 0;
+    const total = walkerCount + golfers.length;
+    if (total === 0) return;
 
     const bodyGeo = new THREE.CylinderGeometry(3.4, 4.2, 15, 8);
     const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
-    npcBodyInst = new THREE.InstancedMesh(bodyGeo, bodyMat, NPC_COUNT);
+    npcBodyInst = new THREE.InstancedMesh(bodyGeo, bodyMat, total);
     const headGeo = new THREE.SphereGeometry(3.8, 8, 6);
     const headMat = new THREE.MeshStandardMaterial({ color: linC(0xf0c8a0), roughness: 0.85 });
-    npcHeadInst = new THREE.InstancedMesh(headGeo, headMat, NPC_COUNT);
+    npcHeadInst = new THREE.InstancedMesh(headGeo, headMat, total);
     npcBodyInst.castShadow = true;
-    for (let i = 0; i < NPC_COUNT; i++) {
+    for (let i = 0; i < walkerCount; i++) {
         const start = npcPathCells[(i * 37) % npcPathCells.length];
         npcStates.push({
             x: (start.c + 0.5) * CELL, z: (start.r + 0.5) * CELL,
             tx: (start.c + 0.5) * CELL, tz: (start.r + 0.5) * CELL,
-            speed: 11 + (i % 4) * 2.5, phase: i * 1.7
+            speed: 11 + (i % 4) * 2.5, phase: i * 1.7, idle: false
         });
+    }
+    for (let g = 0; g < golfers.length; g++) {
+        const gp = golfers[g];
+        npcStates.push({
+            x: (gp.c + 0.5) * CELL, z: (gp.r + 0.5) * CELL,
+            tx: (gp.c + 0.5) * CELL, tz: (gp.r + 0.5) * CELL,
+            speed: 0, phase: g * 2.3, idle: true
+        });
+    }
+    for (let i = 0; i < total; i++) {
         if (npcBodyInst.setColorAt) {
             npcBodyInst.setColorAt(i, new THREE.Color(NPC_COLORS[i % NPC_COLORS.length]).convertSRGBToLinear());
         }
@@ -1841,7 +1863,9 @@ function updateAmbientNPCs3D(dt, hole) {
         const s = npcStates[i];
         const dx = s.tx - s.x, dz = s.tz - s.z;
         const d = Math.sqrt(dx * dx + dz * dz);
-        if (d < 3) {
+        if (s.idle) {
+            // Stationed golfer: gentle sway + slow turn, no wandering
+        } else if (d < 3) {
             // Pick a new stroll target on the path network
             const next = npcPathCells[Math.floor((t * 7 + i * 131) % npcPathCells.length)];
             s.tx = (next.c + 0.5) * CELL;
@@ -1852,9 +1876,11 @@ function updateAmbientNPCs3D(dt, hole) {
         }
         const gy = (hole && hole.heights)
             ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
-        const bob = Math.sin(t * 9 + s.phase) * 0.7;
+        const bob = s.idle ? Math.sin(t * 2.2 + s.phase) * 0.3
+                           : Math.sin(t * 9 + s.phase) * 0.7;
         dummy.position.set(s.x, gy + 7.5 + bob, s.z);
-        dummy.rotation.set(0, Math.atan2(dx, dz), 0);
+        dummy.rotation.set(0, s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
+                              : Math.atan2(dx, dz), 0);
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         npcBodyInst.setMatrixAt(i, dummy.matrix);

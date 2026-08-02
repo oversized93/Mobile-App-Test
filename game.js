@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt3';
+const BUILD_TAG = 'gt4';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2409,6 +2409,24 @@ function drawOverworld() {
     ctx.font = 'bold 14px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('$ ' + Math.floor(resort.coins).toLocaleString(), W() / 2, bpY + bpH / 2 + 5);
+
+    // Game clock chip — Day N + time, driven by the persistent world clock
+    {
+        const mins = Math.floor((resort.worldClock || 0) / 1);
+        const day = Math.floor(mins / 1440) + 1;
+        const hh24 = Math.floor((mins % 1440) / 60);
+        const mm = mins % 60;
+        const ap = hh24 >= 12 ? 'PM' : 'AM';
+        const hh = ((hh24 + 11) % 12) + 1;
+        const label = 'Day ' + day + '  ' + hh + ':' + String(mm).padStart(2, '0') + ' ' + ap;
+        ctx.font = 'bold 12px -apple-system,sans-serif';
+        const cw = ctx.measureText(label).width + 26;
+        const cx0 = L.undoX - 10 - cw;
+        glossyRect(cx0, L.undoY + 3, cw, 30, 15, '#2c3a42');
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, cx0 + cw / 2, L.undoY + 23);
+    }
 
     // Close X — glossy red
     glossyRect(L.closeX, L.closeY, L.closeSize, L.closeSize, 10, '#c0392b');
