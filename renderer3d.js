@@ -1984,6 +1984,7 @@ function setupAmbientNPCs(hole) {
     npcClubInst = null;
     setupHoverBots(hole);
     setupFountains(hole);
+    setupCartDrive(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -2046,6 +2047,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateHoverBots3D(dt, hole);
     updateFountains3D();
     updatePinRings3D();
+    updateCartDrive3D(dt, hole);
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = new THREE.Object3D();
     const t = windClock.value;
@@ -2150,6 +2152,72 @@ function setupFountains(hole) {
     fountainInst = new THREE.InstancedMesh(geo, mat, fountainSpots.length * FOUNTAIN_DROPS);
     fountainInst.renderOrder = 3;
     terrainGroup.add(fountainInst);
+}
+
+// ---- A golf cart cruising the walkway network ----
+let cartGroup = null, cartState = null, cartPathSet = null;
+
+function setupCartDrive(hole) {
+    cartGroup = null;
+    cartState = null;
+    if (!worldAssets || !worldAssets.golfcart) return;
+    if (npcPathCells.length < 10) return;
+    cartPathSet = new Set(npcPathCells.map(p => p.c + ',' + p.r));
+    const model = worldAssets.golfcart;
+    const grp = new THREE.Group();
+    for (const part of model.parts) {
+        const mesh = new THREE.Mesh(part.geometry, part.material);
+        mesh.castShadow = true;
+        grp.add(mesh);
+    }
+    grp.scale.setScalar(model.scale);
+    terrainGroup.add(grp);
+    cartGroup = grp;
+    const start = npcPathCells[Math.floor(npcPathCells.length / 2)];
+    cartState = {
+        c: start.c, r: start.r,
+        x: (start.c + 0.5) * CELL, z: (start.r + 0.5) * CELL,
+        tx: (start.c + 0.5) * CELL, tz: (start.r + 0.5) * CELL,
+        dc: 1, dr: 0, yaw: 0
+    };
+}
+
+function updateCartDrive3D(dt, hole) {
+    if (!cartGroup || !cartState) return;
+    const s = cartState;
+    const dx = s.tx - s.x, dz = s.tz - s.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d < 2) {
+        // At a cell center: mostly keep heading, turn at junctions/corners
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        const opts = [];
+        for (let k = 0; k < 4; k++) {
+            const dc = dirs[k][0], dr = dirs[k][1];
+            if (dc === -s.dc && dr === -s.dr) continue; // no casual U-turns
+            if (cartPathSet.has((s.c + dc) + ',' + (s.r + dr))) opts.push(dirs[k]);
+        }
+        let pick;
+        const straightOk = opts.some(o => o[0] === s.dc && o[1] === s.dr);
+        if (!opts.length) pick = [-s.dc, -s.dr]; // dead end: back out
+        else if (straightOk && (s.c * 7 + s.r * 13) % 4 !== 0) pick = [s.dc, s.dr];
+        else pick = opts[(s.c * 31 + s.r * 17) % opts.length];
+        s.dc = pick[0]; s.dr = pick[1];
+        s.c += s.dc; s.r += s.dr;
+        s.tx = (s.c + 0.5) * CELL;
+        s.tz = (s.r + 0.5) * CELL;
+    } else {
+        s.x += (dx / d) * 46 * dt;
+        s.z += (dz / d) * 46 * dt;
+    }
+    const gy = (hole && hole.heights)
+        ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
+    const targetYaw = Math.atan2(s.tx - s.x, s.tz - s.z);
+    let dy = targetYaw - s.yaw;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    s.yaw += dy * Math.min(1, dt * 8);
+    cartGroup.position.set(s.x, gy, s.z);
+    cartGroup.rotation.y = s.yaw;
 }
 
 function updateFountains3D() {
