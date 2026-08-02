@@ -1192,6 +1192,56 @@ function buildTerrain3D(hole, opts) {
     terrainColorAttrRef = terrainGeo.getAttribute('color');
     terrainHoleRef = hole;
 
+    // ---- Rocky cliff skirt around the island edge ----
+    // Perimeter strip from the terrain lip down past the waterline: soil
+    // lip, jittered rock mid-band, dark base. Flat shading gives facets.
+    {
+        const rows = hole.rows, cols = hole.cols;
+        const per = [];
+        for (let vc = 0; vc <= cols; vc++) per.push({ vc: vc, vr: 0, nx: 0, nz: -1 });
+        for (let vr = 1; vr <= rows; vr++) per.push({ vc: cols, vr: vr, nx: 1, nz: 0 });
+        for (let vc = cols - 1; vc >= 0; vc--) per.push({ vc: vc, vr: rows, nx: 0, nz: 1 });
+        for (let vr = rows - 1; vr >= 1; vr--) per.push({ vc: 0, vr: vr, nx: -1, nz: 0 });
+        const N = per.length;
+        const pos = new Float32Array(N * 9);
+        const colArr = new Float32Array(N * 9);
+        const soil = new THREE.Color('#6b5138').convertSRGBToLinear();
+        const rock = new THREE.Color('#7d7264').convertSRGBToLinear();
+        const rockD = new THREE.Color('#524a42').convertSRGBToLinear();
+        for (let i = 0; i < N; i++) {
+            const p = per[i];
+            const x = p.vc * cellSize, z = p.vr * cellSize;
+            const ty = computeVertexColorHeight(hole, p.vc, p.vr).y;
+            const h = ((p.vc * 92821) ^ (p.vr * 68917)) >>> 0;
+            // Flared talus profile — near-vertical walls subtend nothing
+            // from the game's steep camera, so the rock band must lean out
+            const j1 = 8 + (h % 10), j2 = 16 + ((h >> 3) % 14);
+            const shade = 0.85 + ((h >> 5) % 30) / 100;
+            pos.set([x, ty, z], i * 9);
+            colArr.set([soil.r, soil.g, soil.b], i * 9);
+            pos.set([x + p.nx * j1, Math.max(ty * 0.45, 2) - 6, z + p.nz * j1], i * 9 + 3);
+            colArr.set([rock.r * shade, rock.g * shade, rock.b * shade], i * 9 + 3);
+            pos.set([x + p.nx * j2, -22, z + p.nz * j2], i * 9 + 6);
+            colArr.set([rockD.r * shade, rockD.g * shade, rockD.b * shade], i * 9 + 6);
+        }
+        const idx = [];
+        for (let i = 0; i < N; i++) {
+            const a = i * 3, b = ((i + 1) % N) * 3;
+            idx.push(a, a + 1, b, b, a + 1, b + 1,
+                     a + 1, a + 2, b + 1, b + 1, a + 2, b + 2);
+        }
+        const cliffGeo = new THREE.BufferGeometry();
+        cliffGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        cliffGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
+        cliffGeo.setIndex(idx);
+        cliffGeo.computeVertexNormals();
+        const cliffMat = new THREE.MeshStandardMaterial({
+            vertexColors: true, flatShading: true, roughness: 1,
+            metalness: 0, side: THREE.DoubleSide
+        });
+        terrainGroup.add(new THREE.Mesh(cliffGeo, cliffMat));
+    }
+
     // Animated water surface (visible only inside sunken water cells)
     buildWaterSurface(hole);
 
