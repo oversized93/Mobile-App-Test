@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'g2c';
+const BUILD_TAG = 'g2d';
 
 // ---- Game State ----
 let state = 'menu';
@@ -4766,6 +4766,7 @@ function drawNotification(dt) {
 
 // ---- Main Game Loop ----
 function gameLoop(time) {
+    window.__gameAlive = true; // boot watchdog: the loop is running
     requestAnimationFrame(gameLoop);
 
     if (!lastFrameTime) lastFrameTime = time;

@@ -59,6 +59,46 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a472a;touch-action
   <button id="rotate-continue">Continue anyway</button>
 </div>
 <script>
+// ---- Boot diagnostics: a blank screen must never be silent again ----
+// Any script error before the game loop starts is painted onto the page,
+// and a watchdog reports which layers loaded if the loop never runs.
+window.__bootErrors = [];
+window.__gameAlive = false;
+window.addEventListener('error', function (e) {
+    var src = (e.filename || '').split('/').pop();
+    window.__bootErrors.push((e.message || 'error') + '  @ ' + src + ':' + (e.lineno || '?'));
+    window.__showBootDiag();
+});
+window.__showBootDiag = function () {
+    var el = document.getElementById('boot-diag');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'boot-diag';
+        el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;' +
+            'background:rgba(130,10,10,.94);color:#fff;font:11px/-1.4 monospace;' +
+            'padding:10px;max-height:50%;overflow:auto;white-space:pre-wrap';
+        document.body.appendChild(el);
+        el.addEventListener('click', function () { el.remove(); });
+    }
+    el.textContent = 'BOOT DIAGNOSTIC (tap to hide) — html g2d\n'
+        + window.__bootErrors.join('\n');
+};
+setTimeout(function () {
+    if (!window.__gameAlive) {
+        window.__bootErrors.push('watchdog: game loop NOT running after 5s');
+        window.__bootErrors.push('layers: THREE=' + typeof THREE
+            + ' engine=' + (typeof roundRect !== 'undefined' ? 'ok' : 'MISSING')
+            + ' renderer=' + (typeof scene3dReady !== 'undefined' ? 'ok' : 'MISSING')
+            + ' game=' + (typeof state !== 'undefined' ? 'ok(' + state + ')' : 'MISSING'));
+        window.__showBootDiag();
+    }
+}, 5000);
+// Escape valve for save-related failures: ?fresh=1 wipes local data
+if (location.search.indexOf('fresh=1') >= 0) {
+    try { localStorage.clear(); } catch (err) {}
+}
+</script>
+<script>
   // Best-effort orientation lock — browsers ignore this unless fullscreen,
   // which is why we also show the rotate-overlay via CSS.
   if (screen.orientation && screen.orientation.lock) {
@@ -74,12 +114,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a472a;touch-action
     });
   });
 </script>
-<script src="lib/three.min.js?v=g2c"></script>
-<script src="lib/GLTFLoader.js?v=g2c"></script>
-<script src="engine.js?v=g2c"></script>
-<script src="courses.js?v=g2c"></script>
-<script src="builder.js?v=g2c"></script>
-<script src="renderer3d.js?v=g2c"></script>
-<script src="game.js?v=g2c"></script>
+<script src="lib/three.min.js?v=g2d"></script>
+<script src="lib/GLTFLoader.js?v=g2d"></script>
+<script src="engine.js?v=g2d"></script>
+<script src="courses.js?v=g2d"></script>
+<script src="builder.js?v=g2d"></script>
+<script src="renderer3d.js?v=g2d"></script>
+<script src="game.js?v=g2d"></script>
 </body>
 </html>
