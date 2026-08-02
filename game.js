@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'g2b';
+const BUILD_TAG = 'g2c';
 
 // ---- Game State ----
 let state = 'menu';
@@ -440,7 +440,6 @@ function applyOfflineCatchup() {
     resort.coinsFrac = 0;
     saveResort();
 }
-applyOfflineCatchup();
 
 // The world advances on EVERY screen — economy, and later NPCs and daily
 // upkeep, all hang off this one clock. (Previously income only ticked while
@@ -4890,5 +4889,10 @@ function gameLoop(time) {
 
 
 // ---- Start! ----
+// Offline catch-up runs HERE, not at module evaluation: it can call
+// notify(), whose state lives in let-declarations further up the file —
+// calling during evaluation crashed every device that had offline
+// earnings (TDZ), i.e. every veteran save, while fresh browsers passed.
+applyOfflineCatchup();
 if (typeof init3D === 'function') init3D();
 requestAnimationFrame(gameLoop);
