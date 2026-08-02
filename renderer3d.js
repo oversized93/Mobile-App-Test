@@ -416,13 +416,14 @@ const ASSET_SPECIES = {
     flag:  ['flag-red'],
     prop:  ['bench', 'trash', 'flowers', 'park-entrance', 'stall-food',
             'stall-drinks', 'station-fence', 'bridge_wood', 'bridge_woodRound'],
-    hero:  ['clubhouse', 'golfcart', 'windmill']
+    hero:  ['clubhouse', 'golfcart', 'windmill', 'archsign']
 };
 // Non-Kenney asset locations
 const ASSET_PATH_NAME = {
     'clubhouse': 'assets/meshy/clubhouse.glb',
     'golfcart': 'assets/meshy/golfcart.glb',
-    'windmill': 'assets/meshy/windmill.glb'
+    'windmill': 'assets/meshy/windmill.glb',
+    'archsign': 'assets/meshy/archsign.glb'
 };
 // Per-model height overrides (props vary too much for one species target)
 // Sized to the world's stylized chunky proportions (realistic scale reads
@@ -431,7 +432,7 @@ const ASSET_TARGET_H_NAME = {
     'bench': 22, 'trash': 18, 'flowers': 10, 'park-entrance': 92,
     'stall-food': 62, 'stall-drinks': 62, 'station-fence': 18,
     'clubhouse': 148, 'golfcart': 34, 'windmill': 170,
-    'bridge_wood': 26, 'bridge_woodRound': 30
+    'bridge_wood': 26, 'bridge_woodRound': 30, 'archsign': 110
 };
 // Target world heights per species (CELL = 32; a good tree spans ~2 cells)
 const ASSET_TARGET_H = {
@@ -1434,7 +1435,7 @@ function buildTerrain3D(hole, opts) {
             terrainGroup.add(grp);
         };
         // Gate arch over the walkway just inside the boundary
-        put('park-entrance', ec + 0.5, er - 1.2, 0, 1);
+        put('archsign', ec + 0.5, er - 1.2, 0, 1);
         // The clubhouse — resort landmark beside the entrance walk
         put('clubhouse', ec - 8.5, er - 7.5, Math.PI / 2);
         // A cart parked off the path
