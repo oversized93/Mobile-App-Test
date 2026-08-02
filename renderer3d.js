@@ -926,6 +926,15 @@ function paintAlbedoCell(hole, c, r) {
         if (s !== T.GREEN && s !== t) g.fillRect(x, y + px - fw, px, fw);
         if (w !== T.GREEN && w !== t) g.fillRect(x, y, fw, px);
         if (e !== T.GREEN && e !== t) g.fillRect(x + px - fw, y, fw, px);
+    } else if (t === T.TEE) {
+        // Tee pad: bright inset rim reads as a launch platform
+        const rim2 = shadeHex(ALBEDO_COLORS.base[T.TEE], 0.4);
+        g.fillStyle = rim2;
+        const iw = 2;
+        if (n !== T.TEE) g.fillRect(x, y, px, iw);
+        if (s !== T.TEE) g.fillRect(x, y + px - iw, px, iw);
+        if (w !== T.TEE) g.fillRect(x, y, iw, px);
+        if (e !== T.TEE) g.fillRect(x + px - iw, y, iw, px);
     } else if (t === T.WATER) {
         // Shore highlight inside the water side
         const lite = shadeHex(ALBEDO_COLORS.base[T.WATER], 0.35);
@@ -1206,7 +1215,9 @@ function buildTerrain3D(hole, opts) {
                 const t = hole.grid[r][c];
                 if (t !== T.ROUGH && t !== T.GRASS) continue;
                 const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
-                if (h % 47 === 0) flowerCells.push({ c, r });
+                const nearPath = hole.grid[r][c - 1] === T.PATH || hole.grid[r][c + 1] === T.PATH
+                              || hole.grid[r - 1][c] === T.PATH || hole.grid[r + 1][c] === T.PATH;
+                if (h % (nearPath ? 7 : 29) === 0) flowerCells.push({ c, r });
                 else if (h % 6 === 0) tuftCells.push({ c, r });
             }
         }
@@ -1451,6 +1462,7 @@ function buildTerrain3D(hole, opts) {
     }
 
         // ---- Teal shot-arc trails over each hole (signature reference look) ----
+    arcCurves = [];
     if (hole.holes && hole.holes.length) {
         const arcMat = new THREE.MeshBasicMaterial({
             color: new THREE.Color('#3adbe8'),
@@ -1477,8 +1489,10 @@ function buildTerrain3D(hole, opts) {
                 const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 1.7, 6, false), arcMat);
                 tube.renderOrder = 3;
                 terrainGroup.add(tube);
+                arcCurves.push(curve);
             }
         }
+        setupArcBalls();
     }
 
     // ---- Floating 3D hole numbers over each tee (reference-style) ----
@@ -1945,4 +1959,40 @@ function updateAmbientNPCs3D(dt, hole) {
     }
     npcBodyInst.instanceMatrix.needsUpdate = true;
     npcHeadInst.instanceMatrix.needsUpdate = true;
+}
+
+// ---- Balls flying the shot arcs — one glint per arc segment ----
+let arcCurves = [];
+let arcBallInst = null;
+
+function setupArcBalls() {
+    arcBallInst = null;
+    if (!arcCurves.length) return;
+    const geo = new THREE.SphereGeometry(2.6, 8, 6);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    mat.toneMapped = false;
+    arcBallInst = new THREE.InstancedMesh(geo, mat, arcCurves.length);
+    arcBallInst.renderOrder = 4;
+    terrainGroup.add(arcBallInst);
+}
+
+function updateArcBalls3D() {
+    if (!arcBallInst || !arcCurves.length) return;
+    const dummy = new THREE.Object3D();
+    const t = windClock.value;
+    for (let i = 0; i < arcCurves.length; i++) {
+        // Each segment fires every ~4s, staggered; ball hidden between shots
+        const cycle = ((t * 0.45 + i * 0.37) % 1.6);
+        if (cycle < 1) {
+            const p = arcCurves[i].getPoint(cycle);
+            dummy.position.copy(p);
+            dummy.scale.set(1, 1, 1);
+        } else {
+            dummy.position.set(0, -500, 0);
+            dummy.scale.set(0.001, 0.001, 0.001);
+        }
+        dummy.updateMatrix();
+        arcBallInst.setMatrixAt(i, dummy.matrix);
+    }
+    arcBallInst.instanceMatrix.needsUpdate = true;
 }

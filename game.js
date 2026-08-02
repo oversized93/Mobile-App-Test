@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt6';
+const BUILD_TAG = 'gt7';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2558,7 +2558,7 @@ function drawOverworld() {
             owSelectedHole = null;
         } else {
             const hc = holeCardLayout();
-            ctx.fillStyle = 'rgba(14,22,17,0.94)';
+            ctx.fillStyle = 'rgba(16,28,40,0.95)';
             roundRect(hc.x, hc.y, hc.w, hc.h, 14);
             ctx.fill();
             ctx.strokeStyle = 'rgba(0,0,0,0.6)';
@@ -2571,12 +2571,31 @@ function drawOverworld() {
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 14px -apple-system,sans-serif';
             ctx.fillText('Hole ' + selHole.id, hc.x + 14, hc.y + 21);
+            // Reference-style stat rows: label left, value right, bar fill
             const yds = Math.round(polylineLengthYards(selHole));
-            ctx.fillStyle = 'rgba(255,255,255,0.65)';
-            ctx.font = '12px -apple-system,sans-serif';
-            ctx.fillText('Par ' + selHole.par + '  \u2022  ' + yds + ' yds', hc.x + 14, hc.y + 48);
-            ctx.fillText(selHole.waypoints.length + ' waypoint' + (selHole.waypoints.length === 1 ? '' : 's'),
-                         hc.x + 14, hc.y + 68);
+            const rows = [
+                ['Par', String(selHole.par), Math.min(1, selHole.par / 5), '#66bb6a'],
+                ['Length', yds + ' yds', Math.min(1, yds / 550), '#42a5f5'],
+                ['Bends', String(selHole.waypoints.length), Math.min(1, selHole.waypoints.length / 4), '#ffca28']
+            ];
+            let ry = hc.y + 44;
+            for (const [label, val, frac, col] of rows) {
+                ctx.fillStyle = 'rgba(255,255,255,0.55)';
+                ctx.font = '11px -apple-system,sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(label, hc.x + 14, ry);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 11px -apple-system,sans-serif';
+                ctx.fillText(val, hc.x + hc.w - 14, ry);
+                ctx.fillStyle = 'rgba(255,255,255,0.12)';
+                roundRect(hc.x + 14, ry + 5, hc.w - 28, 5, 2.5);
+                ctx.fill();
+                ctx.fillStyle = col;
+                roundRect(hc.x + 14, ry + 5, (hc.w - 28) * frac, 5, 2.5);
+                ctx.fill();
+                ry += 26;
+            }
             // Test Play button
             const playGrad = ctx.createLinearGradient(hc.playX, hc.playY, hc.playX + hc.playW, hc.playY);
             playGrad.addColorStop(0, '#2e7d32');
@@ -2697,7 +2716,7 @@ function undoLastStroke() {
 
 // Hole inspector card geometry (shared by draw + hit-test)
 function holeCardLayout() {
-    const w = 200, h = 180;
+    const w = 216, h = 210;
     const x = W() - w - 10, y = 58;
     return { x, y, w, h,
              playX: x + 12, playY: y + h - 88, playW: w - 24, playH: 34,
@@ -4861,6 +4880,7 @@ function gameLoop(time) {
             if (ballMesh) ballMesh.visible = false;
             if (typeof cloudsGroup !== 'undefined' && cloudsGroup) cloudsGroup.visible = false;
             if (typeof updateAmbientNPCs3D === 'function') updateAmbientNPCs3D(dt, worldCourse);
+            if (typeof updateArcBalls3D === 'function') updateArcBalls3D();
             updateTarget3D(0, 0, false);
             // Continuous rotate/tilt while a HUD button is held
             tickOverworldCamera(dt);
