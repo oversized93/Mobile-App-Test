@@ -84,9 +84,16 @@ const DIST = parseInt(process.argv[4] || '2000', 10);
                 paint(44, 24, 52, 32, T_.GREEN);
                 paint(34, 40, 40, 45, T_.SAND);
                 paint(12, 20, 22, 30, T_.WATER);
-                for (let i = 0; i < 260; i++) {
+                // Dense forest bands framing the hole (reference-style woods)
+                for (let r = 8; r <= 22; r++)
+                    for (let c = 30; c <= 66; c++)
+                        if (G[r][c] === T_.ROUGH && ((c * 7 + r * 13) % 5) < 4) G[r][c] = T_.TREE;
+                for (let r = 44; r <= 58; r++)
+                    for (let c = 10; c <= 50; c++)
+                        if (G[r][c] === T_.ROUGH && ((c * 11 + r * 3) % 5) < 4) G[r][c] = T_.TREE;
+                for (let i = 0; i < 200; i++) {
                     const c = 8 + (i * 37) % 100, r = 8 + (i * 53) % 62;
-                    if (G[r][c] === T_.ROUGH && ((c * 7 + r * 13) % 5) < 3) G[r][c] = T_.TREE;
+                    if (G[r][c] === T_.ROUGH && ((c * 7 + r * 13) % 6) < 2) G[r][c] = T_.TREE;
                 }
                 paint(58, 40, 60, 74, T_.PATH);
                 paint(52, 40, 70, 42, T_.PATH);

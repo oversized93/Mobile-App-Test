@@ -542,10 +542,29 @@ function placeAssetInstances(hole, cells, speciesKey, opts) {
     const list = ASSET_SPECIES[speciesKey].filter(n => worldAssets[n]);
     if (!list.length) return false;
     const cellSize = CELL;
-    const buckets = {}; // modelName -> cells
+    // Tree species clump: 1-3 stems per cell with sub-cell jitter — forests
+    // read as woods, not evenly-spaced orchards
+    const clumpy = (speciesKey === 'pine' || speciesKey === 'leafy' || speciesKey === 'fall');
+    const placements = [];
     for (const cell of cells) {
-        const name = list[(cell.c * 41 + cell.r * 59) % list.length];
-        (buckets[name] = buckets[name] || []).push(cell);
+        const h = ((cell.c * 92837111) ^ (cell.r * 68998117)) >>> 0;
+        const count = clumpy ? 2 + (h % 2) : 1;   // woods: 2-3 stems per cell
+        for (let k = 0; k < count; k++) {
+            const hx = ((h >> (3 * k)) % 19) / 19 - 0.5;
+            const hz = ((h >> (3 * k + 5)) % 17) / 17 - 0.5;
+            placements.push({
+                c: cell.c, r: cell.r, k,
+                ox: count > 1 ? hx * 0.95 : hx * 0.4,
+                oz: count > 1 ? hz * 0.95 : hz * 0.4,
+                szMul: count > 1 ? 0.85 + ((h >> (2 * k)) % 10) / 30 : 1
+            });
+        }
+    }
+    const buckets = {}; // modelName -> placements
+    for (const p of placements) {
+        const idx = Math.abs(p.c * 41 + p.r * 59 + (p.k || 0) * 23) % list.length;
+        const name = list[idx];
+        (buckets[name] = buckets[name] || []).push(p);
     }
     const dummy = new THREE.Object3D();
     for (const name in buckets) {
@@ -554,13 +573,15 @@ function placeAssetInstances(hole, cells, speciesKey, opts) {
         for (const part of model.parts) {
             const inst = new THREE.InstancedMesh(part.geometry, part.material, group.length);
             for (let i = 0; i < group.length; i++) {
-                const { c, r } = group[i];
-                const szVar = 0.82 + ((c * 11 + r * 23) % 12) / 32;
+                const p = group[i];
+                const { c, r } = p;
+                const szVar = (0.82 + ((c * 11 + r * 23) % 12) / 32) * (p.szMul || 1);
                 const s = model.scale * szVar * ((opts && opts.scaleMul) || 1);
                 const cellH = (hole.heights && hole.heights[r]) ? (hole.heights[r][c] || 0) : 0;
-                dummy.position.set((c + 0.5) * cellSize, cellH, (r + 0.5) * cellSize);
+                dummy.position.set((c + 0.5 + (p.ox || 0)) * cellSize, cellH,
+                                   (r + 0.5 + (p.oz || 0)) * cellSize);
                 dummy.scale.set(s, s, s);
-                dummy.rotation.set(0, ((c * 13 + r * 7) % 12) * (Math.PI / 6), 0);
+                dummy.rotation.set(0, ((c * 13 + r * 7 + i) % 12) * (Math.PI / 6), 0);
                 dummy.updateMatrix();
                 inst.setMatrixAt(i, dummy.matrix);
             }
@@ -608,6 +629,32 @@ const windClock = { value: 0 };
 
 let waterMesh = null;
 let waterMat = null;
+let shoreTexture = null;
+
+// Shore-distance map: white=land, black=open water, blurred so the water
+// shader can draw an animated foam/glow band hugging every shoreline.
+function buildShoreTexture(hole) {
+    const c1 = document.createElement('canvas');
+    c1.width = hole.cols; c1.height = hole.rows;
+    const g1 = c1.getContext('2d');
+    g1.fillStyle = '#000';
+    g1.fillRect(0, 0, hole.cols, hole.rows);
+    g1.fillStyle = '#fff';
+    for (let r = 0; r < hole.rows; r++)
+        for (let cc = 0; cc < hole.cols; cc++)
+            if (hole.grid[r][cc] !== T.WATER) g1.fillRect(cc, r, 1, 1);
+    const c2 = document.createElement('canvas');
+    c2.width = hole.cols; c2.height = hole.rows;
+    const g2 = c2.getContext('2d');
+    g2.filter = 'blur(1.6px)';
+    g2.drawImage(c1, 0, 0);
+    if (shoreTexture) shoreTexture.dispose();
+    shoreTexture = new THREE.CanvasTexture(c2);
+    shoreTexture.flipY = false;
+    shoreTexture.minFilter = THREE.LinearFilter;
+    shoreTexture.magFilter = THREE.LinearFilter;
+    return shoreTexture;
+}
 
 // Water surface: a single translucent plane at y=-1.4 across the whole
 // course. Land sits at y>=0 and water cells sink to -4, so the plane is
@@ -619,8 +666,10 @@ function buildWaterSurface(hole) {
             depthWrite: false,
             uniforms: {
                 uTime: windClock,
-                uDeep: { value: new THREE.Color('#1c6aa6') },
-                uLite: { value: new THREE.Color('#3fa7e0') }
+                uDeep: { value: new THREE.Color('#177fb4') },
+                uLite: { value: new THREE.Color('#45c8e8') },
+                uShore: { value: null },
+                uWorld: { value: new THREE.Vector2(1, 1) }
             },
             vertexShader: [
                 'varying vec2 vPos;',
@@ -634,6 +683,8 @@ function buildWaterSurface(hole) {
                 'uniform float uTime;',
                 'uniform vec3 uDeep;',
                 'uniform vec3 uLite;',
+                'uniform sampler2D uShore;',
+                'uniform vec2 uWorld;',
                 'varying vec2 vPos;',
                 'void main() {',
                 '    float w1 = sin(vPos.x * 0.085 + uTime * 1.1)',
@@ -644,11 +695,18 @@ function buildWaterSurface(hole) {
                 '    float sp = sin(vPos.x * 0.31 + uTime * 2.2)',
                 '             * sin(vPos.y * 0.27 - uTime * 1.9);',
                 '    col += smoothstep(0.965, 1.0, sp) * 0.35;',
+                '    float shore = texture2D(uShore, vPos / uWorld).r;',
+                '    float band = smoothstep(0.18, 0.62, shore);',
+                '    float pulse = 0.6 + 0.4 * sin(uTime * 1.8 + shore * 14.0);',
+                '    col = mix(col, vec3(0.55, 0.93, 0.98), band * 0.55 * pulse);',
+                '    col += band * 0.12;',
                 '    gl_FragColor = vec4(col, 0.86);',
                 '}'
             ].join('\n')
         });
     }
+    waterMat.uniforms.uShore.value = buildShoreTexture(hole);
+    waterMat.uniforms.uWorld.value.set(hole.cols * CELL, hole.rows * CELL);
     const geo = new THREE.PlaneGeometry(hole.cols * CELL, hole.rows * CELL);
     geo.rotateX(-Math.PI / 2);
     geo.translate(hole.cols * CELL / 2, -1.4, hole.rows * CELL / 2);
@@ -939,8 +997,8 @@ function computeVertexColorHeight(hole, vc, vr) {
     const y = isAllWater ? -4 : avgH;
 
     let shade = 1.0;
-    // Canopy shadow patch on forest floor
-    if (nearTree) shade *= 0.82;
+    // (Canopy shade removed: at cell resolution it stamped dark squares —
+    // the instanced contact blobs ground the trees instead)
     // Deep water reads darker
     if (isAllWater) shade *= 0.72;
     // Steep-slope soil: darken + warm (carved-bank read)
@@ -1118,8 +1176,8 @@ function buildTerrain3D(hole, opts) {
                 const t = hole.grid[r][c];
                 if (t !== T.ROUGH && t !== T.GRASS) continue;
                 const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
-                if (h % 89 === 0) flowerCells.push({ c, r });
-                else if (h % 9 === 0) tuftCells.push({ c, r });
+                if (h % 47 === 0) flowerCells.push({ c, r });
+                else if (h % 6 === 0) tuftCells.push({ c, r });
             }
         }
         placeAssetInstances(hole, flowerCells, 'flower');
