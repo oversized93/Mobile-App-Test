@@ -44,6 +44,7 @@ function makeGrassTexture() {
     return grassTexture;
 }
 let terrainGroup, ballMesh, flagGroup, holeMesh;
+let cloudsGroup = null;
 let targetMesh, aimLineMesh, distRingMesh;
 let scene3dReady = false;
 let threeCanvas;
@@ -264,7 +265,10 @@ function init3D() {
     });
     scene3d.add(new THREE.Mesh(skyGeo, skyMat));
 
-    // Add some clouds (flat planes in the sky)
+    // Add some clouds (flat planes in the sky) — grouped so the overworld
+    // camera can hide them (seen from above they read as white debris)
+    cloudsGroup = new THREE.Group();
+    scene3d.add(cloudsGroup);
     for (let i = 0; i < 12; i++) {
         const cloudGeo = new THREE.PlaneGeometry(
             120 + Math.random() * 200,
@@ -286,7 +290,7 @@ function init3D() {
         );
         cloud.rotation.x = -Math.PI / 2;
         cloud.rotation.z = Math.random() * Math.PI;
-        scene3d.add(cloud);
+        cloudsGroup.add(cloud);
     }
 
     // Ground plane extending beyond the course — dark rough color, pushed way down
@@ -355,6 +359,7 @@ function init3D() {
 
     window.addEventListener('resize', onResize3D);
     scene3dReady = true;
+    loadWorldAssets();
 }
 
 function onResize3D() {
@@ -362,6 +367,163 @@ function onResize3D() {
     camera3d.aspect = window.innerWidth / window.innerHeight;
     camera3d.updateProjectionMatrix();
     renderer3d.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ============================================================
+//  WORLD ASSETS — curated CC0 GLB models (Kenney), instanced
+// ============================================================
+// Species lists reference assets/kenney/*.glb. Each model is normalized to
+// a target world height at load; per-instance hash variation on top.
+const ASSET_SPECIES = {
+    pine:  ['tree_pineDefaultA', 'tree_pineDefaultB', 'tree_pineRoundA', 'tree_pineRoundC', 'tree_pineTallA', 'tree_pineSmallA'],
+    leafy: ['tree_default', 'tree_oak', 'tree_detailed', 'tree_fat'],
+    fall:  ['tree_default_fall', 'tree_oak_fall', 'tree_detailed_fall', 'tree_fat_fall'],
+    palm:  ['tree_palm', 'tree_palmShort', 'tree_palmTall', 'tree_palmDetailedTall', 'tree_palmBend'],
+    bush:  ['plant_bush', 'plant_bushLarge'],
+    flower:['flower_redA', 'flower_yellowA', 'flower_purpleA'],
+    rockL: ['rock_largeA', 'rock_largeB', 'stone_largeA'],
+    rockS: ['rock_smallA', 'rock_smallB', 'rock_smallE'],
+    flag:  ['flag-red']
+};
+// Target world heights per species (CELL = 32; a good tree spans ~2 cells)
+const ASSET_TARGET_H = {
+    pine: 118, leafy: 96, fall: 96, palm: 104,
+    bush: 26, flower: 15, rockL: 30, rockS: 13, flag: 46
+};
+
+// name -> { parts: [{geometry, material}], scale } once loaded
+let worldAssets = null;
+let worldAssetsLoading = false;
+
+function loadWorldAssets() {
+    if (worldAssets || worldAssetsLoading || typeof THREE.GLTFLoader === 'undefined') return;
+    worldAssetsLoading = true;
+    const names = [];
+    for (const k in ASSET_SPECIES) names.push(...ASSET_SPECIES[k]);
+    const loader = new THREE.GLTFLoader();
+    const loaded = {};
+    let remaining = names.length;
+    const targetOf = (name) => {
+        for (const k in ASSET_SPECIES) if (ASSET_SPECIES[k].includes(name)) return ASSET_TARGET_H[k];
+        return 40;
+    };
+    const speciesOf = (name) => {
+        for (const k in ASSET_SPECIES) if (ASSET_SPECIES[k].includes(name)) return k;
+        return null;
+    };
+    for (const name of names) {
+        const species = speciesOf(name);
+        loader.load('assets/kenney/' + name + '.glb', (gltf) => {
+            const parts = [];
+            gltf.scene.updateMatrixWorld(true);
+            gltf.scene.traverse((node) => {
+                if (node.isMesh) {
+                    const geo = node.geometry.clone();
+                    geo.applyMatrix4(node.matrixWorld);
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    if (Array.isArray(node.material) && geo.groups && geo.groups.length) {
+                        // Split multi-material geometry into per-material parts
+                        for (let gi = 0; gi < geo.groups.length; gi++) {
+                            const g = geo.groups[gi];
+                            const sub = geo.clone();
+                            sub.setDrawRange(g.start, g.count);
+                            parts.push({ geometry: sub, material: prepMat(mats[g.materialIndex], species) });
+                        }
+                    } else {
+                        parts.push({ geometry: geo, material: prepMat(mats[0], species) });
+                    }
+                }
+            });
+            // Normalize scale from bounding box height
+            const box = new THREE.Box3();
+            for (const p of parts) {
+                p.geometry.computeBoundingBox();
+                box.union(p.geometry.boundingBox);
+            }
+            const h = Math.max(0.001, box.max.y - box.min.y);
+            loaded[name] = { parts, scale: targetOf(name) / h };
+            if (--remaining === 0) finishAssets(loaded);
+        }, undefined, () => {
+            if (--remaining === 0) finishAssets(loaded);
+        });
+    }
+}
+
+// Kenney kits ship metallicFactor=1 (frosty sky-reflection look with no
+// envmap) and a pastel mint palette that reads washed-out against our
+// saturated terrain. Recolor by material name into our art direction;
+// leaf hue varies per species. Fall/flower colors keep their authored hue.
+const LEAF_TINT = {
+    pine: '#2c7a41', leafy: '#4aa254', palm: '#3c9c52', bush: '#459a4e'
+};
+function prepMat(mat, species) {
+    const m = mat.clone();
+    m.metalness = 0;
+    m.roughness = 0.9;
+    const n = (m.name || '').toLowerCase();
+    let tint = null;
+    if (/leaf/.test(n)) {
+        if (species === 'fall') tint = null;          // keep authored autumn hues
+        else tint = LEAF_TINT[species] || '#3f9a4f';
+    } else if (/bark|wood/.test(n)) {
+        tint = '#6f4a2a';
+    } else if (/dirt|stone|rock|_defaultmat/.test(n) && (species === 'rockL' || species === 'rockS')) {
+        tint = '#8f8678';                              // rocks: grey, not tan
+    } else if (/grass/.test(n)) {
+        tint = '#4b8f44';                              // ground tufts match rough
+    }
+    if (tint) m.color.set(tint).convertSRGBToLinear();
+    return m;
+}
+
+function finishAssets(loaded) {
+    worldAssets = loaded;
+    worldAssetsLoading = false;
+    // Rebuild whatever scene is showing so real models replace primitives
+    if (typeof scene3dReady !== 'undefined' && scene3dReady && typeof state !== 'undefined') {
+        if (state === 'overworld' && typeof worldCourse !== 'undefined') {
+            buildTerrain3D(worldCourse, { distantScenery: false });
+        } else if ((state === 'playing' || state === 'holeDone') && typeof currentHole !== 'undefined' && currentHole) {
+            buildTerrain3D(currentHole);
+        }
+    }
+}
+
+// Place one species list as instanced meshes. cells: [{c, r, hash}]; each
+// cell picks a model from the list by hash. One InstancedMesh per model part.
+function placeAssetInstances(hole, cells, speciesKey, opts) {
+    if (!worldAssets || !cells.length) return false;
+    const list = ASSET_SPECIES[speciesKey].filter(n => worldAssets[n]);
+    if (!list.length) return false;
+    const cellSize = CELL;
+    const buckets = {}; // modelName -> cells
+    for (const cell of cells) {
+        const name = list[(cell.c * 41 + cell.r * 59) % list.length];
+        (buckets[name] = buckets[name] || []).push(cell);
+    }
+    const dummy = new THREE.Object3D();
+    for (const name in buckets) {
+        const model = worldAssets[name];
+        const group = buckets[name];
+        for (const part of model.parts) {
+            const inst = new THREE.InstancedMesh(part.geometry, part.material, group.length);
+            for (let i = 0; i < group.length; i++) {
+                const { c, r } = group[i];
+                const szVar = 0.82 + ((c * 11 + r * 23) % 12) / 32;
+                const s = model.scale * szVar * ((opts && opts.scaleMul) || 1);
+                const cellH = (hole.heights && hole.heights[r]) ? (hole.heights[r][c] || 0) : 0;
+                dummy.position.set((c + 0.5) * cellSize, cellH, (r + 0.5) * cellSize);
+                dummy.scale.set(s, s, s);
+                dummy.rotation.set(0, ((c * 13 + r * 7) % 12) * (Math.PI / 6), 0);
+                dummy.updateMatrix();
+                inst.setMatrixAt(i, dummy.matrix);
+            }
+            inst.instanceMatrix.needsUpdate = true;
+            inst.castShadow = true;
+            terrainGroup.add(inst);
+        }
+    }
+    return true;
 }
 
 // ---- Per-vertex terrain shading — shared by the full build and the live
@@ -586,7 +748,40 @@ function buildTerrain3D(hole, opts) {
 
     // ---- Trees as InstancedMeshes (trunks + canopies) ----
     const dummy = new THREE.Object3D();
-    if (treeCells.length > 0) {
+    if (treeCells.length > 0 && worldAssets) {
+        // Real Kenney models — split into species by placement + hash
+        const pines = [], leafy = [], fall = [], bushCells = [], palmCells = [];
+        const nearSandOrWaterA = (c, r) => {
+            for (let dy = -3; dy <= 3; dy++)
+                for (let dx = -3; dx <= 3; dx++) {
+                    const nc = c + dx, nr = r + dy;
+                    if (nc >= 0 && nc < hole.cols && nr >= 0 && nr < hole.rows) {
+                        const t = hole.grid[nr][nc];
+                        if (t === T.SAND || t === T.WATER) return true;
+                    }
+                }
+            return false;
+        };
+        for (const tc of treeCells) {
+            const variant = (tc.c * 31 + tc.r * 17) % 4;
+            if (nearSandOrWaterA(tc.c, tc.r) && (tc.c * 5 + tc.r * 3) % 10 < 7) palmCells.push(tc);
+            else if (variant === 0) bushCells.push(tc);
+            else if (variant === 1) (((tc.c * 19 + tc.r * 7) % 5) < 2 ? fall : leafy).push(tc);
+            else pines.push(tc);
+        }
+        placeAssetInstances(hole, pines, 'pine');
+        placeAssetInstances(hole, leafy, 'leafy');
+        placeAssetInstances(hole, fall, 'fall');
+        placeAssetInstances(hole, bushCells, 'bush');
+        placeAssetInstances(hole, palmCells, 'palm');
+        // Flower sprinkles on open rough near fairways
+        const flowerCells = [];
+        for (let r = 1; r < hole.rows - 1; r++)
+            for (let c = 1; c < hole.cols - 1; c++)
+                if (hole.grid[r][c] === T.ROUGH && (c * 31 + r * 47) % 89 === 0)
+                    flowerCells.push({ c, r });
+        placeAssetInstances(hole, flowerCells, 'flower');
+    } else if (treeCells.length > 0) {
         // Species + palette mix (reference look): conifers and oaks in
         // several green/autumn shades, palms near sand and water.
         const pines = [], bushes = [], palms = [];
@@ -768,7 +963,12 @@ function buildTerrain3D(hole, opts) {
                 }
             }
         }
-        if (rockCells.length > 0) {
+        if (rockCells.length > 0 && worldAssets) {
+            const large = [], small = [];
+            for (const rc of rockCells) (((rc.c * 3 + rc.r) % 3 === 0) ? large : small).push(rc);
+            placeAssetInstances(hole, large, 'rockL');
+            placeAssetInstances(hole, small, 'rockS');
+        } else if (rockCells.length > 0) {
             const rockGeo = new THREE.DodecahedronGeometry(9, 0);
             const rockMat = new THREE.MeshStandardMaterial({ color: linC(0x6f6a63), roughness: 1 });
             const rockInst = new THREE.InstancedMesh(rockGeo, rockMat, rockCells.length);

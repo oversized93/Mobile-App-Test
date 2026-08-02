@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'ui1';
+const BUILD_TAG = 'g2a';
 
 // ---- Game State ----
 let state = 'menu';
@@ -4824,6 +4824,7 @@ function gameLoop(time) {
         // rebuild, tick the camera lerp, and render.
         if (state === 'overworld') {
             if (ballMesh) ballMesh.visible = false;
+            if (typeof cloudsGroup !== 'undefined' && cloudsGroup) cloudsGroup.visible = false;
             updateTarget3D(0, 0, false);
             // Continuous rotate/tilt while a HUD button is held
             tickOverworldCamera(dt);
@@ -4833,6 +4834,7 @@ function gameLoop(time) {
             canvas.style.background = 'transparent';
         } else {
         if (ballMesh) ballMesh.visible = true;
+        if (typeof cloudsGroup !== 'undefined' && cloudsGroup) cloudsGroup.visible = true;
         // Update 3D ball position
         updateBall3D(ball.x, ball.y, ball.z, player.ballColor, terrainHeightAt(ball.x, ball.y));
         // Update 3D target
