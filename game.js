@@ -2747,34 +2747,62 @@ function drawPlacedHole(hole, selected) {
     ctx.stroke();
     ctx.restore();
 
-    // Tee marker (green)
-    const t = screens[0];
-    ctx.fillStyle = '#1b5e20';
-    ctx.beginPath(); ctx.arc(t.x, t.y, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 10px -apple-system,sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('T' + hole.id, t.x, t.y + 4);
+    // Per-hole accent color (rotates through a fixed palette)
+    const HOLE_COLORS = ['#42a5f5', '#ec407a', '#ffca28', '#66bb6a', '#ab47bc',
+                         '#26c6da', '#ff7043', '#9ccc65', '#5c6bc0'];
+    const accent = HOLE_COLORS[(hole.id - 1) % HOLE_COLORS.length];
 
-    // Pin marker (red flag)
+    // Tee: soft pulsing pad ring + floating numbered badge (subtle glow)
+    const t = screens[0];
+    const pulse = 0.75 + Math.sin(Date.now() / 480 + hole.id) * 0.25;
+    ctx.save();
+    ctx.strokeStyle = accent;
+    ctx.globalAlpha = 0.35 * pulse;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(t.x, t.y, 13 + pulse * 3, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    // Floating badge
+    ctx.save();
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = selected ? 14 : 8;
+    ctx.fillStyle = accent;
+    ctx.beginPath(); ctx.arc(t.x, t.y - 20, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(t.x, t.y - 20, 12, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(hole.id), t.x, t.y - 15);
+
+    // Pin marker (red flag on a pole, small glow at the cup)
     const p = screens[screens.length - 1];
+    ctx.save();
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
     ctx.strokeStyle = '#eee';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - 18);
+    ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - 20);
     ctx.stroke();
     ctx.fillStyle = '#e53935';
     ctx.beginPath();
-    ctx.moveTo(p.x, p.y - 18);
-    ctx.lineTo(p.x + 10, p.y - 14);
-    ctx.lineTo(p.x, p.y - 10);
+    ctx.moveTo(p.x, p.y - 20);
+    ctx.lineTo(p.x + 11, p.y - 15.5);
+    ctx.lineTo(p.x, p.y - 11);
     ctx.closePath();
     ctx.fill();
 
-    // Waypoint dots
+    // Waypoint dots — small, tinted to the hole accent
     for (let i = 1; i < screens.length - 1; i++) {
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.beginPath(); ctx.arc(screens[i].x, screens[i].y, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = accent;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath(); ctx.arc(screens[i].x, screens[i].y, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
     }
 }
 
