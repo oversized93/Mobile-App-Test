@@ -413,7 +413,7 @@ function loadWorldAssets() {
     };
     for (const name of names) {
         const species = speciesOf(name);
-        loader.load('assets/kenney/' + name + '.glb', (gltf) => {
+        loader.load((window.ASSET_BASE || '') + 'assets/kenney/' + name + '.glb', (gltf) => {
             const parts = [];
             gltf.scene.updateMatrixWorld(true);
             gltf.scene.traverse((node) => {

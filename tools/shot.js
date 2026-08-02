@@ -28,6 +28,20 @@ const DIST = parseInt(process.argv[4] || '2000', 10);
             deviceScaleFactor: 2,
         });
         const page = await ctx.newPage();
+        await page.route('**cdn.jsdelivr.net/gh/oversized93/Mobile-App-Test@*/**', (route) => {
+            const fs = require('fs');
+            const url = route.request().url();
+            const path = url.split(/@[0-9a-f]+\//)[1];
+            try {
+                const body = fs.readFileSync('/home/user/Mobile-App-Test/' + path);
+                const type = path.endsWith('.js') ? 'application/javascript'
+                           : path.endsWith('.glb') ? 'model/gltf-binary'
+                           : path.endsWith('.json') ? 'application/json'
+                           : 'application/octet-stream';
+                route.fulfill({ body, contentType: type });
+            } catch (e) { route.fulfill({ status: 404, body: 'nf' }); }
+        });
+
         page.on('console', m => { if (m.type() === 'error') console.log('[page]', m.text()); });
         page.on('pageerror', e => console.log('[pageerror]', e.message));
 

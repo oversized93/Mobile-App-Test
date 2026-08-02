@@ -4,7 +4,11 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'g2d';
+const BUILD_TAG = 'g2e';
+
+// Declared first on purpose: notify() can be reached from early boot code
+// and a TDZ here once blanked the whole game on devices with saves.
+let notification = { text: '', timer: 0 };
 
 // ---- Game State ----
 let state = 'menu';
@@ -430,15 +434,19 @@ function stateEnterManage() { saveResort(); }
 // Offline catch-up — run ONCE at boot, not per-screen: members earned
 // passively while the app was closed (capped at 1 hour).
 function applyOfflineCatchup() {
-    const now = Date.now();
-    if (resort.lastTickMs) {
-        const elapsed = Math.min((now - resort.lastTickMs) / 1000, 3600);
-        const income = Math.floor(resort.members * elapsed * 0.2);
-        if (income > 0) { resort.coins += income; notify('+' + income + ' coins while away'); }
+    try {
+        const now = Date.now();
+        if (resort.lastTickMs) {
+            const elapsed = Math.min((now - resort.lastTickMs) / 1000, 3600);
+            const income = Math.floor(resort.members * elapsed * 0.2);
+            if (income > 0) { resort.coins += income; notify('+' + income + ' coins while away'); }
+        }
+        resort.lastTickMs = now;
+        resort.coinsFrac = 0;
+        saveResort();
+    } catch (e) {
+        // Offline earnings are never worth a failed boot
     }
-    resort.lastTickMs = now;
-    resort.coinsFrac = 0;
-    saveResort();
 }
 
 // The world advances on EVERY screen — economy, and later NPCs and daily
@@ -473,7 +481,6 @@ let shotTrail = [];
 let holeComplete = false;
 let roundComplete = false;
 let lastFrameTime = null;
-let notification = { text: '', timer: 0 };
 let menuScroll = 0;
 let inBuilder = false;
 let customCoursePlay = false;
