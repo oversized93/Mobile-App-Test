@@ -270,6 +270,10 @@ canvas.addEventListener('touchstart', (e) => {
         cam._pinchPanEngaged = false;
         cam._pinchZoomBase = 1;
         cam._pinchRotBase = 0;
+        // Recent applied pans {t, dx, dy} — rewound on release to cancel the
+        // finger-liftoff artifact (contact points smear as fingers peel off,
+        // dragging the midpoint a few px in the travel direction).
+        cam._panHistory = [];
         return;
     }
     const t = e.touches[0];
@@ -338,8 +342,14 @@ canvas.addEventListener('touchmove', (e) => {
                 cam._lastPinchDx = pdx; cam._lastPinchDy = pdy;
             }
             if (cam._pinchPanEngaged && typeof panCameraOrbit === 'function') {
-                panCameraOrbit(pdx - (cam._lastPinchDx || 0), pdy - (cam._lastPinchDy || 0));
+                const stepDx = pdx - (cam._lastPinchDx || 0);
+                const stepDy = pdy - (cam._lastPinchDy || 0);
+                panCameraOrbit(stepDx, stepDy);
                 cam._lastPinchDx = pdx; cam._lastPinchDy = pdy;
+                if (cam._panHistory) {
+                    cam._panHistory.push({ t: e.timeStamp, dx: stepDx, dy: stepDy });
+                    if (cam._panHistory.length > 12) cam._panHistory.shift();
+                }
             }
             cam.targetZoom = Math.max(0.3, Math.min(8, pinchStartZoom * scale));
             cam.zoom = cam.targetZoom;
@@ -384,10 +394,26 @@ canvas.addEventListener('touchmove', (e) => {
     if (typeof onTouchMove === 'function') onTouchMove(t.clientX, t.clientY);
 }, { passive: false });
 
+// Cancel the finger-liftoff smear: revert pan applied in the final 60ms of
+// a two-finger gesture. Deliberate pans lose a couple px at most; the
+// release-direction jump disappears.
+function rewindLiftoffPan(timeStamp) {
+    if (!cam._panHistory || !cam._panHistory.length) return;
+    if (typeof cam3dOrbitMode === 'undefined' || !cam3dOrbitMode) { cam._panHistory = null; return; }
+    if (typeof panCameraOrbit !== 'function') { cam._panHistory = null; return; }
+    let sumDx = 0, sumDy = 0;
+    for (const h of cam._panHistory) {
+        if (timeStamp - h.t <= 60) { sumDx += h.dx; sumDy += h.dy; }
+    }
+    if (sumDx !== 0 || sumDy !== 0) panCameraOrbit(-sumDx, -sumDy);
+    cam._panHistory = null;
+}
+
 canvas.addEventListener('touchend', (e) => {
     e.preventDefault();
     if (pinching) {
         pinching = false;
+        rewindLiftoffPan(e.timeStamp);
         if (e.touches.length === 0) { touch.down = false; }
         else {
             // One finger remains — re-baseline it so any later handling
@@ -397,6 +423,16 @@ canvas.addEventListener('touchend', (e) => {
             touch.startX = t.clientX; touch.startY = t.clientY;
         }
         return;
+    }
+    touch.down = false;
+    if (typeof onTouchEnd === 'function') onTouchEnd(touch.x, touch.y);
+}, { passive: false });
+
+canvas.addEventListener('touchcancel', (e) => {
+    e.preventDefault();
+    if (pinching) {
+        pinching = false;
+        rewindLiftoffPan(e.timeStamp);
     }
     touch.down = false;
     if (typeof onTouchEnd === 'function') onTouchEnd(touch.x, touch.y);

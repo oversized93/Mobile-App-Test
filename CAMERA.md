@@ -93,6 +93,9 @@ This avoids four classes of bugs:
 2. **±π wraparound** — yaw delta jumping by 2π when the gesture crosses atan2 boundary
 3. **Drift** — pivot creeping during pinch gestures
 4. **Stale handoff** — leftover one-finger drag state firing after a pinch
+5. **Liftoff smear** — fingers peeling off the glass drag the midpoint a few
+   px in the travel direction on release; the last 60ms of applied pan is
+   rewound when the gesture ends (`rewindLiftoffPan`)
 
 ### Single-finger pan (`overworldTouchMove`)
 
