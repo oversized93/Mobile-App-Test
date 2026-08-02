@@ -929,12 +929,31 @@ function paintAlbedoCell(hole, c, r) {
         g.fillRect(x + (h1 % (px - 3)), y + ((h1 >> 6) % (px - 3)), 2, 2);
     }
     if (t === T.SAND) {
+        // Recessed bunker read: inner shadow on the sun side (light comes
+        // from +x, so east edges shade), bright lip on the far side
+        const shadow = 'rgba(70,52,25,0.35)';
+        const lip = shadeHex(ALBEDO_COLORS.base[T.SAND], 0.42);
+        const bw = 4;
+        if (e !== T.SAND) { g.fillStyle = shadow; g.fillRect(x + px - bw, y, bw, px); }
+        if (n !== T.SAND) { g.fillStyle = shadow; g.fillRect(x, y, px, bw); }
+        if (w !== T.SAND) { g.fillStyle = lip; g.fillRect(x, y, 2, px); }
+        if (s !== T.SAND) { g.fillStyle = lip; g.fillRect(x, y + px - 2, px, 2); }
         g.fillStyle = 'rgba(120,95,50,0.4)';
         for (let i = 0; i < 6; i++) {
             const hx = ((c * 73 + r * 41 + i * 29) % 10) / 10;
             const hy = ((c * 37 + r * 97 + i * 53) % 10) / 10;
             g.fillRect(x + hx * (px - 2), y + hy * (px - 2), 1.6, 1.6);
         }
+        // Rake lines: faint horizontal grooming strokes
+        g.strokeStyle = 'rgba(255,240,200,0.18)';
+        g.lineWidth = 1;
+        g.beginPath();
+        for (let i = 0; i < 3; i++) {
+            const ry = y + 3 + i * ((px - 6) / 2) + ((c * 13 + r * 7 + i) % 3) - 1;
+            g.moveTo(x + 1, ry);
+            g.lineTo(x + px - 1, ry);
+        }
+        g.stroke();
     } else if (t === T.GREEN) {
         // Fringe: cells bordering non-green get a darker inset band
         const fringe = shadeHex(ALBEDO_COLORS.base[T.GREEN], -0.22);
