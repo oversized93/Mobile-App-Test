@@ -113,6 +113,39 @@ function roundRect(x, y, w, h, r) {
     ctx.closePath();
 }
 
+// ---- Glossy UI helpers — chunky beveled reference-style chrome ----
+function shadeColor(hex, f) {
+    // hex '#rrggbb'; f > 0 lightens toward white, f < 0 darkens toward black
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    if (f >= 0) { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; }
+    else { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
+    return 'rgb(' + Math.round(r) + ',' + Math.round(g) + ',' + Math.round(b) + ')';
+}
+
+// Beveled button/panel: vertical body gradient, dark outer edge, soft top
+// highlight band. The one visual primitive behind all polished chrome.
+function glossyRect(x, y, w, h, r, hex, opts) {
+    opts = opts || {};
+    const grad = ctx.createLinearGradient(0, y, 0, y + h);
+    grad.addColorStop(0, shadeColor(hex, 0.26));
+    grad.addColorStop(0.45, hex);
+    grad.addColorStop(1, shadeColor(hex, -0.34));
+    ctx.fillStyle = grad;
+    roundRect(x, y, w, h, r);
+    ctx.fill();
+    const hl = ctx.createLinearGradient(0, y, 0, y + h * 0.55);
+    hl.addColorStop(0, 'rgba(255,255,255,' + (opts.topGlow != null ? opts.topGlow : 0.30) + ')');
+    hl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hl;
+    roundRect(x + 1.5, y + 1.5, w - 3, h * 0.55, Math.max(2, r - 2));
+    ctx.fill();
+    ctx.strokeStyle = opts.stroke || 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = opts.lineWidth || 1.5;
+    roundRect(x, y, w, h, r);
+    ctx.stroke();
+}
+
 function drawBtn(x, y, w, h, text, color, textColor) {
     ctx.fillStyle = color || '#2a7fff';
     roundRect(x, y, w, h, h / 2);

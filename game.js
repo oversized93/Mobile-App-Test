@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'm1h';
+const BUILD_TAG = 'ui1';
 
 // ---- Game State ----
 let state = 'menu';
@@ -129,7 +129,8 @@ function stateEnterOverworld() {
     manualZoom = true;
     scouting = false;
     owTool = 'hand';
-    owCategory = 'surface';
+    owRailOpen = false;
+    owFlyout = null;
     owBrushSize = 3;
     owSelectedHole = null;
     owStrokeDiff = null;
@@ -179,13 +180,26 @@ const OW_BRUSH_SIZES = [1, 3, 5, 7, 9, 11];
 
 // Sims-style bottom bar: tools grouped into filtered categories. Erase and
 // brush size live outside the categories as global controls.
-const OW_CATEGORIES = [
-    { id: 'surface', label: 'Surface', icon: '\u{1F3A8}', tools: ['fairway', 'green', 'rough', 'sand'] },
-    { id: 'nature',  label: 'Nature',  icon: '\u{1F332}', tools: ['water', 'trees'] },
-    { id: 'paths',   label: 'Paths',   icon: '\u{1F6B6}', tools: ['path'] },
-    { id: 'holes',   label: 'Holes',   icon: '\u26F3',    tools: ['hole'] },
+// Collapsible build rail (reference-style left column): a toggle button
+// shows/hides the parent options; parents with multiple tools open a
+// flyout of sub-options. Single-tool parents arm directly.
+const OW_RAIL = [
+    { id: 'hand',    icon: '\u270B',    label: 'MOVE' },
+    { id: 'surface', icon: '\u{1F3A8}', label: 'LAND',   flyout: ['fairway', 'green', 'rough', 'sand'] },
+    { id: 'nature',  icon: '\u{1F332}', label: 'NATURE', flyout: ['water', 'trees'] },
+    { id: 'path',    icon: '\u{1F6B6}', label: 'PATHS' },
+    { id: 'hole',    icon: '\u26F3',    label: 'HOLES' },
+    { id: 'erase',   icon: '\u267B',    label: 'ERASE' },
+    { id: 'size',    icon: null,         label: 'BRUSH', flyout: 'sizes' },
 ];
-let owCategory = 'paths';
+// Parent group of each armable tool (drives rail highlight state)
+const OW_TOOL_PARENT = {
+    hand: 'hand', fairway: 'surface', green: 'surface', rough: 'surface',
+    sand: 'surface', water: 'nature', trees: 'nature', path: 'path', erase: 'erase'
+};
+let owRailOpen = false;   // build rail expanded?
+let owFlyout = null;      // parent id whose sub-options are showing
+let owCategory = 'surface'; // retained for save-compat; no longer drives UI
 
 let owTool = 'path';                // currently selected tool id
 let owBrushSize = 3;                // current brush diameter (from OW_BRUSH_SIZES)
@@ -2307,23 +2321,17 @@ function overworldLayout() {
     const undoSize = 36;
     const undoX = closeX - 10 - undoSize;
     const undoY = pad;
-    // Sims-style bottom bar: [category tabs] [tools of active category]
-    // [brush size stepper] [erase] — one strip, everything reachable.
-    const barH = 58;
-    const barY = H() - barH;
-    const handX = 8, handW = 48;
-    const catW = 48, catGap = 4, catX0 = handX + handW + 10;
-    const catRowW = OW_CATEGORIES.length * catW + (OW_CATEGORIES.length - 1) * catGap;
-    // Right cluster, anchored to the right edge
-    const eraseW = 46;
-    const eraseX = W() - 8 - eraseW;
-    const stepBtnW = 30, sizeValW = 44;
-    const plusX = eraseX - 8 - stepBtnW;
-    const sizeValX = plusX - sizeValW;
-    const minusX = sizeValX - stepBtnW;
-    // Tool chip strip between categories and the right cluster
-    const toolX0 = catX0 + catRowW + 12;
-    const toolAvail = minusX - 12 - toolX0;
+    // Collapsible left build rail: toggle at top, parent buttons below,
+    // flyout column of sub-options to the right of an open parent.
+    const railX = 10;
+    const railY = topBarH + 10;
+    const railCount = OW_RAIL.length + 1; // + the toggle slot
+    const railAvail = H() - railY - 10;
+    const railBtn = Math.max(34, Math.min(50, Math.floor(railAvail / railCount) - 6));
+    const railGap = 6;
+    const railLabels = railBtn >= 42;
+    const flyX = railX + railBtn + 10;
+    const flyW = 122, flyH = 40, flyGap = 5;
     // Camera controls — right-edge vertical strip (pitch up / down / rotate L / R / reset)
     const camBtnSize = 36;
     const camBtnGap = 4;
@@ -2332,9 +2340,7 @@ function overworldLayout() {
     const camX = W() - pad - camBtnSize;
     const camY0 = (H() - camTotalH) / 2;
     return { pad, topBarH, closeSize, closeX, closeY, undoX, undoY, undoSize,
-             barH, barY, handX, handW, catW, catGap, catX0,
-             eraseX, eraseW, stepBtnW, sizeValW, plusX, sizeValX, minusX,
-             toolX0, toolAvail,
+             railX, railY, railBtn, railGap, railLabels, flyX, flyW, flyH, flyGap,
              camX, camY0, camBtnSize, camBtnGap, camBtns };
 }
 
@@ -2378,37 +2384,25 @@ function drawOverworld() {
         + worldCourse.facilities.length + ' facilities \u2022 build ' + BUILD_TAG;
     ctx.fillText(subtitle, L.pad + 6 + nameW + 12, 28);
 
-    // Balance pill (top center)
-    const bpW = 120, bpH = 28;
+    // Balance chip (top center) — gold glossy
+    const bpW = 124, bpH = 30;
     const bpX = (W() - bpW) / 2, bpY = (L.topBarH - bpH) / 2;
-    ctx.fillStyle = 'rgba(255,179,0,0.18)';
-    roundRect(bpX, bpY, bpW, bpH, bpH / 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,179,0,0.4)';
-    roundRect(bpX, bpY, bpW, bpH, bpH / 2);
-    ctx.stroke();
-    ctx.fillStyle = '#ffb300';
+    glossyRect(bpX, bpY, bpW, bpH, bpH / 2, '#d9a02a');
+    ctx.fillStyle = '#231a05';
     ctx.font = 'bold 14px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('$ ' + Math.floor(resort.coins).toLocaleString(), W() / 2, bpY + bpH / 2 + 5);
 
-    // Close X
-    ctx.fillStyle = 'rgba(255,70,70,0.85)';
-    roundRect(L.closeX, L.closeY, L.closeSize, L.closeSize, 10);
-    ctx.fill();
+    // Close X — glossy red
+    glossyRect(L.closeX, L.closeY, L.closeSize, L.closeSize, 10, '#c0392b');
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 16px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('\u2715', L.closeX + L.closeSize / 2, L.closeY + L.closeSize / 2 + 6);
 
-    // Undo — dimmed when there is nothing to undo
-    ctx.fillStyle = owUndoStack.length ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.3)';
-    roundRect(L.undoX, L.undoY, L.undoSize, L.undoSize, 10);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 1;
-    roundRect(L.undoX, L.undoY, L.undoSize, L.undoSize, 10);
-    ctx.stroke();
+    // Undo — glossy slate, dimmed when there is nothing to undo
+    glossyRect(L.undoX, L.undoY, L.undoSize, L.undoSize, 10,
+               owUndoStack.length ? '#3d4f5c' : '#252d33');
     ctx.fillStyle = owUndoStack.length ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)';
     ctx.font = 'bold 16px -apple-system,sans-serif';
     ctx.textAlign = 'center';
@@ -2419,7 +2413,7 @@ function drawOverworld() {
         const eCol = Math.floor(worldCourse.cols / 2);
         const eRow = worldCourse.rows - (worldCourse.border || 4);
         const es = cellCenterScreen(eCol, eRow);
-        const entranceBottom = holeWizard ? H() - 20 : L.barY - 8;
+        const entranceBottom = H() - 20;
         if (es && !es.behind && es.y > L.topBarH + 20 && es.y < entranceBottom) {
             ctx.font = 'bold 10px -apple-system,sans-serif';
             const eW = ctx.measureText('ENTRANCE').width + 18;
@@ -2437,130 +2431,89 @@ function drawOverworld() {
     for (let i = 0; i < L.camBtns.length; i++) {
         const id = L.camBtns[i];
         const by = L.camY0 + i * (L.camBtnSize + L.camBtnGap);
-        ctx.fillStyle = 'rgba(0,0,0,0.55)';
-        roundRect(L.camX, by, L.camBtnSize, L.camBtnSize, 10);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-        ctx.lineWidth = 1;
-        roundRect(L.camX, by, L.camBtnSize, L.camBtnSize, 10);
-        ctx.stroke();
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        glossyRect(L.camX, by, L.camBtnSize, L.camBtnSize, 10, '#2c3a42');
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.font = '16px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(camIconLabels[id], L.camX + L.camBtnSize / 2, by + L.camBtnSize / 2 + 6);
     }
 
-    // ---- Sims-style bottom build bar (hidden during the hole wizard) ----
+    // ---- Collapsible build rail (hidden during the hole wizard) ----
     if (!holeWizard) {
-        // Bar background
-        const barGrad = ctx.createLinearGradient(0, L.barY, 0, H());
-        barGrad.addColorStop(0, 'rgba(10,14,10,0.82)');
-        barGrad.addColorStop(1, 'rgba(0,0,0,0.92)');
-        ctx.fillStyle = barGrad;
-        ctx.fillRect(0, L.barY, W(), L.barH);
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(0, L.barY); ctx.lineTo(W(), L.barY); ctx.stroke();
-
-        // Hand / navigation button — highlighted whenever nothing is armed
-        {
-            const handActive = owTool === 'hand';
-            const hy = L.barY + 6;
-            ctx.fillStyle = handActive ? 'rgba(144,164,174,0.85)' : 'rgba(255,255,255,0.05)';
-            roundRect(L.handX, hy, L.handW, L.barH - 12, 10);
-            ctx.fill();
-            ctx.strokeStyle = handActive ? '#fff' : 'rgba(255,255,255,0.12)';
-            ctx.lineWidth = handActive ? 1.5 : 1;
-            roundRect(L.handX, hy, L.handW, L.barH - 12, 10);
-            ctx.stroke();
-            ctx.textAlign = 'center';
-            ctx.font = '16px -apple-system,sans-serif';
-            ctx.fillStyle = '#fff';
-            ctx.fillText('\u270B', L.handX + L.handW / 2, hy + 21);
-            ctx.font = handActive ? 'bold 7.5px -apple-system,sans-serif' : '7.5px -apple-system,sans-serif';
-            ctx.fillStyle = handActive ? '#fff' : 'rgba(255,255,255,0.55)';
-            ctx.fillText('MOVE', L.handX + L.handW / 2, hy + L.barH - 18);
-        }
-
-        // Category tabs
-        for (let i = 0; i < OW_CATEGORIES.length; i++) {
-            const cat = OW_CATEGORIES[i];
-            const cx = L.catX0 + i * (L.catW + L.catGap);
-            const cy = L.barY + 6;
-            const active = cat.id === owCategory;
-            ctx.fillStyle = active ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.05)';
-            roundRect(cx, cy, L.catW, L.barH - 12, 10);
-            ctx.fill();
-            if (active) {
-                ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-                ctx.lineWidth = 1;
-                roundRect(cx, cy, L.catW, L.barH - 12, 10);
-                ctx.stroke();
-            }
-            ctx.textAlign = 'center';
-            ctx.font = '16px -apple-system,sans-serif';
-            ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.7)';
-            ctx.fillText(cat.icon, cx + L.catW / 2, cy + 21);
-            ctx.font = active ? 'bold 7.5px -apple-system,sans-serif' : '7.5px -apple-system,sans-serif';
-            ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.55)';
-            ctx.fillText(cat.label.toUpperCase(), cx + L.catW / 2, cy + L.barH - 18);
-        }
-
-        // Tool chips for the active category
-        const cat = OW_CATEGORIES.find(c => c.id === owCategory) || OW_CATEGORIES[0];
-        const chipH = 42, chipY = L.barY + (L.barH - chipH) / 2;
-        const chipW = Math.min(96, Math.floor(L.toolAvail / cat.tools.length) - 6);
-        for (let i = 0; i < cat.tools.length; i++) {
-            const tool = OW_TOOLS.find(t => t.id === cat.tools[i]);
-            if (!tool) continue;
-            const tx = L.toolX0 + i * (chipW + 6);
-            const active = tool.id === owTool || (tool.wizard && holeWizard);
-            ctx.fillStyle = active ? tool.color + 'cc' : 'rgba(255,255,255,0.08)';
-            roundRect(tx, chipY, chipW, chipH, 12);
-            ctx.fill();
-            ctx.strokeStyle = active ? '#fff' : 'rgba(255,255,255,0.12)';
-            ctx.lineWidth = active ? 1.5 : 1;
-            roundRect(tx, chipY, chipW, chipH, 12);
-            ctx.stroke();
-            ctx.textAlign = 'center';
-            ctx.font = '14px -apple-system,sans-serif';
-            ctx.fillStyle = '#fff';
-            ctx.fillText(tool.icon, tx + chipW / 2, chipY + 18);
-            ctx.font = active ? 'bold 8px -apple-system,sans-serif' : '8px -apple-system,sans-serif';
-            ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.65)';
-            ctx.fillText(tool.label.toUpperCase(), tx + chipW / 2, chipY + 34);
-        }
-
-        // Brush size stepper: − [3×3] +
-        const stepY = L.barY + (L.barH - 36) / 2;
-        for (const [bx, glyph] of [[L.minusX, '\u2212'], [L.plusX, '+']]) {
-            ctx.fillStyle = 'rgba(255,255,255,0.08)';
-            roundRect(bx, stepY, L.stepBtnW, 36, 10);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.85)';
-            ctx.font = 'bold 16px -apple-system,sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(glyph, bx + L.stepBtnW / 2, stepY + 24);
-        }
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 13px -apple-system,sans-serif';
-        ctx.fillText(owBrushSize + '\u00D7' + owBrushSize, L.sizeValX + L.sizeValW / 2, stepY + 23);
-
-        // Erase toggle
-        const eraseActive = owTool === 'erase';
-        ctx.fillStyle = eraseActive ? 'rgba(220,80,80,0.85)' : 'rgba(255,255,255,0.08)';
-        roundRect(L.eraseX, stepY, L.eraseW, 36, 10);
-        ctx.fill();
-        ctx.strokeStyle = eraseActive ? '#fff' : 'rgba(255,255,255,0.12)';
-        ctx.lineWidth = 1;
-        roundRect(L.eraseX, stepY, L.eraseW, 36, 10);
-        ctx.stroke();
+        const armedTool = OW_TOOLS.find(t => t.id === owTool);
+        // Toggle button: hammer to open, ✕ to collapse
+        glossyRect(L.railX, L.railY, L.railBtn, L.railBtn, 12,
+                   owRailOpen ? '#41535e' : '#2e7d32');
         ctx.textAlign = 'center';
-        ctx.font = '13px -apple-system,sans-serif';
         ctx.fillStyle = '#fff';
-        ctx.fillText('\u267B', L.eraseX + L.eraseW / 2, stepY + 16);
-        ctx.font = eraseActive ? 'bold 7px -apple-system,sans-serif' : '7px -apple-system,sans-serif';
-        ctx.fillText('ERASE', L.eraseX + L.eraseW / 2, stepY + 30);
+        ctx.font = Math.round(L.railBtn * 0.42) + 'px -apple-system,sans-serif';
+        ctx.fillText(owRailOpen ? '\u2715' : '\u{1F528}',
+                     L.railX + L.railBtn / 2, L.railY + L.railBtn * 0.64);
+
+        if (owRailOpen) {
+            for (let i = 0; i < OW_RAIL.length; i++) {
+                const item = OW_RAIL[i];
+                const iy = L.railY + (i + 1) * (L.railBtn + L.railGap);
+                const armedHere = OW_TOOL_PARENT[owTool] === item.id;
+                const open = owFlyout === item.id;
+                const base = armedHere ? (armedTool && armedTool.color) || '#455a64'
+                           : open ? '#546e7a' : '#2c3a42';
+                glossyRect(L.railX, iy, L.railBtn, L.railBtn, 12, base,
+                           armedHere ? { stroke: 'rgba(255,255,255,0.75)' } : undefined);
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#fff';
+                if (item.id === 'size') {
+                    ctx.font = 'bold ' + Math.round(L.railBtn * 0.3) + 'px -apple-system,sans-serif';
+                    ctx.fillText(owBrushSize + '\u00D7' + owBrushSize,
+                                 L.railX + L.railBtn / 2, iy + L.railBtn * (L.railLabels ? 0.5 : 0.62));
+                } else {
+                    ctx.font = Math.round(L.railBtn * 0.4) + 'px -apple-system,sans-serif';
+                    ctx.fillText(item.icon, L.railX + L.railBtn / 2, iy + L.railBtn * (L.railLabels ? 0.52 : 0.64));
+                }
+                if (L.railLabels) {
+                    ctx.font = (armedHere ? 'bold ' : '') + '7px -apple-system,sans-serif';
+                    ctx.fillStyle = armedHere ? '#fff' : 'rgba(255,255,255,0.65)';
+                    ctx.fillText(item.label, L.railX + L.railBtn / 2, iy + L.railBtn - 5);
+                }
+            }
+
+            // Flyout: sub-options of the open parent
+            if (owFlyout) {
+                const pi = OW_RAIL.findIndex(it => it.id === owFlyout);
+                const parent = pi >= 0 ? OW_RAIL[pi] : null;
+                if (parent && parent.flyout) {
+                    const list = parent.flyout === 'sizes' ? OW_BRUSH_SIZES : parent.flyout;
+                    const totalH = list.length * (L.flyH + L.flyGap);
+                    let fy = Math.min(L.railY + (pi + 1) * (L.railBtn + L.railGap),
+                                      H() - 10 - totalH);
+                    for (const entry of list) {
+                        if (parent.flyout === 'sizes') {
+                            const active = entry === owBrushSize;
+                            glossyRect(L.flyX, fy, L.flyW, L.flyH, 10,
+                                       active ? '#1976d2' : '#2c3a42',
+                                       active ? { stroke: 'rgba(255,255,255,0.75)' } : undefined);
+                            ctx.textAlign = 'center';
+                            ctx.fillStyle = '#fff';
+                            ctx.font = (active ? 'bold ' : '') + '14px -apple-system,sans-serif';
+                            ctx.fillText(entry + ' \u00D7 ' + entry, L.flyX + L.flyW / 2, fy + L.flyH / 2 + 5);
+                        } else {
+                            const tool = OW_TOOLS.find(t => t.id === entry);
+                            const active = owTool === entry;
+                            glossyRect(L.flyX, fy, L.flyW, L.flyH, 10,
+                                       active ? tool.color : '#2c3a42',
+                                       active ? { stroke: 'rgba(255,255,255,0.75)' } : undefined);
+                            ctx.textAlign = 'left';
+                            ctx.fillStyle = '#fff';
+                            ctx.font = '15px -apple-system,sans-serif';
+                            ctx.fillText(tool.icon, L.flyX + 10, fy + L.flyH / 2 + 6);
+                            ctx.font = (active ? 'bold ' : '') + '12px -apple-system,sans-serif';
+                            ctx.fillText(tool.label, L.flyX + 36, fy + L.flyH / 2 + 4);
+                        }
+                        fy += L.flyH + L.flyGap;
+                    }
+                }
+            }
+        }
     }
 
     // ---- Hole inspector card (top right, GolfTopia-style) ----
@@ -2570,17 +2523,19 @@ function drawOverworld() {
             owSelectedHole = null;
         } else {
             const hc = holeCardLayout();
-            ctx.fillStyle = 'rgba(15,25,18,0.94)';
+            ctx.fillStyle = 'rgba(14,22,17,0.94)';
             roundRect(hc.x, hc.y, hc.w, hc.h, 14);
             ctx.fill();
-            ctx.strokeStyle = 'rgba(255,190,60,0.5)';
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
             ctx.lineWidth = 1.5;
             roundRect(hc.x, hc.y, hc.w, hc.h, 14);
             ctx.stroke();
+            // Colored glossy header strip (reference-style panel)
+            glossyRect(hc.x + 3, hc.y + 3, hc.w - 6, 26, 11, '#2e7d32');
             ctx.textAlign = 'left';
             ctx.fillStyle = '#fff';
-            ctx.font = 'bold 16px -apple-system,sans-serif';
-            ctx.fillText('Hole ' + selHole.id, hc.x + 14, hc.y + 26);
+            ctx.font = 'bold 14px -apple-system,sans-serif';
+            ctx.fillText('Hole ' + selHole.id, hc.x + 14, hc.y + 21);
             const yds = Math.round(polylineLengthYards(selHole));
             ctx.fillStyle = 'rgba(255,255,255,0.65)';
             ctx.font = '12px -apple-system,sans-serif';
@@ -2624,8 +2579,8 @@ function drawOverworld() {
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         const lines = [
             '\u270B  Drag to move \u2022 pinch to zoom \u2022 twist to rotate',
-            '\u{1F3A8}  Pick a tool from the bottom bar to paint terrain',
-            '\u26F3  The Holes tab designs new holes \u2022 tap a marker to inspect'
+            '\u{1F528}  Tap the hammer to open build tools and paint terrain',
+            '\u26F3  HOLES designs new holes \u2022 tap a marker to inspect or play'
         ];
         for (let i = 0; i < lines.length; i++) {
             ctx.fillText(lines[i], W() / 2, H() * 0.4 + i * 30);
@@ -2690,8 +2645,7 @@ function eyedropAt(cell) {
     const tool = OW_TOOLS.find(x => x.terrain === t && x.id !== 'erase' && !x.wizard && !x.hand);
     if (!tool) return;
     owTool = tool.id;
-    const cat = OW_CATEGORIES.find(c => c.tools.includes(tool.id));
-    if (cat) owCategory = cat.id;
+    owRailOpen = true; // show the rail so the armed tool is visible
     scouting = false; // stop the pan — arming a brush is deliberate
     notify(tool.label + ' brush armed');
 }
@@ -2967,31 +2921,31 @@ function overworldHUDHit(sx, sy) {
         const by = L.camY0 + i * (L.camBtnSize + L.camBtnGap);
         if (hitBtn(sx, sy, L.camX, by, L.camBtnSize, L.camBtnSize)) return 'cam:' + L.camBtns[i];
     }
-    // Bottom build bar (hidden during wizard)
-    if (!holeWizard && sy >= L.barY) {
-        // Hand / navigation button
-        if (hitBtn(sx, sy, L.handX, L.barY + 6, L.handW, L.barH - 12)) return 'tool:hand';
-        // Category tabs
-        for (let i = 0; i < OW_CATEGORIES.length; i++) {
-            const cx = L.catX0 + i * (L.catW + L.catGap);
-            if (hitBtn(sx, sy, cx, L.barY + 6, L.catW, L.barH - 12)) return 'cat:' + OW_CATEGORIES[i].id;
+    // Build rail (hidden during wizard)
+    if (!holeWizard) {
+        if (hitBtn(sx, sy, L.railX, L.railY, L.railBtn, L.railBtn)) return 'rail:toggle';
+        if (owRailOpen) {
+            for (let i = 0; i < OW_RAIL.length; i++) {
+                const iy = L.railY + (i + 1) * (L.railBtn + L.railGap);
+                if (hitBtn(sx, sy, L.railX, iy, L.railBtn, L.railBtn)) return 'rail:' + OW_RAIL[i].id;
+            }
+            if (owFlyout) {
+                const pi = OW_RAIL.findIndex(it => it.id === owFlyout);
+                const parent = pi >= 0 ? OW_RAIL[pi] : null;
+                if (parent && parent.flyout) {
+                    const list = parent.flyout === 'sizes' ? OW_BRUSH_SIZES : parent.flyout;
+                    const totalH = list.length * (L.flyH + L.flyGap);
+                    let fy = Math.min(L.railY + (pi + 1) * (L.railBtn + L.railGap),
+                                      H() - 10 - totalH);
+                    for (const entry of list) {
+                        if (hitBtn(sx, sy, L.flyX, fy, L.flyW, L.flyH)) {
+                            return parent.flyout === 'sizes' ? 'size:' + entry : 'tool:' + entry;
+                        }
+                        fy += L.flyH + L.flyGap;
+                    }
+                }
+            }
         }
-        // Tool chips of active category
-        const cat = OW_CATEGORIES.find(c => c.id === owCategory) || OW_CATEGORIES[0];
-        const chipH = 42, chipY = L.barY + (L.barH - chipH) / 2;
-        const chipW = Math.min(96, Math.floor(L.toolAvail / cat.tools.length) - 6);
-        for (let i = 0; i < cat.tools.length; i++) {
-            const tx = L.toolX0 + i * (chipW + 6);
-            if (hitBtn(sx, sy, tx, chipY, chipW, chipH)) return 'tool:' + cat.tools[i];
-        }
-        // Size stepper + erase
-        const stepY = L.barY + (L.barH - 36) / 2;
-        if (hitBtn(sx, sy, L.minusX, stepY, L.stepBtnW, 36)) return 'size:down';
-        if (hitBtn(sx, sy, L.plusX, stepY, L.stepBtnW, 36)) return 'size:up';
-        if (hitBtn(sx, sy, L.eraseX, stepY, L.eraseW, 36)) return 'tool:erase';
-        // Anything else inside the bar is dead space — swallow it so taps
-        // never paint or pan through the toolbar
-        return 'bar';
     }
     // Hole wizard buttons
     if (holeWizard) {
@@ -3055,30 +3009,38 @@ function overworldTouchStart(sx, sy) {
         }
         return;
     }
-    if (hit === 'bar') return; // dead toolbar space — swallow
-    if (hit && hit.startsWith('cat:')) {
-        const id = hit.slice(4);
-        owCategory = id;
-        // Auto-select the category's first tool so the selection highlight
-        // always matches what a paint tap will do (wizard tools excluded —
-        // those only launch on an explicit chip tap)
-        const cat = OW_CATEGORIES.find(c => c.id === id);
-        const first = cat && OW_TOOLS.find(t => t.id === cat.tools[0]);
-        if (first && !first.wizard) owTool = first.id;
+    if (hit && hit.startsWith('rail:')) {
+        const id = hit.slice(5);
+        if (id === 'toggle') {
+            owRailOpen = !owRailOpen;
+            owFlyout = null;
+        } else if (id === 'hand') {
+            owTool = 'hand';
+            owFlyout = null;
+        } else if (id === 'surface' || id === 'nature' || id === 'size') {
+            owFlyout = (owFlyout === id) ? null : id;
+        } else if (id === 'path') {
+            owTool = (owTool === 'path') ? 'hand' : 'path';
+            owFlyout = null;
+        } else if (id === 'hole') {
+            owFlyout = null;
+            startHoleWizard();
+        } else if (id === 'erase') {
+            owTool = (owTool === 'erase') ? 'hand' : 'erase';
+            owFlyout = null;
+        }
         return;
     }
     if (hit && hit.startsWith('tool:')) {
         const id = hit.slice(5);
-        if (id === 'hole') { startHoleWizard(); return; }
+        owFlyout = null;
         // Tapping the already-active tool disarms back to navigation
         owTool = (owTool === id) ? 'hand' : id;
         return;
     }
-    if (hit === 'size:down' || hit === 'size:up') {
-        const idx = OW_BRUSH_SIZES.indexOf(owBrushSize);
-        const next = hit === 'size:up' ? Math.min(OW_BRUSH_SIZES.length - 1, idx + 1)
-                                       : Math.max(0, idx - 1);
-        owBrushSize = OW_BRUSH_SIZES[next];
+    if (hit && hit.startsWith('size:')) {
+        owBrushSize = parseInt(hit.slice(5), 10);
+        owFlyout = null;
         return;
     }
     if (hit === 'wiz:cancel') { cancelHoleWizard(); return; }
@@ -4791,21 +4753,15 @@ function drawNotification(dt) {
     const alpha = Math.min(1, notification.timer / 0.5);
 
     ctx.globalAlpha = alpha;
-    // Small pill just under the top bar so it doesn't cover the play field
-    ctx.font = '12px -apple-system,sans-serif';
+    // Green glossy banner just under the top bar (reference style)
+    ctx.font = 'bold 12px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     const tw = ctx.measureText(notification.text).width;
-    const pillH = 22;
+    const pillH = 26;
     const pillY = 52;
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    roundRect(W() / 2 - tw / 2 - 10, pillY, tw + 20, pillH, 11);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = 1;
-    roundRect(W() / 2 - tw / 2 - 10, pillY, tw + 20, pillH, 11);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.fillText(notification.text, W() / 2, pillY + 15);
+    glossyRect(W() / 2 - tw / 2 - 14, pillY, tw + 28, pillH, pillH / 2, '#2f7d43');
+    ctx.fillStyle = '#fff';
+    ctx.fillText(notification.text, W() / 2, pillY + 17);
     ctx.globalAlpha = 1;
 }
 
