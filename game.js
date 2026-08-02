@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'g35';
+const BUILD_TAG = 'g4';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -732,7 +732,10 @@ function generateHeights(hole) {
             else if (t === T.PATH) height *= 0.35;
             // Water vertices sit at 0 so they match surrounding terrain flat
             if (t === T.WATER) height = 0;
-            h[r][c] = height;
+            // Fold valleys up to ground level: land never dips below y=0,
+            // so the global water surface (y=-1.4) only ever shows inside
+            // carved ponds. Reads as flats + rolling hills — resort-like.
+            h[r][c] = Math.max(0, height);
         }
     }
     return h;

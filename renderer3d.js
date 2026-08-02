@@ -491,6 +491,24 @@ function prepMat(mat, species) {
     let tint = null;
     if (/leaf/.test(n)) {
         tint = LEAF_TINT[species] || '#3f9a4f';
+        // Canopy wind sway: displace vertices by height with a per-instance
+        // phase — trunks stay planted, foliage breathes
+        m.onBeforeCompile = (shader) => {
+            shader.uniforms.uWind = windClock;
+            shader.vertexShader = 'uniform float uWind;\n' + shader.vertexShader.replace(
+                '#include <begin_vertex>',
+                [
+                    '#include <begin_vertex>',
+                    '#ifdef USE_INSTANCING',
+                    '    float windPhase = instanceMatrix[3].x * 0.045 + instanceMatrix[3].z * 0.06;',
+                    '#else',
+                    '    float windPhase = 0.0;',
+                    '#endif',
+                    'transformed.x += sin(uWind * 1.5 + windPhase) * position.y * 0.04;',
+                    'transformed.z += cos(uWind * 1.15 + windPhase) * position.y * 0.028;'
+                ].join('\n')
+            );
+        };
     } else if (/bark|wood/.test(n)) {
         tint = '#6f4a2a';
     } else if (/dirt|stone|rock|_defaultmat/.test(n) && (species === 'rockL' || species === 'rockS')) {
@@ -551,8 +569,114 @@ function placeAssetInstances(hole, cells, speciesKey, opts) {
             terrainGroup.add(inst);
         }
     }
+    // Contact blob shadow — grounds every prop (the poor man's AO, and on
+    // mobile the better trade than SSAO)
+    const blobSize = BLOB_SHADOW_SIZE[speciesKey];
+    if (blobSize) {
+        const bGeo = new THREE.PlaneGeometry(1, 1);
+        bGeo.rotateX(-Math.PI / 2);
+        const bMat = new THREE.MeshBasicMaterial({
+            map: getBlobShadowTexture(),
+            transparent: true,
+            depthWrite: false,
+            opacity: 0.34
+        });
+        const bInst = new THREE.InstancedMesh(bGeo, bMat, cells.length);
+        for (let i = 0; i < cells.length; i++) {
+            const { c, r } = cells[i];
+            const szVar = 0.82 + ((c * 11 + r * 23) % 12) / 32;
+            const s = blobSize * szVar;
+            const cellH = (hole.heights && hole.heights[r]) ? (hole.heights[r][c] || 0) : 0;
+            dummy.position.set((c + 0.5) * cellSize + 3, cellH + 0.35, (r + 0.5) * cellSize + 2);
+            dummy.scale.set(s, 1, s);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            bInst.setMatrixAt(i, dummy.matrix);
+        }
+        bInst.instanceMatrix.needsUpdate = true;
+        bInst.renderOrder = 1;
+        terrainGroup.add(bInst);
+    }
     return true;
 }
+
+// ============================================================
+//  G4 ATMOSPHERE — animated water, wind sway, contact shadows
+// ============================================================
+// One shared clock drives water ripples and canopy sway
+const windClock = { value: 0 };
+
+let waterMesh = null;
+let waterMat = null;
+
+// Water surface: a single translucent plane at y=-1.4 across the whole
+// course. Land sits at y>=0 and water cells sink to -4, so the plane is
+// only visible inside ponds — no per-region bookkeeping needed.
+function buildWaterSurface(hole) {
+    if (!waterMat) {
+        waterMat = new THREE.ShaderMaterial({
+            transparent: true,
+            depthWrite: false,
+            uniforms: {
+                uTime: windClock,
+                uDeep: { value: new THREE.Color('#1c6aa6') },
+                uLite: { value: new THREE.Color('#3fa7e0') }
+            },
+            vertexShader: [
+                'varying vec2 vPos;',
+                'void main() {',
+                '    vec4 wp = modelMatrix * vec4(position, 1.0);',
+                '    vPos = wp.xz;',
+                '    gl_Position = projectionMatrix * viewMatrix * wp;',
+                '}'
+            ].join('\n'),
+            fragmentShader: [
+                'uniform float uTime;',
+                'uniform vec3 uDeep;',
+                'uniform vec3 uLite;',
+                'varying vec2 vPos;',
+                'void main() {',
+                '    float w1 = sin(vPos.x * 0.085 + uTime * 1.1)',
+                '             + sin(vPos.y * 0.062 + uTime * 0.85);',
+                '    float w2 = sin((vPos.x + vPos.y) * 0.046 + uTime * 1.6);',
+                '    float rip = (w1 + w2) * 0.22;',
+                '    vec3 col = mix(uDeep, uLite, clamp(0.5 + rip * 0.6, 0.0, 1.0));',
+                '    float sp = sin(vPos.x * 0.31 + uTime * 2.2)',
+                '             * sin(vPos.y * 0.27 - uTime * 1.9);',
+                '    col += smoothstep(0.965, 1.0, sp) * 0.35;',
+                '    gl_FragColor = vec4(col, 0.86);',
+                '}'
+            ].join('\n')
+        });
+    }
+    const geo = new THREE.PlaneGeometry(hole.cols * CELL, hole.rows * CELL);
+    geo.rotateX(-Math.PI / 2);
+    geo.translate(hole.cols * CELL / 2, -1.4, hole.rows * CELL / 2);
+    waterMesh = new THREE.Mesh(geo, waterMat);
+    waterMesh.renderOrder = 2;
+    terrainGroup.add(waterMesh);
+}
+
+// Radial contact-shadow sprite shared by every prop
+let blobShadowTexture = null;
+function getBlobShadowTexture() {
+    if (blobShadowTexture) return blobShadowTexture;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(32, 32, 4, 32, 32, 30);
+    grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+    grad.addColorStop(0.7, 'rgba(0,0,0,0.28)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    blobShadowTexture = new THREE.CanvasTexture(c);
+    return blobShadowTexture;
+}
+const BLOB_SHADOW_SIZE = {
+    pine: 40, leafy: 50, fall: 50, palm: 44,
+    bush: 20, rockL: 32, rockS: 15
+};
 
 // ============================================================
 //  TERRAIN ALBEDO — crisp painted ground texture (G3)
@@ -952,6 +1076,9 @@ function buildTerrain3D(hole, opts) {
     // Register refs for the live mid-stroke color repaint
     terrainColorAttrRef = terrainGeo.getAttribute('color');
     terrainHoleRef = hole;
+
+    // Animated water surface (visible only inside sunken water cells)
+    buildWaterSurface(hole);
 
     // Water is handled directly by vertex colors on the continuous mesh
 
@@ -1479,6 +1606,8 @@ function worldToScreen3D(wx, wy) {
 // ---- Render ----
 function render3D() {
     if (!renderer3d || !scene3d || !camera3d) return;
+    // Shared atmosphere clock: water ripples + canopy sway
+    windClock.value = performance.now() / 1000;
     renderer3d.render(scene3d, camera3d);
 }
 
