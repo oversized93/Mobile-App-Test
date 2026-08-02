@@ -454,7 +454,8 @@ function loadWorldAssets() {
 // saturated terrain. Recolor by material name into our art direction;
 // leaf hue varies per species. Fall/flower colors keep their authored hue.
 const LEAF_TINT = {
-    pine: '#2c7a41', leafy: '#4aa254', palm: '#3c9c52', bush: '#459a4e'
+    pine: '#2c7a41', leafy: '#4aa254', palm: '#3c9c52', bush: '#459a4e',
+    fall: '#cf6a2b'
 };
 function prepMat(mat, species) {
     const m = mat.clone();
@@ -463,8 +464,7 @@ function prepMat(mat, species) {
     const n = (m.name || '').toLowerCase();
     let tint = null;
     if (/leaf/.test(n)) {
-        if (species === 'fall') tint = null;          // keep authored autumn hues
-        else tint = LEAF_TINT[species] || '#3f9a4f';
+        tint = LEAF_TINT[species] || '#3f9a4f';
     } else if (/bark|wood/.test(n)) {
         tint = '#6f4a2a';
     } else if (/dirt|stone|rock|_defaultmat/.test(n) && (species === 'rockL' || species === 'rockS')) {
@@ -526,6 +526,184 @@ function placeAssetInstances(hole, cells, speciesKey, opts) {
     return true;
 }
 
+// ============================================================
+//  TERRAIN ALBEDO — crisp painted ground texture (G3)
+// ============================================================
+// All terrain HUE lives here, painted into an offscreen canvas at
+// ALBEDO_PX per cell: chamfered region edges, boundary outlines, mow
+// stripes, green fringe, sand speckle, water shore. Vertex colors are
+// shading-only on top (slope soil, canopy shade, water depth).
+const ALBEDO_PX = 12;
+let albedoCanvas = null, albedoCtx = null, albedoTexture = null;
+let albedoHoleRef = null;
+
+// NOTE: authored dark on purpose — scene lighting roughly doubles these
+// before ACES tone mapping (the tree tints were picked the same way).
+const ALBEDO_COLORS = {
+    base: {
+        [T.GRASS]:   '#256d35',
+        [T.FAIRWAY]: '#2f8742',   // stripe A; B derived darker
+        [T.GREEN]:   '#39a04f',
+        [T.ROUGH]:   '#1f6130',
+        [T.SAND]:    '#c2a15c',
+        [T.WATER]:   '#1a6fae',
+        [T.TREE]:    '#1a5228',   // forest floor under canopies
+        [T.TEE]:     '#43aa58',
+        [T.OOB]:     '#12351c',
+        [T.PATH]:    '#8f7347'
+    }
+};
+
+function albedoCellColor(hole, c, r) {
+    const t = hole.grid[r][c];
+    let col = ALBEDO_COLORS.base[t] || '#3e9e53';
+    if (t === T.FAIRWAY) {
+        // Crisp mow stripes, alternating every 3 rows
+        if (Math.floor(r / 3) % 2 === 1) col = shadeHex(col, -0.14);
+    } else if (t === T.GREEN) {
+        // Checkerboard mow in 2-cell blocks
+        if ((Math.floor(c / 2) + Math.floor(r / 2)) % 2 === 1) col = shadeHex(col, -0.07);
+    } else if (t === T.ROUGH || t === T.GRASS || t === T.TREE || t === T.OOB) {
+        // Organic tone variation — scrambled hash + tiny amplitude so it
+        // reads as texture, not a checkerboard
+        const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
+        const j = (h % 9) - 4;
+        col = shadeHex(col, j * 0.006);
+    } else if (t === T.PATH) {
+        const h = ((c * 83492791) ^ (r * 2654435761)) >>> 0;
+        const j = (h % 5) - 2;
+        col = shadeHex(col, j * 0.012);
+    }
+    return col;
+}
+
+function shadeHex(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    if (f >= 0) { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; }
+    else { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
+    r = Math.round(Math.max(0, Math.min(255, r)));
+    g = Math.round(Math.max(0, Math.min(255, g)));
+    b = Math.round(Math.max(0, Math.min(255, b)));
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+const cellType = (hole, c, r) => {
+    if (c < 0 || c >= hole.cols || r < 0 || r >= hole.rows) return T.OOB;
+    return hole.grid[r][c];
+};
+
+// Paint one cell (fill + chamfers + boundary strokes + detail) into ctx2d.
+function paintAlbedoCell(hole, c, r) {
+    const px = ALBEDO_PX;
+    const x = c * px, y = r * px;
+    const t = cellType(hole, c, r);
+    const g = albedoCtx;
+
+    g.fillStyle = albedoCellColor(hole, c, r);
+    g.fillRect(x, y, px, px);
+
+    const n = cellType(hole, c, r - 1), s = cellType(hole, c, r + 1);
+    const w = cellType(hole, c - 1, r), e = cellType(hole, c + 1, r);
+
+    // 45° chamfer: when both orthogonal neighbors at a corner share a type
+    // different from ours, cut the corner with their color → smooth regions
+    const chamfer = (t2, corner) => {
+        g.fillStyle = albedoCellColor(hole,
+            corner === 'nw' ? c - 1 : corner === 'ne' ? c + 1 : corner === 'sw' ? c - 1 : c + 1,
+            corner === 'nw' || corner === 'ne' ? r - 1 : r + 1);
+        g.beginPath();
+        if (corner === 'nw') { g.moveTo(x, y); g.lineTo(x + px * 0.55, y); g.lineTo(x, y + px * 0.55); }
+        if (corner === 'ne') { g.moveTo(x + px, y); g.lineTo(x + px - px * 0.55, y); g.lineTo(x + px, y + px * 0.55); }
+        if (corner === 'sw') { g.moveTo(x, y + px); g.lineTo(x + px * 0.55, y + px); g.lineTo(x, y + px - px * 0.55); }
+        if (corner === 'se') { g.moveTo(x + px, y + px); g.lineTo(x + px - px * 0.55, y + px); g.lineTo(x + px, y + px - px * 0.55); }
+        g.closePath();
+        g.fill();
+    };
+    if (n !== t && w === n && cellType(hole, c - 1, r - 1) === n) chamfer(n, 'nw');
+    if (n !== t && e === n && cellType(hole, c + 1, r - 1) === n) chamfer(n, 'ne');
+    if (s !== t && w === s && cellType(hole, c - 1, r + 1) === s) chamfer(s, 'sw');
+    if (s !== t && e === s && cellType(hole, c + 1, r + 1) === s) chamfer(s, 'se');
+
+    // Boundary strokes: darker rim on OUR side wherever the neighbor differs
+    const PRI = TERRAIN_VERT_PRIORITY;
+    const rim = (t === T.WATER) ? shadeHex(ALBEDO_COLORS.base[T.WATER], 0.45)
+              : shadeHex(albedoCellColor(hole, c, r), -0.28);
+    const lw = (t === T.SAND || t === T.WATER || t === T.GREEN) ? 2.5 : 1.5;
+    g.fillStyle = rim;
+    // Draw rim only from the higher-priority side so lines don't double
+    if (n !== t && (PRI[t] || 0) >= (PRI[n] || 0)) g.fillRect(x, y, px, lw);
+    if (s !== t && (PRI[t] || 0) >= (PRI[s] || 0)) g.fillRect(x, y + px - lw, px, lw);
+    if (w !== t && (PRI[t] || 0) >= (PRI[w] || 0)) g.fillRect(x, y, lw, px);
+    if (e !== t && (PRI[t] || 0) >= (PRI[e] || 0)) g.fillRect(x + px - lw, y, lw, px);
+
+    // Per-terrain detail
+    if (t === T.SAND) {
+        g.fillStyle = 'rgba(160,130,70,0.35)';
+        for (let i = 0; i < 3; i++) {
+            const hx = ((c * 73 + r * 41 + i * 29) % 10) / 10;
+            const hy = ((c * 37 + r * 97 + i * 53) % 10) / 10;
+            g.fillRect(x + hx * (px - 2), y + hy * (px - 2), 1.6, 1.6);
+        }
+    } else if (t === T.GREEN) {
+        // Fringe: cells bordering non-green get a darker inset band
+        const fringe = shadeHex(ALBEDO_COLORS.base[T.GREEN], -0.22);
+        g.fillStyle = fringe;
+        const fw = 3;
+        if (n !== T.GREEN && n !== t) g.fillRect(x, y, px, fw);
+        if (s !== T.GREEN && s !== t) g.fillRect(x, y + px - fw, px, fw);
+        if (w !== T.GREEN && w !== t) g.fillRect(x, y, fw, px);
+        if (e !== T.GREEN && e !== t) g.fillRect(x + px - fw, y, fw, px);
+    } else if (t === T.WATER) {
+        // Shore highlight inside the water side
+        const lite = shadeHex(ALBEDO_COLORS.base[T.WATER], 0.35);
+        g.fillStyle = lite;
+        const sw2 = 3;
+        if (n !== T.WATER) g.fillRect(x, y, px, sw2);
+        if (s !== T.WATER) g.fillRect(x, y + px - sw2, px, sw2);
+        if (w !== T.WATER) g.fillRect(x, y, sw2, px);
+        if (e !== T.WATER) g.fillRect(x + px - sw2, y, sw2, px);
+    }
+}
+
+function buildTerrainAlbedo(hole) {
+    const wpx = hole.cols * ALBEDO_PX, hpx = hole.rows * ALBEDO_PX;
+    if (!albedoCanvas || albedoCanvas.width !== wpx || albedoCanvas.height !== hpx) {
+        albedoCanvas = document.createElement('canvas');
+        albedoCanvas.width = wpx;
+        albedoCanvas.height = hpx;
+        albedoCtx = albedoCanvas.getContext('2d');
+        if (albedoTexture) albedoTexture.dispose();
+        albedoTexture = new THREE.CanvasTexture(albedoCanvas);
+        albedoTexture.encoding = THREE.sRGBEncoding;
+        albedoTexture.anisotropy = 4;
+    }
+    for (let r = 0; r < hole.rows; r++)
+        for (let c = 0; c < hole.cols; c++)
+            paintAlbedoCell(hole, c, r);
+    albedoTexture.needsUpdate = true;
+    albedoHoleRef = hole;
+    return albedoTexture;
+}
+
+// Dirty-rect repaint for live painting (cells ±2 covers chamfer/rim reach)
+function repaintAlbedoCells(hole, cells) {
+    if (!albedoCtx || albedoHoleRef !== hole || !cells.length) return;
+    const seen = new Set();
+    for (const cell of cells) {
+        for (let r = cell.r - 2; r <= cell.r + 2; r++) {
+            for (let c = cell.c - 2; c <= cell.c + 2; c++) {
+                if (c < 0 || c >= hole.cols || r < 0 || r >= hole.rows) continue;
+                const k = r * hole.cols + c;
+                if (seen.has(k)) continue;
+                seen.add(k);
+                paintAlbedoCell(hole, c, r);
+            }
+        }
+    }
+    albedoTexture.needsUpdate = true;
+}
+
 // ---- Per-vertex terrain shading — shared by the full build and the live
 // mid-stroke repaint so painting feedback is instant without a mesh rebuild.
 const TERRAIN_VERT_PRIORITY = {
@@ -553,64 +731,37 @@ function terrainRGBTable() {
 }
 
 function computeVertexColorHeight(hole, vc, vr) {
-    const terrainRGB = terrainRGBTable();
-    // 4 cells that share this vertex
+    // Shading-only since G3: hue lives in the albedo texture. Vertex color
+    // multiplies it — 1.0 = untouched, darker for soil/canopy/depth.
     const neighbors = [
         { c: vc - 1, r: vr - 1 }, { c: vc, r: vr - 1 },
         { c: vc - 1, r: vr     }, { c: vc, r: vr     }
     ];
     let sumH = 0;
     let waterCount = 0;
-    let bestType = T.ROUGH;
-    let bestPriority = -1;
-    let nearSand = false;
     let nearTree = false;
+    let anyRoughish = false;
     for (const n of neighbors) {
         const inBounds = n.c >= 0 && n.c < hole.cols && n.r >= 0 && n.r < hole.rows;
         const t = inBounds ? hole.grid[n.r][n.c] : T.ROUGH;
         const h = (inBounds && hole.heights) ? hole.heights[n.r][n.c] : 0;
         sumH += h;
         if (t === T.WATER) waterCount++;
-        // Sand within 1 cell of a neighbor darkens the vertex (bunker lip)
-        if (inBounds) {
-            for (let dy = -1; dy <= 1 && !nearSand; dy++) {
-                for (let dx = -1; dx <= 1; dx++) {
-                    const nc = n.c + dx, nr = n.r + dy;
-                    if (nc >= 0 && nc < hole.cols && nr >= 0 && nr < hole.rows
-                        && hole.grid[nr][nc] === T.SAND) { nearSand = true; break; }
-                }
-            }
-        }
-        const pri = TERRAIN_VERT_PRIORITY[t] || 0;
-        if (pri > bestPriority) {
-            bestPriority = pri;
-            bestType = t;
-        }
         if (t === T.TREE) nearTree = true;
+        if (t === T.ROUGH || t === T.GRASS || t === T.TREE) anyRoughish = true;
     }
     const avgH = sumH / 4;
     const isAllWater = (waterCount === 4);
     const y = isAllWater ? -4 : avgH;
 
-    let rgb = terrainRGB[bestType] || [0.1, 0.3, 0.15];
-
-    // Fairway mowing stripes — alternate every 3 rows
-    if (bestType === T.FAIRWAY) {
-        const stripe = Math.floor(vr / 3) % 2;
-        const stripeMult = stripe === 0 ? 1.15 : 0.85;
-        rgb = [rgb[0] * stripeMult, rgb[1] * stripeMult, rgb[2] * stripeMult];
-    }
-    // Bunker sand lip — darken edges near sand
-    if (bestType !== T.SAND && nearSand) {
-        rgb = [rgb[0] * 0.75, rgb[1] * 0.75, rgb[2] * 0.7];
-    }
-    // Tree shadow patch — darken rough under tree canopies
-    if (nearTree && bestType === T.ROUGH) {
-        rgb = [rgb[0] * 0.65, rgb[1] * 0.7, rgb[2] * 0.65];
-    }
-    // Steep-slope soil — carved terraces read as exposed earth, like the
-    // reference's cliff banks. Grass types only.
-    if (hole.heights && (bestType === T.ROUGH || bestType === T.GRASS || bestType === T.TREE)) {
+    let shade = 1.0;
+    // Canopy shadow patch on forest floor
+    if (nearTree) shade *= 0.82;
+    // Deep water reads darker
+    if (isAllWater) shade *= 0.72;
+    // Steep-slope soil: darken + warm (carved-bank read)
+    let soil = 0;
+    if (hole.heights && anyRoughish) {
         let minH = Infinity, maxH = -Infinity;
         for (const n of neighbors) {
             const cc2 = Math.max(0, Math.min(hole.cols - 1, n.c));
@@ -620,23 +771,13 @@ function computeVertexColorHeight(hole, vc, vr) {
             if (hh > maxH) maxH = hh;
         }
         const steep = maxH - minH;
-        if (steep > 7) {
-            const f = Math.min(1, (steep - 7) / 16) * 0.75;
-            // soil brown in linear space
-            const soil = [0.15, 0.066, 0.023];
-            rgb = [rgb[0] * (1 - f) + soil[0] * f,
-                   rgb[1] * (1 - f) + soil[1] * f,
-                   rgb[2] * (1 - f) + soil[2] * f];
-        }
+        if (steep > 7) soil = Math.min(1, (steep - 7) / 16) * 0.6;
     }
-    // Shoreline — land vertices touching water get a subtle bright-teal wet
-    // rim so ponds pop at overworld zoom (subtle-glow accent)
-    if (bestType !== T.WATER && waterCount >= 1) {
-        const teal = [0.07, 0.55, 0.60];
-        rgb = [rgb[0] * 0.72 + teal[0] * 0.28,
-               rgb[1] * 0.72 + teal[1] * 0.28,
-               rgb[2] * 0.72 + teal[2] * 0.28];
-    }
+    const rgb = [
+        shade * (1 - soil * 0.45),
+        shade * (1 - soil * 0.62),
+        shade * (1 - soil * 0.72)
+    ];
     return { y, rgb };
 }
 
@@ -726,13 +867,10 @@ function buildTerrain3D(hole, opts) {
     terrainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     terrainGeo.computeVertexNormals();
 
-    // Procedural grass texture tiled over the terrain
-    const grassTex = makeGrassTexture();
-    grassTex.repeat.set(hole.cols / 4, hole.rows / 4);
-
+    // Crisp painted albedo (G3) — vertex colors provide shading on top
     const terrainMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
-        map: grassTex,
+        map: buildTerrainAlbedo(hole),
         roughness: 0.95,
         metalness: 0,
         flatShading: false

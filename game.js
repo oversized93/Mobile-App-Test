@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'g2e';
+const BUILD_TAG = 'g3';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3136,8 +3136,9 @@ function overworldTouchStart(sx, sy) {
             owLastGhostCell = cell;
             owStrokeDiff = new Map();
             const changed = paintBrushAt(cell.c, cell.r, owBrushSize, tool.terrain);
-            if (changed.length && scene3dReady && typeof repaintTerrainCells === 'function') {
-                repaintTerrainCells(worldCourse, changed);
+            if (changed.length && scene3dReady) {
+                if (typeof repaintAlbedoCells === 'function') repaintAlbedoCells(worldCourse, changed);
+                if (typeof repaintTerrainCells === 'function') repaintTerrainCells(worldCourse, changed);
             }
             return;
         }
@@ -3169,8 +3170,9 @@ function overworldTouchMove(sx, sy) {
             owDragLastCell = cell;
             owLastGhostCell = cell;
             const changed = paintBrushAt(cell.c, cell.r, owBrushSize, currentTool().terrain);
-            if (changed.length && scene3dReady && typeof repaintTerrainCells === 'function') {
-                repaintTerrainCells(worldCourse, changed);
+            if (changed.length && scene3dReady) {
+                if (typeof repaintAlbedoCells === 'function') repaintAlbedoCells(worldCourse, changed);
+                if (typeof repaintTerrainCells === 'function') repaintTerrainCells(worldCourse, changed);
             }
         }
         return;

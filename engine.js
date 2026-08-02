@@ -9,6 +9,15 @@ function resize() {
     canvas.width = window.innerWidth * dpr;
     canvas.height = window.innerHeight * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Keep the 3D layer in sync — without this, rotating or Safari chrome
+    // showing/hiding leaves a letterboxed band
+    if (typeof renderer3d !== 'undefined' && renderer3d) {
+        renderer3d.setSize(window.innerWidth, window.innerHeight);
+        if (typeof camera3d !== 'undefined' && camera3d) {
+            camera3d.aspect = window.innerWidth / window.innerHeight;
+            camera3d.updateProjectionMatrix();
+        }
+    }
 }
 resize();
 window.addEventListener('resize', resize);
