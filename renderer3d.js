@@ -1985,6 +1985,7 @@ function setupAmbientNPCs(hole) {
     setupHoverBots(hole);
     setupFountains(hole);
     setupCartDrive(hole);
+    setupCritters(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -2048,6 +2049,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateFountains3D();
     updatePinRings3D();
     updateCartDrive3D(dt, hole);
+    updateCritters3D(hole);
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = new THREE.Object3D();
     const t = windClock.value;
@@ -2152,6 +2154,103 @@ function setupFountains(hole) {
     fountainInst = new THREE.InstancedMesh(geo, mat, fountainSpots.length * FOUNTAIN_DROPS);
     fountainInst.renderOrder = 3;
     terrainGroup.add(fountainInst);
+}
+
+// ---- Ambient critters: butterflies over meadows, gulls over ponds ----
+let bflyInst = null, bflyStates = [];
+let gullInst = null, gullStates = [];
+
+function setupCritters(hole) {
+    bflyInst = null;
+    bflyStates = [];
+    gullInst = null;
+    gullStates = [];
+    const spots = [];
+    for (let r = 2; r < hole.rows - 2; r++) {
+        for (let c = 2; c < hole.cols - 2; c++) {
+            const t = hole.grid[r][c];
+            if ((t === T.ROUGH || t === T.GRASS)
+                && ((((c * 73856093) ^ (r * 19349663)) >>> 0) % 197) === 0) {
+                spots.push({ c: c, r: r });
+            }
+        }
+    }
+    const nB = Math.min(14, spots.length);
+    if (nB) {
+        const geo = new THREE.PlaneGeometry(3.2, 2.4);
+        geo.rotateX(-Math.PI / 2);
+        const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+        mat.toneMapped = false;
+        bflyInst = new THREE.InstancedMesh(geo, mat, nB);
+        const wingCols = [0xffd54f, 0xff8a65, 0xba68c8, 0x4fc3f7, 0xfff176];
+        for (let i = 0; i < nB; i++) {
+            const sp = spots[Math.floor(i * spots.length / nB)];
+            bflyStates.push({
+                x: (sp.c + 0.5) * CELL, z: (sp.r + 0.5) * CELL,
+                phase: i * 1.93, rad: 6 + (i % 5) * 2.5
+            });
+            if (bflyInst.setColorAt) {
+                bflyInst.setColorAt(i, new THREE.Color(wingCols[i % wingCols.length]).convertSRGBToLinear());
+            }
+        }
+        if (bflyInst.instanceColor) bflyInst.instanceColor.needsUpdate = true;
+        terrainGroup.add(bflyInst);
+    }
+    // Gulls circle above the fountain ponds (fountainSpots set just before)
+    if (fountainSpots.length) {
+        const nG = fountainSpots.length * 2 + 1;
+        const geo = new THREE.PlaneGeometry(6.5, 1.8);
+        geo.rotateX(-Math.PI / 2);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xf5f7f9, side: THREE.DoubleSide });
+        mat.toneMapped = false;
+        gullInst = new THREE.InstancedMesh(geo, mat, nG);
+        for (let i = 0; i < nG; i++) {
+            const spot = fountainSpots[i % fountainSpots.length];
+            gullStates.push({
+                x: spot.x, z: spot.z, phase: i * 2.4,
+                rad: 45 + (i * 23) % 50, h: 105 + (i * 17) % 40,
+                spd: 0.25 + (i % 3) * 0.07
+            });
+        }
+        terrainGroup.add(gullInst);
+    }
+}
+
+function updateCritters3D(hole) {
+    const t = windClock.value;
+    const dummy = new THREE.Object3D();
+    if (bflyInst && bflyStates.length) {
+        for (let i = 0; i < bflyStates.length; i++) {
+            const s = bflyStates[i];
+            const a = t * 0.8 + s.phase;
+            const x = s.x + Math.cos(a) * s.rad;
+            const z = s.z + Math.sin(a * 1.3) * s.rad;
+            const gy = (hole && hole.heights)
+                ? ((hole.heights[Math.floor(z / CELL)] || [])[Math.floor(x / CELL)] || 0) : 0;
+            dummy.position.set(x, gy + 9 + Math.sin(t * 2.1 + s.phase) * 3, z);
+            dummy.rotation.set(0, -a, 0);
+            // Wing flap faked as lateral scale shimmer
+            const flap = 0.35 + Math.abs(Math.sin(t * 9 + s.phase)) * 0.65;
+            dummy.scale.set(flap, 1, 1);
+            dummy.updateMatrix();
+            bflyInst.setMatrixAt(i, dummy.matrix);
+        }
+        bflyInst.instanceMatrix.needsUpdate = true;
+    }
+    if (gullInst && gullStates.length) {
+        for (let i = 0; i < gullStates.length; i++) {
+            const s = gullStates[i];
+            const a = t * s.spd + s.phase;
+            dummy.position.set(s.x + Math.cos(a) * s.rad,
+                               s.h + Math.sin(t * 0.7 + s.phase) * 6,
+                               s.z + Math.sin(a) * s.rad);
+            dummy.rotation.set(0, -a, Math.sin(t * 3 + s.phase) * 0.25);
+            dummy.scale.set(1, 1, 1);
+            dummy.updateMatrix();
+            gullInst.setMatrixAt(i, dummy.matrix);
+        }
+        gullInst.instanceMatrix.needsUpdate = true;
+    }
 }
 
 // ---- A golf cart cruising the walkway network ----
