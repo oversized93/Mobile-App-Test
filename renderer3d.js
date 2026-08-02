@@ -812,6 +812,20 @@ function albedoCellColor(hole, c, r) {
         const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
         const j = (h % 9) - 4;
         col = shadeHex(col, j * 0.006);
+        if (t === T.ROUGH || t === T.GRASS) {
+            // First cut: a lighter semi-rough band hugging mowed surfaces
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if (!dr && !dc) continue;
+                    const nt = cellType(hole, c + dc, r + dr);
+                    if (nt === T.FAIRWAY || nt === T.GREEN || nt === T.TEE) {
+                        col = shadeHex(col, 0.16);
+                        dr = 2; // break both loops
+                        break;
+                    }
+                }
+            }
+        }
     } else if (t === T.PATH) {
         const h = ((c * 83492791) ^ (r * 2654435761)) >>> 0;
         const j = (h % 5) - 2;
