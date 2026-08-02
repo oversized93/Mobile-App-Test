@@ -99,6 +99,8 @@ const PR = parseFloat(process.argv[6] || '40');
                 }
                 paint(58, 40, 60, 74, T_.PATH);
                 paint(52, 40, 70, 42, T_.PATH);
+                // Walkway spur crossing the pond (bridge showcase)
+                paint(10, 24, 24, 25, T_.PATH);
                 worldCourse.holes.push({
                     id: 1, par: 4,
                     tee: { x: 22, y: 52 }, pin: { x: 48, y: 28 },

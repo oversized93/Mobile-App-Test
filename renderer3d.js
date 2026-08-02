@@ -412,7 +412,7 @@ const ASSET_SPECIES = {
     tuft:  ['grass', 'grass_large', 'grass_leafs'],
     flag:  ['flag-red'],
     prop:  ['bench', 'trash', 'flowers', 'park-entrance', 'stall-food',
-            'stall-drinks', 'station-fence'],
+            'stall-drinks', 'station-fence', 'bridge_wood', 'bridge_woodRound'],
     hero:  ['clubhouse', 'golfcart', 'windmill']
 };
 // Non-Kenney asset locations
@@ -427,7 +427,8 @@ const ASSET_PATH_NAME = {
 const ASSET_TARGET_H_NAME = {
     'bench': 22, 'trash': 18, 'flowers': 10, 'park-entrance': 92,
     'stall-food': 62, 'stall-drinks': 62, 'station-fence': 18,
-    'clubhouse': 148, 'golfcart': 34, 'windmill': 170
+    'clubhouse': 148, 'golfcart': 34, 'windmill': 170,
+    'bridge_wood': 26, 'bridge_woodRound': 30
 };
 // Target world heights per species (CELL = 32; a good tree spans ~2 cells)
 const ASSET_TARGET_H = {
@@ -1045,9 +1046,9 @@ function computeVertexColorHeight(hole, vc, vr) {
         if (steep > 7) soil = Math.min(1, (steep - 7) / 16) * 0.6;
     }
     const rgb = [
-        shade * (1 - soil * 0.45),
-        shade * (1 - soil * 0.62),
-        shade * (1 - soil * 0.72)
+        shade * (1 - soil * 0.55),
+        shade * (1 - soil * 0.74),
+        shade * (1 - soil * 0.85)
     ];
     return { y, rgb };
 }
@@ -1410,6 +1411,16 @@ function buildTerrain3D(hole, opts) {
         put('clubhouse', ec - 8.5, er - 7.5, Math.PI / 2);
         // A cart parked off the path
         put('golfcart', ec + 4.2, er - 14.6, -Math.PI / 3);
+        // Wooden bridges wherever the walkway crosses water
+        for (let r = 1; r < hole.rows - 1; r++) {
+            for (let c = 1; c < hole.cols - 1; c++) {
+                if (hole.grid[r][c] !== T.PATH) continue;
+                const nWater = hole.grid[r - 1][c] === T.WATER && hole.grid[r + 1][c] === T.WATER;
+                const eWater = hole.grid[r][c - 1] === T.WATER && hole.grid[r][c + 1] === T.WATER;
+                if (nWater) put('bridge_woodRound', c + 0.5, r + 0.5, Math.PI / 2, 1.4);
+                else if (eWater) put('bridge_woodRound', c + 0.5, r + 0.5, 0, 1.4);
+            }
+        }
         // Windmill on the first pond's bank — classic resort landmark
         let placedMill = false;
         for (let r = 2; r < hole.rows - 2 && !placedMill; r++) {
@@ -1439,7 +1450,38 @@ function buildTerrain3D(hole, opts) {
         }
     }
 
-        // ---- Floating 3D hole numbers over each tee (reference-style) ----
+        // ---- Teal shot-arc trails over each hole (signature reference look) ----
+    if (hole.holes && hole.holes.length) {
+        const arcMat = new THREE.MeshBasicMaterial({
+            color: new THREE.Color('#3adbe8'),
+            transparent: true,
+            opacity: 0.55,
+            depthWrite: false
+        });
+        arcMat.toneMapped = false;
+        const hAt2 = (p) => (hole.heights && hole.heights[p.y])
+            ? (hole.heights[p.y][p.x] || 0) : 0;
+        for (const rec of hole.holes) {
+            const pts = [rec.tee, ...(rec.waypoints || []), rec.pin];
+            for (let i = 0; i < pts.length - 1; i++) {
+                const a = pts[i], b = pts[i + 1];
+                const ax = (a.x + 0.5) * CELL, az = (a.y + 0.5) * CELL;
+                const bx = (b.x + 0.5) * CELL, bz = (b.y + 0.5) * CELL;
+                const segLen = Math.sqrt((bx - ax) ** 2 + (bz - az) ** 2);
+                const apex = Math.min(220, 40 + segLen * 0.28);
+                const curve = new THREE.QuadraticBezierCurve3(
+                    new THREE.Vector3(ax, hAt2(a) + 6, az),
+                    new THREE.Vector3((ax + bx) / 2, Math.max(hAt2(a), hAt2(b)) + apex, (az + bz) / 2),
+                    new THREE.Vector3(bx, hAt2(b) + 6, bz)
+                );
+                const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 1.7, 6, false), arcMat);
+                tube.renderOrder = 3;
+                terrainGroup.add(tube);
+            }
+        }
+    }
+
+    // ---- Floating 3D hole numbers over each tee (reference-style) ----
     if (hole.holes && hole.holes.length) {
         const HOLE_COLORS3D = ['#42a5f5', '#ec407a', '#ffca28', '#66bb6a',
             '#ab47bc', '#26c6da', '#ff7043', '#9ccc65', '#5c6bc0'];
