@@ -1879,6 +1879,7 @@ function setupAmbientNPCs(hole) {
     npcHeadInst = null;
     npcClubInst = null;
     setupHoverBots(hole);
+    setupFountains(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -1938,6 +1939,8 @@ function setupAmbientNPCs(hole) {
 
 // Called from the game loop each frame while the overworld is visible
 function updateAmbientNPCs3D(dt, hole) {
+    updateHoverBots3D(dt, hole);
+    updateFountains3D();
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = new THREE.Object3D();
     const t = windClock.value;
@@ -1986,7 +1989,85 @@ function updateAmbientNPCs3D(dt, hole) {
     npcBodyInst.instanceMatrix.needsUpdate = true;
     npcHeadInst.instanceMatrix.needsUpdate = true;
     if (npcClubInst) npcClubInst.instanceMatrix.needsUpdate = true;
-    updateHoverBots3D(dt, hole);
+}
+
+// ---- Pond fountains — animated jets on the largest water bodies ----
+let fountainInst = null;
+let fountainSpots = [];
+const FOUNTAIN_DROPS = 16;
+
+function setupFountains(hole) {
+    fountainInst = null;
+    fountainSpots = [];
+    // Flood-fill water into blobs, crown the two largest with a fountain
+    const seen = [];
+    for (let r = 0; r < hole.rows; r++) seen.push(new Array(hole.cols).fill(false));
+    const blobs = [];
+    for (let r = 0; r < hole.rows; r++) {
+        for (let c = 0; c < hole.cols; c++) {
+            if (hole.grid[r][c] !== T.WATER || seen[r][c]) continue;
+            const cells = [];
+            const stack = [{ c: c, r: r }];
+            seen[r][c] = true;
+            while (stack.length) {
+                const cur = stack.pop();
+                cells.push(cur);
+                const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+                for (let k = 0; k < 4; k++) {
+                    const nc = cur.c + nb[k][0], nr = cur.r + nb[k][1];
+                    if (nr >= 0 && nr < hole.rows && nc >= 0 && nc < hole.cols
+                        && hole.grid[nr][nc] === T.WATER && !seen[nr][nc]) {
+                        seen[nr][nc] = true;
+                        stack.push({ c: nc, r: nr });
+                    }
+                }
+            }
+            blobs.push(cells);
+        }
+    }
+    blobs.sort((a, b) => b.length - a.length);
+    for (const cells of blobs.slice(0, 2)) {
+        if (cells.length < 16) continue;
+        let sc = 0, sr = 0;
+        for (const p of cells) { sc += p.c; sr += p.r; }
+        const cc = sc / cells.length, cr = sr / cells.length;
+        let best = cells[0], bd = Infinity;
+        for (const p of cells) {
+            const d = (p.c - cc) * (p.c - cc) + (p.r - cr) * (p.r - cr);
+            if (d < bd) { bd = d; best = p; }
+        }
+        fountainSpots.push({ x: (best.c + 0.5) * CELL, z: (best.r + 0.5) * CELL });
+    }
+    if (!fountainSpots.length) return;
+    const geo = new THREE.SphereGeometry(2.0, 6, 5);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xdff4fb, transparent: true, opacity: 0.85 });
+    mat.toneMapped = false;
+    fountainInst = new THREE.InstancedMesh(geo, mat, fountainSpots.length * FOUNTAIN_DROPS);
+    fountainInst.renderOrder = 3;
+    terrainGroup.add(fountainInst);
+}
+
+function updateFountains3D() {
+    if (!fountainInst) return;
+    const dummy = new THREE.Object3D();
+    const t = windClock.value;
+    let idx = 0;
+    for (let f = 0; f < fountainSpots.length; f++) {
+        const spot = fountainSpots[f];
+        for (let i = 0; i < FOUNTAIN_DROPS; i++) {
+            // Each droplet loops its own arc: up out of the pond, outward, back in
+            const ci = (t * 0.55 + i / FOUNTAIN_DROPS + f * 0.5) % 1;
+            const ang = i * 2.4 + f;
+            const rad = 1 + ci * 7;
+            const h = -1.4 + Math.sin(Math.PI * ci) * (20 + (i % 3) * 6);
+            dummy.position.set(spot.x + Math.cos(ang) * rad, h, spot.z + Math.sin(ang) * rad);
+            const sc = 1.15 - ci * 0.5;
+            dummy.scale.set(sc, sc * (1.3 - Math.sin(Math.PI * ci) * 0.4), sc);
+            dummy.updateMatrix();
+            fountainInst.setMatrixAt(idx++, dummy.matrix);
+        }
+    }
+    fountainInst.instanceMatrix.needsUpdate = true;
 }
 
 // ---- Hover bots — groundskeeper drones skimming the fairways ----
