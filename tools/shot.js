@@ -7,6 +7,8 @@ const REPO = require('path').resolve(__dirname, '..');
 const OUT = process.argv[2] || 'shot.png';
 const STATE = process.argv[3] || 'overworld';
 const DIST = parseInt(process.argv[4] || '2000', 10);
+const PC = parseFloat(process.argv[5] || '36');
+const PR = parseFloat(process.argv[6] || '40');
 
 (async () => {
     // Static server for the repo
@@ -66,7 +68,7 @@ const DIST = parseInt(process.argv[4] || '2000', 10);
         }));
         console.log('diag:', JSON.stringify(diag));
 
-        await page.evaluate((d) => { window.__SHOT_DIST = d; }, DIST);
+        await page.evaluate((a) => { window.__SHOT_DIST = a.d; window.__SHOT_PC = a.pc; window.__SHOT_PR = a.pr; }, { d: DIST, pc: PC, pr: PR });
         if (STATE === 'overworld') {
             // Build a representative demo resort, then enter it
             await page.evaluate(() => {
@@ -105,7 +107,7 @@ const DIST = parseInt(process.argv[4] || '2000', 10);
                 refreshWorldHeights();
                 enterOverworld();
                 // Frame the demo area nicely
-                setCameraOrbit(36 * CELL, 40 * CELL, window.__SHOT_DIST || 2000, Math.PI / 180 * 52, 0.35);
+                setCameraOrbit((window.__SHOT_PC || 36) * CELL, (window.__SHOT_PR || 40) * CELL, window.__SHOT_DIST || 2000, Math.PI / 180 * 52, 0.35);
             });
             await page.waitForTimeout(1200);
         }

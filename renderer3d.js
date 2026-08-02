@@ -409,7 +409,23 @@ const ASSET_SPECIES = {
     rockL: ['rock_largeA', 'rock_largeB', 'stone_largeA'],
     rockS: ['rock_smallA', 'rock_smallB', 'rock_smallE'],
     tuft:  ['grass', 'grass_large', 'grass_leafs'],
-    flag:  ['flag-red']
+    flag:  ['flag-red'],
+    prop:  ['bench', 'trash', 'flowers', 'park-entrance', 'stall-food',
+            'stall-drinks', 'station-fence'],
+    hero:  ['clubhouse', 'golfcart']
+};
+// Non-Kenney asset locations
+const ASSET_PATH_NAME = {
+    'clubhouse': 'assets/meshy/clubhouse.glb',
+    'golfcart': 'assets/meshy/golfcart.glb'
+};
+// Per-model height overrides (props vary too much for one species target)
+// Sized to the world's stylized chunky proportions (realistic scale reads
+// ant-like next to 3-cell trees)
+const ASSET_TARGET_H_NAME = {
+    'bench': 22, 'trash': 18, 'flowers': 10, 'park-entrance': 92,
+    'stall-food': 62, 'stall-drinks': 62, 'station-fence': 18,
+    'clubhouse': 148, 'golfcart': 34
 };
 // Target world heights per species (CELL = 32; a good tree spans ~2 cells)
 const ASSET_TARGET_H = {
@@ -430,6 +446,7 @@ function loadWorldAssets() {
     const loaded = {};
     let remaining = names.length;
     const targetOf = (name) => {
+        if (ASSET_TARGET_H_NAME[name]) return ASSET_TARGET_H_NAME[name];
         for (const k in ASSET_SPECIES) if (ASSET_SPECIES[k].includes(name)) return ASSET_TARGET_H[k];
         return 40;
     };
@@ -439,7 +456,7 @@ function loadWorldAssets() {
     };
     for (const name of names) {
         const species = speciesOf(name);
-        loader.load((window.ASSET_BASE || '') + 'assets/kenney/' + name + '.glb', (gltf) => {
+        loader.load((window.ASSET_BASE || '') + (ASSET_PATH_NAME[name] || ('assets/kenney/' + name + '.glb')), (gltf) => {
             const parts = [];
             gltf.scene.updateMatrixWorld(true);
             gltf.scene.traverse((node) => {
@@ -460,11 +477,19 @@ function loadWorldAssets() {
                     }
                 }
             });
-            // Normalize scale from bounding box height
+            // Normalize scale from bounding box height, and rebase the
+            // geometry so x/z center and the BASE sit at the origin —
+            // generated (Meshy) models arrive origin-centered and would
+            // otherwise sink half-underground
             const box = new THREE.Box3();
             for (const p of parts) {
                 p.geometry.computeBoundingBox();
                 box.union(p.geometry.boundingBox);
+            }
+            const ctr = new THREE.Vector3();
+            box.getCenter(ctr);
+            for (const p of parts) {
+                p.geometry.translate(-ctr.x, -box.min.y, -ctr.z);
             }
             const h = Math.max(0.001, box.max.y - box.min.y);
             loaded[name] = { parts, scale: targetOf(name) / h };
@@ -487,6 +512,8 @@ function prepMat(mat, species) {
     const m = mat.clone();
     m.metalness = 0;
     m.roughness = 0.9;
+    // Coaster/City kit models use a shared palette texture — leave it alone
+    if (m.map) return m;
     const n = (m.name || '').toLowerCase();
     let tint = null;
     if (/leaf/.test(n)) {
@@ -1352,6 +1379,50 @@ function buildTerrain3D(hole, opts) {
         }
         dummy.scale.set(1, 1, 1);
         dummy.rotation.set(0, 0, 0);
+    }
+
+        // ---- Entrance plaza dressing (props once assets are loaded) ----
+    if (worldAssets && hole.border != null) {
+        const ec = Math.floor(hole.cols / 2);
+        const er = hole.rows - hole.border;
+        const hAt = (c, r) => (hole.heights && hole.heights[Math.round(r)])
+            ? (hole.heights[Math.round(r)][Math.round(c)] || 0) : 0;
+        const put = (name, c, r, yaw, scaleMul) => {
+            const model = worldAssets[name];
+            if (!model) return;
+            const grp = new THREE.Group();
+            for (const part of model.parts) {
+                const mesh = new THREE.Mesh(part.geometry, part.material);
+                mesh.castShadow = true;
+                grp.add(mesh);
+            }
+            const s = model.scale * (scaleMul || 1);
+            grp.scale.set(s, s, s);
+            grp.position.set(c * CELL, hAt(c, r), r * CELL);
+            grp.rotation.y = yaw || 0;
+            terrainGroup.add(grp);
+        };
+        // Gate arch over the walkway just inside the boundary
+        put('park-entrance', ec + 0.5, er - 1.2, 0, 1);
+        // The clubhouse — resort landmark beside the entrance walk
+        put('clubhouse', ec - 8.5, er - 7.5, Math.PI / 2);
+        // A cart parked off the path
+        put('golfcart', ec + 4.2, er - 14.6, -Math.PI / 3);
+        // Benches + trash along the entry path
+        put('bench', ec - 2.1, er - 5, Math.PI / 2);
+        put('bench', ec + 2.6, er - 7.5, -Math.PI / 2);
+        put('trash', ec - 2.1, er - 6.2, 0);
+        // Refreshment stalls forming a small plaza
+        put('stall-food', ec - 4.4, er - 10.5, Math.PI / 2);
+        put('stall-drinks', ec + 4.9, er - 11.5, -Math.PI / 2);
+        // Flower planters + fence run flanking the walkway mouth
+        put('flowers', ec - 2.2, er - 3.2, 0);
+        put('flowers', ec + 2.7, er - 3.6, 0);
+        put('flowers', ec + 2.7, er - 10.2, 0);
+        for (let i = 0; i < 4; i++) {
+            put('station-fence', ec - 2.6, er - 4.5 - i * 1.6, Math.PI / 2, 1.2);
+            put('station-fence', ec + 3.1, er - 4.9 - i * 1.6, Math.PI / 2, 1.2);
+        }
     }
 
     // ---- Boulders: sparse grey rocks on rough (reference-style scenery) ----
