@@ -76,10 +76,23 @@ On every `touchmove`:
   current yaw each step, so pan + twist compose correctly)
 - **Pitch is never touched by gestures** — buttons only
 
-This avoids three classes of bugs:
+**Intent gates:** zoom, rotate, and pan each engage only after crossing a
+threshold (7% distance change / ~6° twist / 12px midpoint travel) and are
+rebased at the engage moment — so micro-twist while zooming doesn't rotate,
+micro-scale while panning doesn't zoom, and nothing snaps when a gate opens.
+
+**Gesture handoff:** the engine calls `onPinchStart()` (game.js) the moment a
+second finger lands. That cancels every one-finger interaction (pan-scouting,
+paint stroke — banked via finishPaintStroke so undo stays per-stroke — wizard
+waypoint drag, long-press, and in gameplay: aim drag / spin / drag-back).
+When a pinch drops back to one finger, the engine re-baselines the tracked
+touch coords. Together these kill the "camera jumps after pinching" bug.
+
+This avoids four classes of bugs:
 1. **Compounding** — applying ratios every frame instead of computing from baseline
 2. **±π wraparound** — yaw delta jumping by 2π when the gesture crosses atan2 boundary
 3. **Drift** — pivot creeping during pinch gestures
+4. **Stale handoff** — leftover one-finger drag state firing after a pinch
 
 ### Single-finger pan (`overworldTouchMove`)
 

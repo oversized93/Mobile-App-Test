@@ -231,6 +231,10 @@ function getTouchAngle(e) {
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     if (e.touches.length === 2) {
+        // A second finger landed — let the game cleanly cancel any in-flight
+        // one-finger interaction (pan, paint stroke, drags). Without this,
+        // stale drag state fires after the pinch and the camera jumps.
+        if (typeof onPinchStart === 'function') onPinchStart();
         // Start pinch zoom + rotate + pan
         pinching = true;
         pinchStartDist = getTouchDist(e);
@@ -258,6 +262,14 @@ canvas.addEventListener('touchstart', (e) => {
         // user rotates past the ±π boundary mid-gesture.
         cam._pinchLastAngle = pinchStartAngle;
         cam._pinchAccumRot = 0;
+        // Intent gates: zoom/rotate/pan each engage only after crossing a
+        // threshold, then rebase so there is no snap at the engage moment.
+        // Stops micro-twist-while-zooming and micro-zoom-while-panning.
+        cam._pinchZoomEngaged = false;
+        cam._pinchRotEngaged = false;
+        cam._pinchPanEngaged = false;
+        cam._pinchZoomBase = 1;
+        cam._pinchRotBase = 0;
         return;
     }
     const t = e.touches[0];
@@ -284,29 +296,51 @@ canvas.addEventListener('touchmove', (e) => {
         if (typeof cam3dOrbitMode !== 'undefined' && cam3dOrbitMode && typeof setCameraOrbit === 'function') {
             const baseYaw = (cam._pinchOrbitYaw != null) ? cam._pinchOrbitYaw : cam3dYaw;
             const baseFov = (cam._pinchOrbitFov != null) ? cam._pinchOrbitFov : 75;
-            // Zoom is FOV-driven — camera stays put, lens narrows as fingers
-            // spread. This avoids the "camera dives down toward ground pivot"
-            // feel that comes from dolly-zoom on an orbit camera.
-            if (typeof setCameraFov === 'function') setCameraFov(baseFov / scale);
+            // Intent thresholds — tuned to Maps-like feel
+            const ZOOM_GATE = 0.07;   // 7% finger-distance change
+            const ROT_GATE = 0.10;    // ~6° of twist
+            const PAN_GATE = 12;      // px of midpoint travel
+
+            // Zoom (FOV-driven — camera stays put, lens narrows as fingers
+            // spread). Engages after the gate; rebased so there's no snap.
+            if (!cam._pinchZoomEngaged && Math.abs(Math.log(scale)) > Math.log(1 + ZOOM_GATE)) {
+                cam._pinchZoomEngaged = true;
+                cam._pinchZoomBase = scale;
+            }
+            if (cam._pinchZoomEngaged && typeof setCameraFov === 'function') {
+                setCameraFov(baseFov / (scale / cam._pinchZoomBase));
+            }
+
             // Yaw — accumulate frame-to-frame angle delta, normalizing across
             // the ±π boundary so twisting past 180° in one gesture doesn't
-            // snap back the wrong direction.
+            // snap back the wrong direction. Applies only after the gate.
             let frameRot = angle - (cam._pinchLastAngle != null ? cam._pinchLastAngle : angle);
             if (frameRot > Math.PI)  frameRot -= 2 * Math.PI;
             if (frameRot < -Math.PI) frameRot += 2 * Math.PI;
             cam._pinchAccumRot = (cam._pinchAccumRot || 0) + frameRot;
             cam._pinchLastAngle = angle;
-            setCameraOrbit(cam3dPivotX, cam3dPivotZ, cam3dDistance, cam3dPitch, baseYaw + cam._pinchAccumRot);
-            // Two-finger drag = pan — the industry-standard map gesture.
-            // (Pitch moved to the ▲▼ hold buttons; a shared gesture made it
-            // too easy to tilt while trying to move.) Applied per-frame so
-            // panning composes correctly with simultaneous twisting.
+            if (!cam._pinchRotEngaged && Math.abs(cam._pinchAccumRot) > ROT_GATE) {
+                cam._pinchRotEngaged = true;
+                cam._pinchRotBase = cam._pinchAccumRot;
+            }
+            if (cam._pinchRotEngaged) {
+                setCameraOrbit(cam3dPivotX, cam3dPivotZ, cam3dDistance, cam3dPitch,
+                               baseYaw + (cam._pinchAccumRot - cam._pinchRotBase));
+            }
+
+            // Two-finger drag = pan — engages after the gate, then applies
+            // per-frame deltas (rebased at engage → no jump), which also
+            // composes correctly with simultaneous twisting.
             const pdx = midX - pinchStartMidX;
             const pdy = midY - pinchStartMidY;
-            if (typeof panCameraOrbit === 'function') {
-                panCameraOrbit(pdx - (cam._lastPinchDx || 0), pdy - (cam._lastPinchDy || 0));
+            if (!cam._pinchPanEngaged && (pdx * pdx + pdy * pdy) > PAN_GATE * PAN_GATE) {
+                cam._pinchPanEngaged = true;
+                cam._lastPinchDx = pdx; cam._lastPinchDy = pdy;
             }
-            cam._lastPinchDx = pdx; cam._lastPinchDy = pdy;
+            if (cam._pinchPanEngaged && typeof panCameraOrbit === 'function') {
+                panCameraOrbit(pdx - (cam._lastPinchDx || 0), pdy - (cam._lastPinchDy || 0));
+                cam._lastPinchDx = pdx; cam._lastPinchDy = pdy;
+            }
             cam.targetZoom = Math.max(0.3, Math.min(8, pinchStartZoom * scale));
             cam.zoom = cam.targetZoom;
             manualZoom = true;
@@ -355,6 +389,13 @@ canvas.addEventListener('touchend', (e) => {
     if (pinching) {
         pinching = false;
         if (e.touches.length === 0) { touch.down = false; }
+        else {
+            // One finger remains — re-baseline it so any later handling
+            // starts from where the finger actually is
+            const t = e.touches[0];
+            touch.x = t.clientX; touch.y = t.clientY;
+            touch.startX = t.clientX; touch.startY = t.clientY;
+        }
         return;
     }
     touch.down = false;

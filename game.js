@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'm1f';
+const BUILD_TAG = 'm1g';
 
 // ---- Game State ----
 let state = 'menu';
@@ -3207,26 +3207,50 @@ function overworldTouchEnd() {
         return;
     }
     if (owDragPainting) {
-        owDragPainting = false;
-        owDragLastCell = null;
-        // Bank the stroke for undo
-        if (owStrokeDiff && owStrokeDiff.size) {
-            owUndoStack.push({ cells: Array.from(owStrokeDiff.values()) });
-            if (owUndoStack.length > 20) owUndoStack.shift();
-        }
-        owStrokeDiff = null;
-        if (owNeedsRebuild && scene3dReady) {
-            // Terrain-type flattening means painting reshapes elevation too
-            // (fairway smooths hills, water sits flat) — refresh heights
-            // before the mesh rebuild so the two never desync.
-            refreshWorldHeights();
-            buildTerrain3D(worldCourse, { distantScenery: false });
-            owNeedsRebuild = false;
-        }
-        saveWorldCourse();
+        finishPaintStroke();
         return;
     }
     scouting = false;
+}
+
+// Finalize the active paint stroke: bank it for undo, settle heights +
+// mesh, persist. Called from touch-end AND from the pinch-start cancel
+// (a second finger landing mid-stroke must not leave the stroke open).
+function finishPaintStroke() {
+    owDragPainting = false;
+    owDragLastCell = null;
+    if (owStrokeDiff && owStrokeDiff.size) {
+        owUndoStack.push({ cells: Array.from(owStrokeDiff.values()) });
+        if (owUndoStack.length > 20) owUndoStack.shift();
+    }
+    owStrokeDiff = null;
+    if (owNeedsRebuild && scene3dReady) {
+        // Terrain-type flattening means painting reshapes elevation too
+        // (fairway smooths hills, water sits flat) — refresh heights
+        // before the mesh rebuild so the two never desync.
+        refreshWorldHeights();
+        buildTerrain3D(worldCourse, { distantScenery: false });
+        owNeedsRebuild = false;
+    }
+    saveWorldCourse();
+}
+
+// ---- Two-finger gesture begins: cancel all one-finger interactions ----
+// Called by the engine before pinch tracking starts. Leaving any of these
+// live produced the classic "camera jumps after pinching" bug (stale
+// scoutLast coords) and open-ended paint strokes that broke undo.
+function onPinchStart() {
+    if (state === 'overworld') {
+        cancelOwLongPress();
+        if (owDragPainting) finishPaintStroke();
+        if (holeWizard) holeWizard.draggingIdx = -1;
+        scouting = false;
+    } else if (state === 'playing') {
+        scouting = false;
+        spinAdjusting = false;
+        if (draggingTarget) { draggingTarget = false; aiming = false; }
+        if (dragBackActive) { dragBackActive = false; dragBackY = 0; }
+    }
 }
 
 // ---- Gameplay Drawing ----
