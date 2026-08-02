@@ -1861,9 +1861,10 @@ function hide3D() {
 // ============================================================
 //  AMBIENT NPC WALKERS — capsule visitors wandering the paths
 // ============================================================
-let npcBodyInst = null, npcHeadInst = null;
+let npcBodyInst = null, npcHeadInst = null, npcClubInst = null;
 let npcStates = [];
 let npcPathCells = [];
+let npcWalkerCount = 0;
 const NPC_COUNT = 10;
 const NPC_COLORS = [0xe5533d, 0x3d7de5, 0xe5b13d, 0x8e44ad,
                     0x2ecc71, 0xe67e22, 0x16a085, 0xd35400];
@@ -1876,6 +1877,8 @@ function setupAmbientNPCs(hole) {
     npcStates = [];
     npcBodyInst = null;
     npcHeadInst = null;
+    npcClubInst = null;
+    setupHoverBots(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -1887,6 +1890,7 @@ function setupAmbientNPCs(hole) {
         }
     }
     const walkerCount = npcPathCells.length >= 4 ? NPC_COUNT : 0;
+    npcWalkerCount = walkerCount;
     const total = walkerCount + golfers.length;
     if (total === 0) return;
 
@@ -1921,6 +1925,15 @@ function setupAmbientNPCs(hole) {
     if (npcBodyInst.instanceColor) npcBodyInst.instanceColor.needsUpdate = true;
     terrainGroup.add(npcBodyInst);
     terrainGroup.add(npcHeadInst);
+    if (golfers.length) {
+        // Club shaft held by each stationed golfer, grip at origin so
+        // rotating the instance swings the club around the hands
+        const clubGeo = new THREE.CylinderGeometry(0.45, 0.85, 15, 5);
+        clubGeo.translate(0, -7.5, 0);
+        const clubMat = new THREE.MeshStandardMaterial({ color: linC(0xb8bfc6), roughness: 0.4 });
+        npcClubInst = new THREE.InstancedMesh(clubGeo, clubMat, golfers.length);
+        terrainGroup.add(npcClubInst);
+    }
 }
 
 // Called from the game loop each frame while the overworld is visible
@@ -1947,18 +1960,109 @@ function updateAmbientNPCs3D(dt, hole) {
             ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
         const bob = s.idle ? Math.sin(t * 2.2 + s.phase) * 0.3
                            : Math.sin(t * 9 + s.phase) * 0.7;
+        const yaw = s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
+                           : Math.atan2(dx, dz);
         dummy.position.set(s.x, gy + 7.5 + bob, s.z);
-        dummy.rotation.set(0, s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
-                              : Math.atan2(dx, dz), 0);
+        dummy.rotation.set(0, yaw, 0);
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         npcBodyInst.setMatrixAt(i, dummy.matrix);
         dummy.position.y = gy + 18.5 + bob;
         dummy.updateMatrix();
         npcHeadInst.setMatrixAt(i, dummy.matrix);
+        if (s.idle && npcClubInst) {
+            // Swing loop: long address, quick backswing, snap through, settle
+            const cyc = (t * 0.5 + s.phase) % 4;
+            let ang = 0.55;
+            if (cyc > 3.0 && cyc < 3.35) ang = 0.55 - ((cyc - 3.0) / 0.35) * 2.9;
+            else if (cyc >= 3.35 && cyc < 3.5) ang = -2.35 + ((cyc - 3.35) / 0.15) * 4.5;
+            else if (cyc >= 3.5 && cyc < 3.95) ang = 2.15 - ((cyc - 3.5) / 0.45) * 1.6;
+            dummy.position.set(s.x + Math.cos(yaw) * 4.2, gy + 12.5 + bob, s.z - Math.sin(yaw) * 4.2);
+            dummy.rotation.set(0, yaw, ang);
+            dummy.updateMatrix();
+            npcClubInst.setMatrixAt(i - npcWalkerCount, dummy.matrix);
+        }
     }
     npcBodyInst.instanceMatrix.needsUpdate = true;
     npcHeadInst.instanceMatrix.needsUpdate = true;
+    if (npcClubInst) npcClubInst.instanceMatrix.needsUpdate = true;
+    updateHoverBots3D(dt, hole);
+}
+
+// ---- Hover bots — groundskeeper drones skimming the fairways ----
+let botBodyInst = null, botGlowInst = null;
+let botStates = [], botCells = [];
+const BOT_COUNT = 4;
+
+function setupHoverBots(hole) {
+    botBodyInst = null;
+    botGlowInst = null;
+    botStates = [];
+    botCells = [];
+    for (let r = 0; r < hole.rows; r++)
+        for (let c = 0; c < hole.cols; c++)
+            if (hole.grid[r][c] === T.FAIRWAY) botCells.push({ c, r });
+    if (botCells.length < 12) return;
+    const n = Math.min(BOT_COUNT, Math.max(1, Math.floor(botCells.length / 60)));
+    const bodyGeo = new THREE.SphereGeometry(7.5, 12, 9);
+    bodyGeo.scale(1, 0.5, 1);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: linC(0xe8ecef), roughness: 0.35 });
+    botBodyInst = new THREE.InstancedMesh(bodyGeo, bodyMat, n);
+    botBodyInst.castShadow = true;
+    const glowGeo = new THREE.CircleGeometry(11.5, 16);
+    glowGeo.rotateX(-Math.PI / 2);
+    const glowMat = new THREE.MeshBasicMaterial({
+        color: 0x3adbe8, transparent: true, opacity: 0.55, depthWrite: false
+    });
+    glowMat.toneMapped = false;
+    botGlowInst = new THREE.InstancedMesh(glowGeo, glowMat, n);
+    botGlowInst.renderOrder = 3;
+    for (let i = 0; i < n; i++) {
+        const start = botCells[(i * 97) % botCells.length];
+        botStates.push({
+            x: (start.c + 0.5) * CELL, z: (start.r + 0.5) * CELL,
+            tx: (start.c + 0.5) * CELL, tz: (start.r + 0.5) * CELL,
+            phase: i * 2.1
+        });
+    }
+    terrainGroup.add(botBodyInst);
+    terrainGroup.add(botGlowInst);
+}
+
+function updateHoverBots3D(dt, hole) {
+    if (!botBodyInst || !botStates.length) return;
+    const dummy = new THREE.Object3D();
+    const t = windClock.value;
+    for (let i = 0; i < botStates.length; i++) {
+        const s = botStates[i];
+        const dx = s.tx - s.x, dz = s.tz - s.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d < 4) {
+            const next = botCells[Math.floor((t * 3 + i * 211) % botCells.length)];
+            s.tx = (next.c + 0.5) * CELL;
+            s.tz = (next.r + 0.5) * CELL;
+        } else {
+            s.x += (dx / d) * 26 * dt;
+            s.z += (dz / d) * 26 * dt;
+        }
+        const gy = (hole && hole.heights)
+            ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
+        dummy.position.set(s.x, gy + 13 + Math.sin(t * 1.8 + s.phase) * 2.2, s.z);
+        // Slow spin plus a lean into the direction of travel
+        dummy.rotation.set(d > 4 ? (dz / d) * 0.14 : 0, t * 0.9 + s.phase,
+                           d > 4 ? -(dx / d) * 0.14 : 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        botBodyInst.setMatrixAt(i, dummy.matrix);
+        const pulse = 1 + Math.sin(t * 3 + s.phase) * 0.15;
+        dummy.position.set(s.x, gy + 2.6, s.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(pulse, 1, pulse);
+        dummy.updateMatrix();
+        botGlowInst.setMatrixAt(i, dummy.matrix);
+    }
+    botBodyInst.instanceMatrix.needsUpdate = true;
+    botGlowInst.instanceMatrix.needsUpdate = true;
 }
 
 // ---- Balls flying the shot arcs — one glint per arc segment ----
