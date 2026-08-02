@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt2';
+const BUILD_TAG = 'gt3';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2732,20 +2732,17 @@ function drawPlacedHole(hole, selected) {
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(t.x, t.y, 13 + pulse * 3, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
-    // Floating badge
-    ctx.save();
-    ctx.shadowColor = accent;
-    ctx.shadowBlur = selected ? 14 : 8;
-    ctx.fillStyle = accent;
-    ctx.beginPath(); ctx.arc(t.x, t.y - 20, 12, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(t.x, t.y - 20, 12, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 13px -apple-system,sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(hole.id), t.x, t.y - 15);
+    // (Number badge moved into the 3D scene as a floating sprite; the 2D
+    // layer keeps the pulsing pad ring + selection highlight only)
+    if (selected) {
+        ctx.save();
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 16;
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(t.x, t.y, 18, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+    }
 
     // Pin marker (red flag on a pole, small glow at the cup)
     const p = screens[screens.length - 1];
@@ -4845,6 +4842,7 @@ function gameLoop(time) {
         if (state === 'overworld') {
             if (ballMesh) ballMesh.visible = false;
             if (typeof cloudsGroup !== 'undefined' && cloudsGroup) cloudsGroup.visible = false;
+            if (typeof updateAmbientNPCs3D === 'function') updateAmbientNPCs3D(dt, worldCourse);
             updateTarget3D(0, 0, false);
             // Continuous rotate/tilt while a HUD button is held
             tickOverworldCamera(dt);

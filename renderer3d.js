@@ -318,16 +318,17 @@ function init3D() {
         cloudsGroup.add(cloud);
     }
 
-    // Ground plane extending beyond the course — dark rough color, pushed way down
+    // Ocean backdrop — the resort reads as an island in the sea (reference
+    // horizon language) instead of floating over a dark void
     const groundGeo = new THREE.PlaneGeometry(20000, 20000);
     const groundMat = new THREE.MeshStandardMaterial({
-        color: linC(0x1a4020), // dark rough green, matches rough color
-        roughness: 0.95,
+        color: linC(0x1f7fb4),
+        roughness: 0.6,
         metalness: 0
     });
     const groundMesh = new THREE.Mesh(groundGeo, groundMat);
     groundMesh.rotation.x = -Math.PI / 2;
-    groundMesh.position.y = -200; // way below terrain so nothing pokes through
+    groundMesh.position.y = -2.5; // just below course level: island-in-ocean
     scene3d.add(groundMesh);
 
     // Groups
@@ -1425,6 +1426,45 @@ function buildTerrain3D(hole, opts) {
         }
     }
 
+        // ---- Floating 3D hole numbers over each tee (reference-style) ----
+    if (hole.holes && hole.holes.length) {
+        const HOLE_COLORS3D = ['#42a5f5', '#ec407a', '#ffca28', '#66bb6a',
+            '#ab47bc', '#26c6da', '#ff7043', '#9ccc65', '#5c6bc0'];
+        for (const rec of hole.holes) {
+            const cnv = document.createElement('canvas');
+            cnv.width = cnv.height = 128;
+            const g = cnv.getContext('2d');
+            const col = HOLE_COLORS3D[(rec.id - 1) % HOLE_COLORS3D.length];
+            g.shadowColor = col;
+            g.shadowBlur = 18;
+            g.fillStyle = col;
+            g.beginPath(); g.arc(64, 64, 44, 0, Math.PI * 2); g.fill();
+            g.shadowBlur = 0;
+            g.strokeStyle = 'rgba(255,255,255,0.95)';
+            g.lineWidth = 6;
+            g.beginPath(); g.arc(64, 64, 44, 0, Math.PI * 2); g.stroke();
+            g.fillStyle = '#fff';
+            g.font = 'bold 56px -apple-system,Arial,sans-serif';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText(String(rec.id), 64, 68);
+            const tex = new THREE.CanvasTexture(cnv);
+            const sprMat = new THREE.SpriteMaterial({
+                map: tex, transparent: true, depthTest: true
+            });
+            sprMat.toneMapped = false; // full-saturation badge, no ACES wash
+            const spr = new THREE.Sprite(sprMat);
+            const th = (hole.heights && hole.heights[rec.tee.y])
+                ? (hole.heights[rec.tee.y][rec.tee.x] || 0) : 0;
+            spr.position.set((rec.tee.x + 0.5) * CELL, th + 58, (rec.tee.y + 0.5) * CELL);
+            spr.scale.set(42, 42, 1);
+            terrainGroup.add(spr);
+        }
+    }
+
+        // ---- Ambient visitors: little walkers on the paths bring life ----
+    setupAmbientNPCs(hole);
+
     // ---- Boulders: sparse grey rocks on rough (reference-style scenery) ----
     {
         const rockCells = [];
@@ -1747,4 +1787,81 @@ function show3D() {
 
 function hide3D() {
     if (threeCanvas) threeCanvas.style.display = 'none';
+}
+
+// ============================================================
+//  AMBIENT NPC WALKERS — capsule visitors wandering the paths
+// ============================================================
+let npcBodyInst = null, npcHeadInst = null;
+let npcStates = [];
+let npcPathCells = [];
+const NPC_COUNT = 10;
+const NPC_COLORS = [0xe5533d, 0x3d7de5, 0xe5b13d, 0x8e44ad,
+                    0x2ecc71, 0xe67e22, 0x16a085, 0xd35400];
+
+function setupAmbientNPCs(hole) {
+    npcPathCells = [];
+    for (let r = 0; r < hole.rows; r++)
+        for (let c = 0; c < hole.cols; c++)
+            if (hole.grid[r][c] === T.PATH) npcPathCells.push({ c, r });
+    npcStates = [];
+    npcBodyInst = null;
+    npcHeadInst = null;
+    if (npcPathCells.length < 4) return;
+
+    const bodyGeo = new THREE.CylinderGeometry(3.4, 4.2, 15, 8);
+    const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+    npcBodyInst = new THREE.InstancedMesh(bodyGeo, bodyMat, NPC_COUNT);
+    const headGeo = new THREE.SphereGeometry(3.8, 8, 6);
+    const headMat = new THREE.MeshStandardMaterial({ color: linC(0xf0c8a0), roughness: 0.85 });
+    npcHeadInst = new THREE.InstancedMesh(headGeo, headMat, NPC_COUNT);
+    npcBodyInst.castShadow = true;
+    for (let i = 0; i < NPC_COUNT; i++) {
+        const start = npcPathCells[(i * 37) % npcPathCells.length];
+        npcStates.push({
+            x: (start.c + 0.5) * CELL, z: (start.r + 0.5) * CELL,
+            tx: (start.c + 0.5) * CELL, tz: (start.r + 0.5) * CELL,
+            speed: 11 + (i % 4) * 2.5, phase: i * 1.7
+        });
+        if (npcBodyInst.setColorAt) {
+            npcBodyInst.setColorAt(i, new THREE.Color(NPC_COLORS[i % NPC_COLORS.length]).convertSRGBToLinear());
+        }
+    }
+    if (npcBodyInst.instanceColor) npcBodyInst.instanceColor.needsUpdate = true;
+    terrainGroup.add(npcBodyInst);
+    terrainGroup.add(npcHeadInst);
+}
+
+// Called from the game loop each frame while the overworld is visible
+function updateAmbientNPCs3D(dt, hole) {
+    if (!npcBodyInst || !npcStates.length) return;
+    const dummy = new THREE.Object3D();
+    const t = windClock.value;
+    for (let i = 0; i < npcStates.length; i++) {
+        const s = npcStates[i];
+        const dx = s.tx - s.x, dz = s.tz - s.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d < 3) {
+            // Pick a new stroll target on the path network
+            const next = npcPathCells[Math.floor((t * 7 + i * 131) % npcPathCells.length)];
+            s.tx = (next.c + 0.5) * CELL;
+            s.tz = (next.r + 0.5) * CELL;
+        } else {
+            s.x += (dx / d) * s.speed * dt;
+            s.z += (dz / d) * s.speed * dt;
+        }
+        const gy = (hole && hole.heights)
+            ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
+        const bob = Math.sin(t * 9 + s.phase) * 0.7;
+        dummy.position.set(s.x, gy + 7.5 + bob, s.z);
+        dummy.rotation.set(0, Math.atan2(dx, dz), 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        npcBodyInst.setMatrixAt(i, dummy.matrix);
+        dummy.position.y = gy + 18.5 + bob;
+        dummy.updateMatrix();
+        npcHeadInst.setMatrixAt(i, dummy.matrix);
+    }
+    npcBodyInst.instanceMatrix.needsUpdate = true;
+    npcHeadInst.instanceMatrix.needsUpdate = true;
 }
