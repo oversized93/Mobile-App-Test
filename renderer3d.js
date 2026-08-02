@@ -286,7 +286,10 @@ function init3D() {
     skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyColors, 3));
     const skyMat = new THREE.MeshBasicMaterial({
         vertexColors: true,
-        side: THREE.BackSide
+        side: THREE.BackSide,
+        // The dome sits at ~13000 units — beyond the fog far distance —
+        // so with fog on it renders as a flat fog-colored wall
+        fog: false
     });
     scene3d.add(new THREE.Mesh(skyGeo, skyMat));
 
@@ -1463,6 +1466,7 @@ function buildTerrain3D(hole, opts) {
 
         // ---- Teal shot-arc trails over each hole (signature reference look) ----
     arcCurves = [];
+    pinRings = [];
     if (hole.holes && hole.holes.length) {
         const arcMat = new THREE.MeshBasicMaterial({
             color: new THREE.Color('#3adbe8'),
@@ -1493,6 +1497,22 @@ function buildTerrain3D(hole, opts) {
             }
         }
         setupArcBalls();
+        // Pulsing beacon ring around every pin
+        for (const rec of hole.holes) {
+            const ringGeo = new THREE.RingGeometry(5.5, 8.5, 20);
+            ringGeo.rotateX(-Math.PI / 2);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0x3adbe8, transparent: true, opacity: 0.7,
+                depthWrite: false, side: THREE.DoubleSide
+            });
+            ringMat.toneMapped = false;
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.position.set((rec.pin.x + 0.5) * CELL, hAt2(rec.pin) + 0.9,
+                              (rec.pin.y + 0.5) * CELL);
+            ring.renderOrder = 3;
+            terrainGroup.add(ring);
+            pinRings.push(ring);
+        }
     }
 
     // ---- Floating 3D hole numbers over each tee (reference-style) ----
@@ -1941,6 +1961,7 @@ function setupAmbientNPCs(hole) {
 function updateAmbientNPCs3D(dt, hole) {
     updateHoverBots3D(dt, hole);
     updateFountains3D();
+    updatePinRings3D();
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = new THREE.Object3D();
     const t = windClock.value;
@@ -2149,6 +2170,18 @@ function updateHoverBots3D(dt, hole) {
 // ---- Balls flying the shot arcs — one glint per arc segment ----
 let arcCurves = [];
 let arcBallInst = null;
+let pinRings = [];
+
+function updatePinRings3D() {
+    if (!pinRings.length) return;
+    const t = windClock.value;
+    for (let i = 0; i < pinRings.length; i++) {
+        const ring = pinRings[i];
+        const p = 1 + Math.sin(t * 2.4 + i) * 0.18;
+        ring.scale.set(p, 1, p);
+        ring.material.opacity = 0.5 + Math.sin(t * 2.4 + i) * 0.25;
+    }
+}
 
 function setupArcBalls() {
     arcBallInst = null;
