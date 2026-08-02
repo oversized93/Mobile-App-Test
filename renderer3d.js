@@ -75,9 +75,32 @@ const CAM3D_DIST_MAX = 10000;
 // dives down toward the ground pivot." Dolly-distance only changes via
 // the reset button.
 const CAM3D_FOV_DEFAULT = 75;
-const CAM3D_FOV_MIN = 22;  // most zoomed-in
+const CAM3D_FOV_MIN = 14;  // most zoomed-in (lens stage)
 const CAM3D_FOV_MAX = 85;  // most zoomed-out
 let cam3dFov = CAM3D_FOV_DEFAULT;
+
+// Hybrid zoom: one absolute zoom value drives the lens until FOV_MIN,
+// then keeps going by dollying the orbit distance in. Gives "inspect a
+// single bunker" range without the ground-dive feel at normal zooms.
+let cam3dZoom = 1;
+const CAM3D_DIST_DEFAULT = 2600;
+const CAM3D_DOLLY_MIN = 420;
+const CAM3D_ZOOM_MIN = CAM3D_FOV_DEFAULT / CAM3D_FOV_MAX;
+const CAM3D_ZOOM_MAX = (CAM3D_FOV_DEFAULT / CAM3D_FOV_MIN) * (CAM3D_DIST_DEFAULT / CAM3D_DOLLY_MIN);
+
+function setCameraZoomAbs(z) {
+    cam3dZoom = Math.max(CAM3D_ZOOM_MIN, Math.min(CAM3D_ZOOM_MAX, z));
+    const fovWanted = CAM3D_FOV_DEFAULT / cam3dZoom;
+    if (fovWanted >= CAM3D_FOV_MIN) {
+        setCameraFov(fovWanted);
+        cam3dDistance = CAM3D_DIST_DEFAULT;
+    } else {
+        setCameraFov(CAM3D_FOV_MIN);
+        cam3dDistance = Math.max(CAM3D_DOLLY_MIN,
+            CAM3D_DIST_DEFAULT * (fovWanted / CAM3D_FOV_MIN));
+    }
+    applyOrbitCamera();
+}
 
 function applyOrbitCamera() {
     const d = cam3dDistance;
@@ -159,6 +182,8 @@ function setCameraFov(fov) {
 // Restore the default FOV — called when leaving overworld so gameplay
 // cameras get their expected field of view back.
 function resetCameraFov() {
+    cam3dZoom = 1;
+    cam3dDistance = CAM3D_DIST_DEFAULT;
     setCameraFov(CAM3D_FOV_DEFAULT);
 }
 
@@ -383,12 +408,13 @@ const ASSET_SPECIES = {
     flower:['flower_redA', 'flower_yellowA', 'flower_purpleA'],
     rockL: ['rock_largeA', 'rock_largeB', 'stone_largeA'],
     rockS: ['rock_smallA', 'rock_smallB', 'rock_smallE'],
+    tuft:  ['grass', 'grass_large', 'grass_leafs'],
     flag:  ['flag-red']
 };
 // Target world heights per species (CELL = 32; a good tree spans ~2 cells)
 const ASSET_TARGET_H = {
     pine: 118, leafy: 96, fall: 96, palm: 104,
-    bush: 26, flower: 15, rockL: 30, rockS: 13, flag: 46
+    bush: 26, flower: 15, rockL: 30, rockS: 13, tuft: 11, flag: 46
 };
 
 // name -> { parts: [{geometry, material}], scale } once loaded
@@ -469,8 +495,10 @@ function prepMat(mat, species) {
         tint = '#6f4a2a';
     } else if (/dirt|stone|rock|_defaultmat/.test(n) && (species === 'rockL' || species === 'rockS')) {
         tint = '#8f8678';                              // rocks: grey, not tan
+    } else if (/grass|leafs/.test(n) && species === 'tuft') {
+        tint = '#3f9a4a';                              // tufts pop slightly above rough
     } else if (/grass/.test(n)) {
-        tint = '#4b8f44';                              // ground tufts match rough
+        tint = '#4b8f44';                              // rock-top grass matches rough
     }
     if (tint) m.color.set(tint).convertSRGBToLinear();
     return m;
@@ -533,7 +561,7 @@ function placeAssetInstances(hole, cells, speciesKey, opts) {
 // ALBEDO_PX per cell: chamfered region edges, boundary outlines, mow
 // stripes, green fringe, sand speckle, water shore. Vertex colors are
 // shading-only on top (slope soil, canopy shade, water depth).
-const ALBEDO_PX = 12;
+const ALBEDO_PX = 18;
 let albedoCanvas = null, albedoCtx = null, albedoTexture = null;
 let albedoHoleRef = null;
 
@@ -638,9 +666,41 @@ function paintAlbedoCell(hole, c, r) {
     if (e !== t && (PRI[t] || 0) >= (PRI[e] || 0)) g.fillRect(x + px - lw, y, lw, px);
 
     // Per-terrain detail
+    // Grass blades: short angled dashes on every grassy surface — THE thing
+    // that makes ground read as turf instead of flat paint up close
+    if (t === T.ROUGH || t === T.GRASS || t === T.TREE || t === T.FAIRWAY
+        || t === T.GREEN || t === T.TEE || t === T.OOB) {
+        const dense = (t === T.GREEN || t === T.TEE) ? 2 : 4;
+        const dark = shadeHex(albedoCellColor(hole, c, r), -0.18);
+        const lite = shadeHex(albedoCellColor(hole, c, r), 0.14);
+        for (let i = 0; i < dense; i++) {
+            const h1 = ((c * 928371 + r * 123457 + i * 7919) >>> 0);
+            const bx = x + (h1 % (px - 4)) + 1;
+            const by = y + ((h1 >> 4) % (px - 5)) + 1;
+            const len = 2 + (h1 >> 7) % 3;
+            const lean = ((h1 >> 9) % 3) - 1;
+            g.strokeStyle = (h1 % 3 === 0) ? lite : dark;
+            g.lineWidth = 1;
+            g.beginPath();
+            g.moveTo(bx, by + len);
+            g.lineTo(bx + lean, by);
+            g.stroke();
+        }
+    }
+    if (t === T.PATH) {
+        // Stepping-stone ovals + pebble dots
+        const h1 = ((c * 4241) ^ (r * 7013)) >>> 0;
+        g.fillStyle = shadeHex(albedoCellColor(hole, c, r), 0.13);
+        g.beginPath();
+        g.ellipse(x + px / 2 + (h1 % 5) - 2, y + px / 2 + ((h1 >> 3) % 5) - 2,
+                  px * 0.30, px * 0.22, ((h1 >> 5) % 6) * 0.5, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = shadeHex(albedoCellColor(hole, c, r), -0.2);
+        g.fillRect(x + (h1 % (px - 3)), y + ((h1 >> 6) % (px - 3)), 2, 2);
+    }
     if (t === T.SAND) {
-        g.fillStyle = 'rgba(160,130,70,0.35)';
-        for (let i = 0; i < 3; i++) {
+        g.fillStyle = 'rgba(120,95,50,0.4)';
+        for (let i = 0; i < 6; i++) {
             const hx = ((c * 73 + r * 41 + i * 29) % 10) / 10;
             const hy = ((c * 37 + r * 97 + i * 53) % 10) / 10;
             g.fillRect(x + hx * (px - 2), y + hy * (px - 2), 1.6, 1.6);
@@ -850,6 +910,15 @@ function buildTerrain3D(hole, opts) {
     // Translate so cell (0,0) starts at world origin
     terrainGeo.translate(holeW / 2, 0, holeH / 2);
 
+    // uv2 drives the tiling micro-noise aoMap (~1 tile per 2 cells)
+    const uvAttr = terrainGeo.getAttribute('uv');
+    const uv2 = new Float32Array(uvAttr.count * 2);
+    for (let i = 0; i < uvAttr.count; i++) {
+        uv2[i * 2] = uvAttr.getX(i) * hole.cols / 2;
+        uv2[i * 2 + 1] = uvAttr.getY(i) * hole.rows / 2;
+    }
+    terrainGeo.setAttribute('uv2', new THREE.BufferAttribute(uv2, 2));
+
     const posAttr = terrainGeo.getAttribute('position');
     const colors = new Float32Array(posAttr.count * 3);
     const vertCols = hole.cols + 1;
@@ -871,6 +940,8 @@ function buildTerrain3D(hole, opts) {
     const terrainMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
         map: buildTerrainAlbedo(hole),
+        aoMap: makeGrassTexture(),      // tiling micro-noise via uv2
+        aoMapIntensity: 0.55,
         roughness: 0.95,
         metalness: 0,
         flatShading: false
@@ -912,13 +983,20 @@ function buildTerrain3D(hole, opts) {
         placeAssetInstances(hole, fall, 'fall');
         placeAssetInstances(hole, bushCells, 'bush');
         placeAssetInstances(hole, palmCells, 'palm');
-        // Flower sprinkles on open rough near fairways
-        const flowerCells = [];
-        for (let r = 1; r < hole.rows - 1; r++)
-            for (let c = 1; c < hole.cols - 1; c++)
-                if (hole.grid[r][c] === T.ROUGH && (c * 31 + r * 47) % 89 === 0)
-                    flowerCells.push({ c, r });
+        // Ground cover: flower sprinkles + grass tufts fill the rough so
+        // close zoom never reads as empty flat color
+        const flowerCells = [], tuftCells = [];
+        for (let r = 1; r < hole.rows - 1; r++) {
+            for (let c = 1; c < hole.cols - 1; c++) {
+                const t = hole.grid[r][c];
+                if (t !== T.ROUGH && t !== T.GRASS) continue;
+                const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
+                if (h % 89 === 0) flowerCells.push({ c, r });
+                else if (h % 9 === 0) tuftCells.push({ c, r });
+            }
+        }
         placeAssetInstances(hole, flowerCells, 'flower');
+        placeAssetInstances(hole, tuftCells, 'tuft');
     } else if (treeCells.length > 0) {
         // Species + palette mix (reference look): conifers and oaks in
         // several green/autumn shades, palms near sand and water.

@@ -297,6 +297,7 @@ canvas.addEventListener('touchstart', (e) => {
             cam._pinchOrbitPivotX = cam3dPivotX;
             cam._pinchOrbitPivotZ = cam3dPivotZ;
             cam._pinchOrbitFov   = (typeof cam3dFov !== 'undefined') ? cam3dFov : 75;
+            cam._pinchOrbitZoomAbs = (typeof cam3dZoom !== 'undefined') ? cam3dZoom : 1;
         }
         cam._lastPinchDx = 0; cam._lastPinchDy = 0;
         cam._lastPinchRot = 0;
@@ -353,8 +354,14 @@ canvas.addEventListener('touchmove', (e) => {
                 cam._pinchZoomEngaged = true;
                 cam._pinchZoomBase = scale;
             }
-            if (cam._pinchZoomEngaged && typeof setCameraFov === 'function') {
-                setCameraFov(baseFov / (scale / cam._pinchZoomBase));
+            if (cam._pinchZoomEngaged) {
+                const baseZoomAbs = (cam._pinchOrbitZoomAbs != null) ? cam._pinchOrbitZoomAbs : 1;
+                if (typeof setCameraZoomAbs === 'function') {
+                    // Hybrid zoom: lens first, then dolly — much deeper range
+                    setCameraZoomAbs(baseZoomAbs * (scale / cam._pinchZoomBase));
+                } else if (typeof setCameraFov === 'function') {
+                    setCameraFov(baseFov / (scale / cam._pinchZoomBase));
+                }
             }
 
             // Yaw — accumulate frame-to-frame angle delta, normalizing across
