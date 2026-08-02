@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'g2a';
+const BUILD_TAG = 'g2b';
 
 // ---- Game State ----
 let state = 'menu';

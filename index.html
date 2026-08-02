@@ -37,6 +37,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a472a;touch-action
   0%,100%{transform:rotate(0deg)}
   50%{transform:rotate(90deg)}
 }
+#rotate-overlay .tips{margin-top:14px;font-size:12px;opacity:.55;max-width:300px;line-height:1.5}
+#rotate-overlay button{
+  margin-top:18px;padding:10px 22px;border:0;border-radius:22px;
+  background:rgba(255,255,255,.15);color:#fff;font-size:14px;font-weight:600;
+}
 </style>
 </head>
 <body>
@@ -48,6 +53,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a472a;touch-action
   <div class="icon">&#x1F4F1;</div>
   <h1>Please rotate your device</h1>
   <p>Golf Tycoon is designed for landscape. Turn your phone sideways to start playing.</p>
+  <p class="tips">Nothing happening? Check that orientation lock is off
+  (Control Center), and open this page in Safari &mdash; in-app browsers
+  often can't rotate.</p>
+  <button id="rotate-continue">Continue anyway</button>
 </div>
 <script>
   // Best-effort orientation lock — browsers ignore this unless fullscreen,
@@ -55,13 +64,22 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1a472a;touch-action
   if (screen.orientation && screen.orientation.lock) {
     screen.orientation.lock('landscape').catch(() => {});
   }
+  // Escape hatch: orientation-locked devices and in-app browsers can never
+  // reach landscape, so the overlay must be dismissible. Inline style wins
+  // over the CSS media query.
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('rotate-continue');
+    if (btn) btn.addEventListener('click', () => {
+      document.getElementById('rotate-overlay').style.display = 'none';
+    });
+  });
 </script>
-<script src="lib/three.min.js?v=g2a"></script>
-<script src="lib/GLTFLoader.js?v=g2a"></script>
-<script src="engine.js?v=g2a"></script>
-<script src="courses.js?v=g2a"></script>
-<script src="builder.js?v=g2a"></script>
-<script src="renderer3d.js?v=g2a"></script>
-<script src="game.js?v=g2a"></script>
+<script src="lib/three.min.js?v=g2b"></script>
+<script src="lib/GLTFLoader.js?v=g2b"></script>
+<script src="engine.js?v=g2b"></script>
+<script src="courses.js?v=g2b"></script>
+<script src="builder.js?v=g2b"></script>
+<script src="renderer3d.js?v=g2b"></script>
+<script src="game.js?v=g2b"></script>
 </body>
 </html>
