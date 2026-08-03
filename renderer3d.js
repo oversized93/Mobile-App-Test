@@ -1971,6 +1971,10 @@ function hide3D() {
 // ============================================================
 //  AMBIENT NPC WALKERS — capsule visitors wandering the paths
 // ============================================================
+// Shared scratch object for every per-frame instance-matrix update —
+// allocating Object3Ds each frame churns GC on mobile. Every user must
+// set position/rotation/scale before updateMatrix (no field survives).
+const sharedDummy3D = new THREE.Object3D();
 let npcBodyInst = null, npcHeadInst = null, npcClubInst = null;
 let npcStates = [];
 let npcPathCells = [];
@@ -2060,7 +2064,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateCritters3D(hole);
     updateFireflies3D(hole);
     if (!npcBodyInst || !npcStates.length) return;
-    const dummy = new THREE.Object3D();
+    const dummy = sharedDummy3D;
     const t = windClock.value;
     for (let i = 0; i < npcStates.length; i++) {
         const s = npcStates[i];
@@ -2205,7 +2209,7 @@ function updateFireflies3D(hole) {
     if (!fireflyInst || !fireflyStates.length) return;
     if (fireflyMatRef && fireflyMatRef.opacity <= 0.01) return; // daytime: skip
     const t = windClock.value;
-    const dummy = new THREE.Object3D();
+    const dummy = sharedDummy3D;
     for (let i = 0; i < fireflyStates.length; i++) {
         const s = fireflyStates[i];
         const a = t * 0.55 + s.phase;
@@ -2251,7 +2255,7 @@ function setupPathLamps(hole) {
     headMat.toneMapped = false;
     lampHeadMatRef = headMat;
     const headInst = new THREE.InstancedMesh(headGeo, headMat, spots.length);
-    const dummy = new THREE.Object3D();
+    const dummy = sharedDummy3D;
     for (let i = 0; i < spots.length; i++) {
         const sp = spots[i];
         // Offset toward a cell corner so posts hug the walkway edge
@@ -2275,6 +2279,7 @@ function setupPathLamps(hole) {
 // Never goes truly dark: night floors keep the resort readable, the cycle
 // reads through warm dawns/dusks, sweeping shadows, and a dimmed sky.
 let hemiLightRef = null, dirLightRef = null, skyMatRef = null, oceanMatRef = null;
+const OCEAN_BASE_COLOR = new THREE.Color(0x1f7fb4).convertSRGBToLinear();
 
 function updateDayNightTint(minutes) {
     if (!dirLightRef || !hemiLightRef) return;
@@ -2301,7 +2306,7 @@ function updateDayNightTint(minutes) {
     // the authored vertex/base colors)
     const dim = 0.34 + 0.66 * dayW;
     if (skyMatRef) skyMatRef.color.setRGB(dim * 0.8, dim * 0.88, dim);
-    if (oceanMatRef) oceanMatRef.color.copy(linC(0x1f7fb4)).multiplyScalar(0.35 + 0.65 * dayW);
+    if (oceanMatRef) oceanMatRef.color.copy(OCEAN_BASE_COLOR).multiplyScalar(0.35 + 0.65 * dayW);
     // Lamp globes: dull stone by day, warm glow after dark
     if (lampHeadMatRef) {
         const nw = 1 - dayW;
@@ -2374,7 +2379,7 @@ function setupCritters(hole) {
 
 function updateCritters3D(hole) {
     const t = windClock.value;
-    const dummy = new THREE.Object3D();
+    const dummy = sharedDummy3D;
     if (bflyInst && bflyStates.length) {
         for (let i = 0; i < bflyStates.length; i++) {
             const s = bflyStates[i];
@@ -2477,7 +2482,7 @@ function updateCartDrive3D(dt, hole) {
 
 function updateFountains3D() {
     if (!fountainInst) return;
-    const dummy = new THREE.Object3D();
+    const dummy = sharedDummy3D;
     const t = windClock.value;
     let idx = 0;
     for (let f = 0; f < fountainSpots.length; f++) {
@@ -2540,7 +2545,7 @@ function setupHoverBots(hole) {
 
 function updateHoverBots3D(dt, hole) {
     if (!botBodyInst || !botStates.length) return;
-    const dummy = new THREE.Object3D();
+    const dummy = sharedDummy3D;
     const t = windClock.value;
     for (let i = 0; i < botStates.length; i++) {
         const s = botStates[i];
@@ -2603,7 +2608,7 @@ function setupArcBalls() {
 
 function updateArcBalls3D() {
     if (!arcBallInst || !arcCurves.length) return;
-    const dummy = new THREE.Object3D();
+    const dummy = sharedDummy3D;
     const t = windClock.value;
     for (let i = 0; i < arcCurves.length; i++) {
         // Each segment fires every ~4s, staggered; ball hidden between shots

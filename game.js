@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt20';
+const BUILD_TAG = 'gt21';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -40,7 +40,7 @@ const RESORT_DEFAULT = {
     amenities: {},      // id -> true when built
     lastTickMs: 0,      // unix ms at last income tick (for offline-style catch-up)
     coinsFrac: 0,       // fractional accumulator so we don't lose sub-1 ticks
-    worldClock: 0       // total simulated seconds — the resort's persistent time base
+    worldClock: 9 * 60  // simulated minutes; new resorts open at 9:00 AM, not midnight
 };
 let resort = Object.assign({}, RESORT_DEFAULT, loadData('resort', {}));
 
