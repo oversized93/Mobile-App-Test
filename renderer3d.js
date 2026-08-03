@@ -226,7 +226,10 @@ function init3D() {
     // hex color renders in linear space and the whole scene reads flat/milky.
     renderer3d = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true });
     renderer3d.setSize(window.innerWidth, window.innerHeight);
-    renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // Full retina sharpness on modern phones; instancing keeps draw calls
+    // low enough that fill rate is the only cost, and A-series GPUs have
+    // headroom for this scene at 2x
+    renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer3d.outputEncoding = THREE.sRGBEncoding;
     renderer3d.toneMapping = THREE.ACESFilmicToneMapping;
     renderer3d.toneMappingExposure = 1.0;
