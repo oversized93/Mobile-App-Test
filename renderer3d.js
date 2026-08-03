@@ -2095,6 +2095,7 @@ function setupAmbientNPCs(hole) {
     setupFireflies(hole);
     setupBuoys(hole);
     setupBoat(hole);
+    setupLeaves(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -2182,6 +2183,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateFireflies3D(hole);
     updateBuoys3D();
     updateBoat3D(hole);
+    updateLeaves3D(hole);
     if (beaconGroupRef) beaconGroupRef.rotation.y = windClock.value * 0.9;
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = sharedDummy3D;
@@ -2230,8 +2232,12 @@ function updateAmbientNPCs3D(dt, hole) {
         const gy = (hole && hole.heights)
             ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
         const still = s.idle || (s.route && s.pause > 0);
-        const bob = still ? Math.sin(t * 2.2 + s.phase) * 0.3
-                          : Math.sin(t * 9 + s.phase) * 0.7;
+        let bob = still ? Math.sin(t * 2.2 + s.phase) * 0.3
+                        : Math.sin(t * 9 + s.phase) * 0.7;
+        // Holed out: celebratory hops at the pin before the walk back
+        if (s.route && s.pause > 0 && s.ptIdx === s.route.length - 1) {
+            bob = Math.abs(Math.sin(t * 8 + s.phase)) * 4;
+        }
         const yaw = s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
                            : Math.atan2(s.tx - s.x, s.tz - s.z);
         dummy.position.set(s.x, gy + 7.5 + bob, s.z);
@@ -2379,6 +2385,65 @@ function updateBuoys3D() {
         buoyInst.setMatrixAt(i, dummy.matrix);
     }
     buoyInst.instanceMatrix.needsUpdate = true;
+}
+
+// ---- Autumn leaves drifting down over the forests ----
+let leafInst = null, leafStates = [];
+
+function setupLeaves(hole) {
+    leafInst = null;
+    leafStates = [];
+    const spots = [];
+    for (let r = 2; r < hole.rows - 2; r++) {
+        for (let c = 2; c < hole.cols - 2; c++) {
+            if (hole.grid[r][c] === T.TREE
+                && ((((c * 40503) ^ (r * 88651)) >>> 0) % 83) === 0) {
+                spots.push({ c: c, r: r });
+            }
+        }
+    }
+    const n = Math.min(16, spots.length);
+    if (!n) return;
+    const geo = new THREE.PlaneGeometry(2.4, 1.7);
+    const mat = new THREE.MeshBasicMaterial({
+        side: THREE.DoubleSide, transparent: true, opacity: 0.85
+    });
+    mat.toneMapped = false;
+    leafInst = new THREE.InstancedMesh(geo, mat, n);
+    const leafCols = [0xd8842f, 0xe0a63b, 0xb35c26, 0x76a83a];
+    for (let i = 0; i < n; i++) {
+        const sp = spots[Math.floor(i * spots.length / n)];
+        leafStates.push({
+            x: (sp.c + 0.5) * CELL, z: (sp.r + 0.5) * CELL, phase: i * 1.31
+        });
+        if (leafInst.setColorAt) {
+            leafInst.setColorAt(i, new THREE.Color(leafCols[i % leafCols.length]).convertSRGBToLinear());
+        }
+    }
+    if (leafInst.instanceColor) leafInst.instanceColor.needsUpdate = true;
+    terrainGroup.add(leafInst);
+}
+
+function updateLeaves3D(hole) {
+    if (!leafInst || !leafStates.length) return;
+    const t = windClock.value;
+    const dummy = sharedDummy3D;
+    for (let i = 0; i < leafStates.length; i++) {
+        const s = leafStates[i];
+        // Each leaf loops a slow tumbling fall from canopy height,
+        // drifting downwind (+x) with a lateral sway
+        const cyc = (t * 0.14 + s.phase) % 1;
+        const x = s.x + cyc * 55 + Math.sin(t * 1.7 + s.phase) * 6;
+        const z = s.z + Math.sin(t * 0.9 + s.phase * 2) * 5;
+        const gy = (hole && hole.heights)
+            ? ((hole.heights[Math.floor(z / CELL)] || [])[Math.floor(x / CELL)] || 0) : 0;
+        dummy.position.set(x, gy + 80 - cyc * 74, z);
+        dummy.rotation.set(t * 2.1 + s.phase, s.phase * 3, t * 1.4 + s.phase * 2);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        leafInst.setMatrixAt(i, dummy.matrix);
+    }
+    leafInst.instanceMatrix.needsUpdate = true;
 }
 
 // ---- A sailboat slowly circling the island ----
