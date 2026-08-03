@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt28';
+const BUILD_TAG = 'gt29';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -711,7 +711,7 @@ function generateHeights(hole) {
         ctrl[r] = [];
         for (let c = 0; c < ctrlCols; c++) {
             // Two octaves of hash noise — dramatic rolling hills
-            ctrl[r][c] = hash(c, r) * 60 + hash(c * 2.7, r * 2.7) * 20;
+            ctrl[r][c] = hash(c, r) * 85 + hash(c * 2.7, r * 2.7) * 28;
         }
     }
     // Smoothstep curve for interpolation (matches Perlin-style easing)
@@ -732,8 +732,8 @@ function generateHeights(hole) {
             // walkways don't ride raw noise bumps
             const t = hole.grid[r][c];
             if (t === T.TEE || t === T.GREEN) height *= 0.1;
-            else if (t === T.FAIRWAY) height *= 0.5;
-            else if (t === T.PATH) height *= 0.35;
+            else if (t === T.FAIRWAY) height *= 0.35;
+            else if (t === T.PATH) height *= 0.28;
             // Water vertices sit at 0 so they match surrounding terrain flat
             if (t === T.WATER) height = 0;
             // Fold valleys up to ground level: land never dips below y=0,
@@ -743,7 +743,7 @@ function generateHeights(hole) {
             // Terraced plateaus (reference terrain language): flat steps
             // with short steep lips — cliff faces pick up the slope-soil
             // shading automatically
-            const STEP_H = 16;
+            const STEP_H = 20;
             const stepBase = Math.floor(q / STEP_H) * STEP_H;
             const frac = (q - stepBase) / STEP_H;
             const lip = frac < 0.68 ? 0 : (frac - 0.68) / 0.32;
