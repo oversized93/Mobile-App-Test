@@ -420,14 +420,15 @@ const ASSET_SPECIES = {
     flag:  ['flag-red'],
     prop:  ['bench', 'trash', 'flowers', 'park-entrance', 'stall-food',
             'stall-drinks', 'station-fence', 'bridge_wood', 'bridge_woodRound'],
-    hero:  ['clubhouse', 'golfcart', 'windmill', 'archsign']
+    hero:  ['clubhouse', 'golfcart', 'windmill', 'archsign', 'fountainstatue']
 };
 // Non-Kenney asset locations
 const ASSET_PATH_NAME = {
     'clubhouse': 'assets/meshy/clubhouse.glb',
     'golfcart': 'assets/meshy/golfcart.glb',
     'windmill': 'assets/meshy/windmill.glb',
-    'archsign': 'assets/meshy/archsign.glb'
+    'archsign': 'assets/meshy/archsign.glb',
+    'fountainstatue': 'assets/meshy/fountainstatue.glb'
 };
 // Per-model height overrides (props vary too much for one species target)
 // Sized to the world's stylized chunky proportions (realistic scale reads
@@ -436,7 +437,8 @@ const ASSET_TARGET_H_NAME = {
     'bench': 22, 'trash': 18, 'flowers': 10, 'park-entrance': 92,
     'stall-food': 62, 'stall-drinks': 62, 'station-fence': 18,
     'clubhouse': 148, 'golfcart': 34, 'windmill': 170,
-    'bridge_wood': 26, 'bridge_woodRound': 30, 'archsign': 110
+    'bridge_wood': 26, 'bridge_woodRound': 30, 'archsign': 110,
+    'fountainstatue': 52
 };
 // Target world heights per species (CELL = 32; a good tree spans ~2 cells)
 const ASSET_TARGET_H = {
@@ -2186,6 +2188,21 @@ function setupFountains(hole) {
         fountainSpots.push({ x: (best.c + 0.5) * CELL, z: (best.r + 0.5) * CELL });
     }
     if (!fountainSpots.length) return;
+    // Tiered stone centerpiece at each fountain spot, base just under water
+    if (worldAssets && worldAssets.fountainstatue) {
+        const model = worldAssets.fountainstatue;
+        for (const spot of fountainSpots) {
+            const grp = new THREE.Group();
+            for (const part of model.parts) {
+                const mesh = new THREE.Mesh(part.geometry, part.material);
+                mesh.castShadow = true;
+                grp.add(mesh);
+            }
+            grp.scale.setScalar(model.scale);
+            grp.position.set(spot.x, -3.2, spot.z);
+            terrainGroup.add(grp);
+        }
+    }
     const geo = new THREE.SphereGeometry(2.0, 6, 5);
     const mat = new THREE.MeshBasicMaterial({ color: 0xdff4fb, transparent: true, opacity: 0.85 });
     mat.toneMapped = false;
