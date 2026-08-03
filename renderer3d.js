@@ -1990,6 +1990,7 @@ function setupAmbientNPCs(hole) {
     setupFountains(hole);
     setupCartDrive(hole);
     setupCritters(hole);
+    setupPathLamps(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -2160,6 +2161,53 @@ function setupFountains(hole) {
     terrainGroup.add(fountainInst);
 }
 
+// ---- Path lamps: warm globes on posts along the walkways ----
+// The head material brightens at night via updateDayNightTint.
+let lampHeadMatRef = null;
+
+function setupPathLamps(hole) {
+    lampHeadMatRef = null;
+    const spots = [];
+    for (let r = 1; r < hole.rows - 1; r++) {
+        for (let c = 1; c < hole.cols - 1; c++) {
+            if (hole.grid[r][c] !== T.PATH) continue;
+            if ((c * 7 + r * 13) % 9 !== 0) continue;
+            spots.push({ c: c, r: r });
+            if (spots.length >= 60) break;
+        }
+        if (spots.length >= 60) break;
+    }
+    if (!spots.length) return;
+    const poleGeo = new THREE.CylinderGeometry(0.7, 0.9, 24, 6);
+    poleGeo.translate(0, 12, 0);
+    const poleMat = new THREE.MeshStandardMaterial({ color: linC(0x3c4148), roughness: 0.6 });
+    const poleInst = new THREE.InstancedMesh(poleGeo, poleMat, spots.length);
+    poleInst.castShadow = true;
+    const headGeo = new THREE.SphereGeometry(2.6, 8, 6);
+    const headMat = new THREE.MeshBasicMaterial({ color: 0xbdb49e });
+    headMat.toneMapped = false;
+    lampHeadMatRef = headMat;
+    const headInst = new THREE.InstancedMesh(headGeo, headMat, spots.length);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < spots.length; i++) {
+        const sp = spots[i];
+        // Offset toward a cell corner so posts hug the walkway edge
+        const ox = ((sp.c * 31 + sp.r) % 2) ? 0.82 : 0.18;
+        const x = (sp.c + ox) * CELL, z = (sp.r + 0.15) * CELL;
+        const gy = (hole.heights && hole.heights[sp.r]) ? (hole.heights[sp.r][sp.c] || 0) : 0;
+        dummy.position.set(x, gy, z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        poleInst.setMatrixAt(i, dummy.matrix);
+        dummy.position.y = gy + 25.5;
+        dummy.updateMatrix();
+        headInst.setMatrixAt(i, dummy.matrix);
+    }
+    terrainGroup.add(poleInst);
+    terrainGroup.add(headInst);
+}
+
 // ---- Day/night lighting cycle driven by the resort world clock ----
 // Never goes truly dark: night floors keep the resort readable, the cycle
 // reads through warm dawns/dusks, sweeping shadows, and a dimmed sky.
@@ -2191,6 +2239,11 @@ function updateDayNightTint(minutes) {
     const dim = 0.34 + 0.66 * dayW;
     if (skyMatRef) skyMatRef.color.setRGB(dim * 0.8, dim * 0.88, dim);
     if (oceanMatRef) oceanMatRef.color.copy(linC(0x1f7fb4)).multiplyScalar(0.35 + 0.65 * dayW);
+    // Lamp globes: dull stone by day, warm glow after dark
+    if (lampHeadMatRef) {
+        const nw = 1 - dayW;
+        lampHeadMatRef.color.setRGB(m(0.74, 1.0, nw), m(0.71, 0.85, nw), m(0.62, 0.5, nw));
+    }
 }
 
 // ---- Ambient critters: butterflies over meadows, gulls over ponds ----
