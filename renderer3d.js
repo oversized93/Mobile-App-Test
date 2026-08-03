@@ -2093,6 +2093,7 @@ function setupAmbientNPCs(hole) {
     setupCritters(hole);
     setupPathLamps(hole);
     setupFireflies(hole);
+    setupBuoys(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -2178,6 +2179,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateCartDrive3D(dt, hole);
     updateCritters3D(hole);
     updateFireflies3D(hole);
+    updateBuoys3D();
     if (beaconGroupRef) beaconGroupRef.rotation.y = windClock.value * 0.9;
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = sharedDummy3D;
@@ -2325,6 +2327,43 @@ function setupFountains(hole) {
     fountainInst = new THREE.InstancedMesh(geo, mat, fountainSpots.length * FOUNTAIN_DROPS);
     fountainInst.renderOrder = 3;
     terrainGroup.add(fountainInst);
+}
+
+// ---- Ocean buoys bobbing off the coastline ----
+let buoyInst = null, buoySpots = [];
+
+function setupBuoys(hole) {
+    buoyInst = null;
+    buoySpots = [];
+    const worldW = hole.cols * CELL, worldH = hole.rows * CELL;
+    for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2 + ((i * 37) % 10) / 20;
+        buoySpots.push({
+            x: worldW / 2 + Math.cos(a) * (worldW / 2 + 90 + (i * 53) % 180),
+            z: worldH / 2 + Math.sin(a) * (worldH / 2 + 90 + (i * 91) % 180),
+            phase: i * 1.7
+        });
+    }
+    const geo = new THREE.CylinderGeometry(1.2, 9, 26, 6);
+    const mat = new THREE.MeshStandardMaterial({ color: linC(0xd94f3d), roughness: 0.6 });
+    buoyInst = new THREE.InstancedMesh(geo, mat, buoySpots.length);
+    terrainGroup.add(buoyInst);
+}
+
+function updateBuoys3D() {
+    if (!buoyInst || !buoySpots.length) return;
+    const t = windClock.value;
+    const dummy = sharedDummy3D;
+    for (let i = 0; i < buoySpots.length; i++) {
+        const s = buoySpots[i];
+        dummy.position.set(s.x, -2.5 + 3.5 + Math.sin(t * 1.3 + s.phase) * 1.4, s.z);
+        dummy.rotation.set(Math.sin(t * 0.9 + s.phase) * 0.14, 0,
+                           Math.cos(t * 1.1 + s.phase) * 0.14);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        buoyInst.setMatrixAt(i, dummy.matrix);
+    }
+    buoyInst.instanceMatrix.needsUpdate = true;
 }
 
 // ---- Build-mode grid overlay toggle ----
