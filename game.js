@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt26';
+const BUILD_TAG = 'gt27';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -19,7 +19,11 @@ let state = 'menu';
 const STATE_HOOKS = {
     overworld: { enter: stateEnterOverworld, exit: stateExitOverworld },
     manage:    { enter: stateEnterManage },
+    menu:      { enter: function () { menuOrbitReady = false; } },
 };
+
+// Live 3D resort backdrop behind the main menu — re-framed on each entry
+let menuOrbitReady = false;
 
 function setState(next) {
     if (state === next) return;
@@ -1575,24 +1579,36 @@ function menuLayout() {
 }
 
 function drawMenu() {
-    // Rich gradient background
-    const bg = ctx.createLinearGradient(0, 0, 0, H());
-    bg.addColorStop(0, '#0d2818');
-    bg.addColorStop(0.5, '#1a472a');
-    bg.addColorStop(1, '#0a1f10');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W(), H());
-
-    // Decorative pattern
-    for (let i = 0; i < 18; i++) {
-        const px = ((i * 97 + 33) % W());
-        const py = ((i * 149 + 77) % H());
-        const size = 20 + (i % 5) * 18;
-        ctx.strokeStyle = `rgba(255,255,255,${0.02 + (i % 3) * 0.01})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(px, py, size, 0, Math.PI * 2);
-        ctx.stroke();
+    if (menuOrbitReady && scene3dReady) {
+        // Live 3D backdrop is rendering underneath: darken just enough
+        // for text legibility, heavier at the edges. Must clear first or
+        // the translucent scrim compounds toward black frame over frame.
+        ctx.clearRect(0, 0, W(), H());
+        const bg = ctx.createLinearGradient(0, 0, 0, H());
+        bg.addColorStop(0, 'rgba(7,22,13,0.78)');
+        bg.addColorStop(0.45, 'rgba(10,28,17,0.35)');
+        bg.addColorStop(1, 'rgba(6,18,11,0.7)');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W(), H());
+    } else {
+        // Rich gradient background (3D not ready yet)
+        const bg = ctx.createLinearGradient(0, 0, 0, H());
+        bg.addColorStop(0, '#0d2818');
+        bg.addColorStop(0.5, '#1a472a');
+        bg.addColorStop(1, '#0a1f10');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W(), H());
+        // Decorative pattern
+        for (let i = 0; i < 18; i++) {
+            const px = ((i * 97 + 33) % W());
+            const py = ((i * 149 + 77) % H());
+            const size = 20 + (i % 5) * 18;
+            ctx.strokeStyle = `rgba(255,255,255,${0.02 + (i % 3) * 0.01})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(px, py, size, 0, Math.PI * 2);
+            ctx.stroke();
+        }
     }
 
     const L = menuLayout();
@@ -4939,11 +4955,38 @@ function gameLoop(time) {
         }
     }
 
-    // 3D rendering for gameplay states AND overworld
-    const use3D = scene3dReady && (state === 'playing' || state === 'holeDone' || state === 'overworld');
+    // 3D rendering for gameplay states, overworld, AND the menu backdrop
+    const use3D = scene3dReady && (state === 'playing' || state === 'holeDone'
+        || state === 'overworld' || state === 'menu');
     if (use3D) {
         show3D();
 
+        // Menu backdrop: the live resort slowly orbiting under the UI
+        if (state === 'menu') {
+            if (!menuOrbitReady) {
+                if (!worldCourse.heights) refreshWorldHeights();
+                buildTerrain3D(worldCourse, { distantScenery: false });
+                cam3dOrbitMode = true;
+                if (typeof resetCameraFov === 'function') resetCameraFov();
+                setCameraOrbit(worldCourse.cols * CELL / 2, worldCourse.rows * CELL / 2,
+                               2100, Math.PI / 180 * 46, 0.5);
+                if (typeof camera3d !== 'undefined' && camera3d) {
+                    camera3d.position.set(cam3dTarget.x, cam3dTarget.y, cam3dTarget.z);
+                }
+                menuOrbitReady = true;
+            }
+            if (ballMesh) ballMesh.visible = false;
+            if (typeof cloudsGroup !== 'undefined' && cloudsGroup) cloudsGroup.visible = false;
+            if (typeof setDistantSceneryVisible === 'function') setDistantSceneryVisible(true);
+            if (typeof setBuildGridVisible === 'function') setBuildGridVisible(false);
+            if (typeof rotateCameraOrbit === 'function') rotateCameraOrbit(0.045 * dt);
+            if (typeof updateAmbientNPCs3D === 'function') updateAmbientNPCs3D(dt, worldCourse);
+            if (typeof updateArcBalls3D === 'function') updateArcBalls3D();
+            if (typeof updateDayNightTint === 'function') updateDayNightTint(resort.worldClock || 0);
+            updateCamera3D(dt);
+            render3D();
+            canvas.style.background = 'transparent';
+        } else
         // Overworld branch — cam3dTarget is driven directly by panCamera3D /
         // zoomCamera3D from user input; we just flush any pending terrain
         // rebuild, tick the camera lerp, and render.
