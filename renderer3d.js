@@ -2094,6 +2094,7 @@ function setupAmbientNPCs(hole) {
     setupPathLamps(hole);
     setupFireflies(hole);
     setupBuoys(hole);
+    setupBoat(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -2180,6 +2181,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateCritters3D(hole);
     updateFireflies3D(hole);
     updateBuoys3D();
+    updateBoat3D(hole);
     if (beaconGroupRef) beaconGroupRef.rotation.y = windClock.value * 0.9;
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = sharedDummy3D;
@@ -2364,6 +2366,47 @@ function updateBuoys3D() {
         buoyInst.setMatrixAt(i, dummy.matrix);
     }
     buoyInst.instanceMatrix.needsUpdate = true;
+}
+
+// ---- A sailboat slowly circling the island ----
+let boatGroupRef = null;
+
+function setupBoat(hole) {
+    boatGroupRef = null;
+    const grp = new THREE.Group();
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(34, 8, 12),
+        new THREE.MeshStandardMaterial({ color: linC(0x7a4b2c), roughness: 0.8 }));
+    hull.position.y = 2;
+    grp.add(hull);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 34, 5),
+        new THREE.MeshStandardMaterial({ color: linC(0x5d4630), roughness: 0.8 }));
+    mast.position.y = 22;
+    grp.add(mast);
+    const sailGeo = new THREE.BufferGeometry();
+    sailGeo.setAttribute('position', new THREE.Float32BufferAttribute([
+        0, 6, 0, 0, 36, 0, 16, 10, 0
+    ], 3));
+    sailGeo.computeVertexNormals();
+    const sail = new THREE.Mesh(sailGeo, new THREE.MeshStandardMaterial({
+        color: linC(0xf2efe6), side: THREE.DoubleSide, roughness: 0.9
+    }));
+    grp.add(sail);
+    grp.scale.setScalar(2); // island-scale silhouette, not a rowboat
+    terrainGroup.add(grp);
+    boatGroupRef = grp;
+}
+
+function updateBoat3D(hole) {
+    if (!boatGroupRef) return;
+    const t = windClock.value;
+    const w2 = hole.cols * CELL / 2, h2 = hole.rows * CELL / 2;
+    const rad = Math.sqrt(w2 * w2 + h2 * h2) + 260;
+    const a = t * 0.02;
+    boatGroupRef.position.set(w2 + Math.cos(a) * rad,
+                              -2.5 + Math.sin(t * 1.1) * 1.2,
+                              h2 + Math.sin(a) * rad);
+    boatGroupRef.rotation.set(Math.sin(t * 0.8) * 0.05, -a,
+                              Math.sin(t * 1.3) * 0.06);
 }
 
 // ---- Build-mode grid overlay toggle ----
