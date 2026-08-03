@@ -2069,9 +2069,21 @@ function setupAmbientNPCs(hole) {
             golfers.push({ c: rec.pin.x - 0.8, r: rec.pin.y + 0.7 });
         }
     }
+    // Playing groups: pairs that walk each hole's route, pausing to hit
+    const routeGolfers = [];
+    if (hole.holes) {
+        for (const rec of hole.holes) {
+            const pts = [rec.tee, ...(rec.waypoints || []), rec.pin]
+                .map(p => ({ x: (p.x + 0.5) * CELL, z: (p.y + 0.5) * CELL }));
+            if (pts.length >= 2) {
+                routeGolfers.push({ pts: pts, off: 0 });
+                routeGolfers.push({ pts: pts, off: 1 });
+            }
+        }
+    }
     const walkerCount = npcPathCells.length >= 4 ? NPC_COUNT : 0;
     npcWalkerCount = walkerCount;
-    const total = walkerCount + golfers.length;
+    const total = walkerCount + golfers.length + routeGolfers.length;
     if (total === 0) return;
 
     const bodyGeo = new THREE.CylinderGeometry(3.4, 4.2, 15, 8);
@@ -2095,6 +2107,14 @@ function setupAmbientNPCs(hole) {
             x: (gp.c + 0.5) * CELL, z: (gp.r + 0.5) * CELL,
             tx: (gp.c + 0.5) * CELL, tz: (gp.r + 0.5) * CELL,
             speed: 0, phase: g * 2.3, idle: true
+        });
+    }
+    for (const rg of routeGolfers) {
+        npcStates.push({
+            x: rg.pts[0].x + rg.off * 6, z: rg.pts[0].z + 4,
+            tx: rg.pts[1].x, tz: rg.pts[1].z,
+            speed: 14 + rg.off * 3, phase: rg.off * 2.1, idle: false,
+            route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5
         });
     }
     for (let i = 0; i < total; i++) {
@@ -2133,6 +2153,32 @@ function updateAmbientNPCs3D(dt, hole) {
         const d = Math.sqrt(dx * dx + dz * dz);
         if (s.idle) {
             // Stationed golfer: gentle sway + slow turn, no wandering
+        } else if (s.route) {
+            // Round-in-progress golfer: walk the hole route, pause to hit,
+            // restart at the tee after holing out
+            if (s.pause > 0) {
+                s.pause -= dt;
+            } else {
+                const nxt = s.route[s.ptIdx + 1];
+                if (!nxt) {
+                    s.ptIdx = 0;
+                    s.x = s.route[0].x;
+                    s.z = s.route[0].z;
+                    s.pause = 5;
+                } else {
+                    s.tx = nxt.x;
+                    s.tz = nxt.z;
+                    const rdx = nxt.x - s.x, rdz = nxt.z - s.z;
+                    const rd = Math.sqrt(rdx * rdx + rdz * rdz);
+                    if (rd < 2.5) {
+                        s.ptIdx++;
+                        s.pause = 3;
+                    } else {
+                        s.x += (rdx / rd) * s.speed * dt;
+                        s.z += (rdz / rd) * s.speed * dt;
+                    }
+                }
+            }
         } else if (d < 3) {
             // Pick a new stroll target on the path network
             const next = npcPathCells[Math.floor((t * 7 + i * 131) % npcPathCells.length)];
@@ -2144,10 +2190,11 @@ function updateAmbientNPCs3D(dt, hole) {
         }
         const gy = (hole && hole.heights)
             ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
-        const bob = s.idle ? Math.sin(t * 2.2 + s.phase) * 0.3
-                           : Math.sin(t * 9 + s.phase) * 0.7;
+        const still = s.idle || (s.route && s.pause > 0);
+        const bob = still ? Math.sin(t * 2.2 + s.phase) * 0.3
+                          : Math.sin(t * 9 + s.phase) * 0.7;
         const yaw = s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
-                           : Math.atan2(dx, dz);
+                           : Math.atan2(s.tx - s.x, s.tz - s.z);
         dummy.position.set(s.x, gy + 7.5 + bob, s.z);
         dummy.rotation.set(0, yaw, 0);
         dummy.scale.set(1, 1, 1);
