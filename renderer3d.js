@@ -1744,7 +1744,9 @@ function buildTerrain3D(hole, opts) {
     if (wantScenery) {
     // Two rings of fake trees around the perimeter
     for (let ring = 0; ring < 2; ring++) {
-        const radius = courseRadius + 200 + ring * 400;
+        // Far enough out that the ring never overlaps the island silhouette
+        // from low playtest cameras (half-diagonal is ~0.86 * courseRadius)
+        const radius = courseRadius + 700 + ring * 500;
         const count = 60 + ring * 40;
         for (let i = 0; i < count; i++) {
             const angle = (i / count) * Math.PI * 2 + ring * 0.3;
@@ -1763,14 +1765,18 @@ function buildTerrain3D(hole, opts) {
         for (let i = 0; i < distantTrees.length; i++) {
             const t = distantTrees[i];
             const sz = 1.2 + (i % 5) * 0.3;
-            dummy.position.set(t.x, 35 * sz, t.z);
+            // Base sunk below the waterline so trees rise out of the sea
+            // haze instead of hovering on an invisible shelf
+            dummy.position.set(t.x, 35 * sz - 14, t.z);
             dummy.scale.set(sz, sz, sz);
             dummy.rotation.set(0, 0, 0);
             dummy.updateMatrix();
             dtInst.setMatrixAt(i, dummy.matrix);
         }
         dtInst.instanceMatrix.needsUpdate = true;
-        terrainGroup.add(dtInst);
+        distantGroupRef = new THREE.Group();
+        distantGroupRef.add(dtInst);
+        terrainGroup.add(distantGroupRef);
         dummy.scale.set(1, 1, 1);
     }
 
@@ -1799,7 +1805,8 @@ function buildTerrain3D(hole, opts) {
             hillInst.setMatrixAt(i, dummy.matrix);
         }
         hillInst.instanceMatrix.needsUpdate = true;
-        terrainGroup.add(hillInst);
+        if (distantGroupRef) distantGroupRef.add(hillInst);
+        else terrainGroup.add(hillInst);
         dummy.scale.set(1, 1, 1);
     }
 
@@ -2242,6 +2249,12 @@ function setupFountains(hole) {
 let buildGridRef = null;
 function setBuildGridVisible(v) {
     if (buildGridRef) buildGridRef.visible = !!v;
+}
+
+// ---- Distant horizon scenery toggle (overworld only) ----
+let distantGroupRef = null;
+function setDistantSceneryVisible(v) {
+    if (distantGroupRef) distantGroupRef.visible = !!v;
 }
 
 // ---- Fireflies: warm motes drifting over the rough after dark ----

@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt24';
+const BUILD_TAG = 'gt25';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4950,6 +4950,7 @@ function gameLoop(time) {
         if (state === 'overworld') {
             if (ballMesh) ballMesh.visible = false;
             if (typeof cloudsGroup !== 'undefined' && cloudsGroup) cloudsGroup.visible = false;
+            if (typeof setDistantSceneryVisible === 'function') setDistantSceneryVisible(true);
             if (typeof updateAmbientNPCs3D === 'function') updateAmbientNPCs3D(dt, worldCourse);
             if (typeof updateArcBalls3D === 'function') updateArcBalls3D();
             if (typeof updateDayNightTint === 'function') updateDayNightTint(resort.worldClock || 0);
@@ -4965,6 +4966,9 @@ function gameLoop(time) {
         } else {
         if (ballMesh) ballMesh.visible = true;
         if (typeof cloudsGroup !== 'undefined' && cloudsGroup) cloudsGroup.visible = true;
+        // Horizon-ring scenery only reads right from the high overworld
+        // camera; from low play cameras it looks like floating debris
+        if (typeof setDistantSceneryVisible === 'function') setDistantSceneryVisible(false);
         // Update 3D ball position
         updateBall3D(ball.x, ball.y, ball.z, player.ballColor, terrainHeightAt(ball.x, ball.y));
         // Update 3D target
