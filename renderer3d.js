@@ -1577,6 +1577,29 @@ function buildTerrain3D(hole, opts) {
         // Lighthouse landmark on the island's northeast corner, looking
         // out over the cliff edge to sea
         put('lighthouse', hole.cols - 4.5, 3.5, Math.PI);
+        // Rotating beacon: two opposed light cones from the lantern room,
+        // faded in after dark by the day/night pass
+        {
+            const lx = (hole.cols - 4.5) * CELL, lz = 3.5 * CELL;
+            const ly = hAt(hole.cols - 4.5, 3.5) + 195;
+            const beamGeo = new THREE.ConeGeometry(22, 300, 8, 1, true);
+            beamGeo.rotateZ(Math.PI / 2);
+            beamGeo.translate(150, 0, 0); // apex at lantern, base outward
+            const beamMat = new THREE.MeshBasicMaterial({
+                color: 0xfff2c0, transparent: true, opacity: 0,
+                depthWrite: false, side: THREE.DoubleSide
+            });
+            beamMat.toneMapped = false;
+            beaconMatRef = beamMat;
+            beaconGroupRef = new THREE.Group();
+            const b1 = new THREE.Mesh(beamGeo, beamMat);
+            const b2 = new THREE.Mesh(beamGeo, beamMat);
+            b2.rotation.y = Math.PI;
+            beaconGroupRef.add(b1);
+            beaconGroupRef.add(b2);
+            beaconGroupRef.position.set(lx, ly, lz);
+            terrainGroup.add(beaconGroupRef);
+        }
         // Benches + trash along the entry path
         put('bench', ec - 2.1, er - 5, Math.PI / 2);
         put('bench', ec + 2.6, er - 7.5, -Math.PI / 2);
@@ -2155,6 +2178,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateCartDrive3D(dt, hole);
     updateCritters3D(hole);
     updateFireflies3D(hole);
+    if (beaconGroupRef) beaconGroupRef.rotation.y = windClock.value * 0.9;
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = sharedDummy3D;
     const t = windClock.value;
@@ -2425,6 +2449,7 @@ function setupPathLamps(hole) {
 // Never goes truly dark: night floors keep the resort readable, the cycle
 // reads through warm dawns/dusks, sweeping shadows, and a dimmed sky.
 let hemiLightRef = null, dirLightRef = null, skyMatRef = null, oceanMatRef = null;
+let beaconGroupRef = null, beaconMatRef = null;
 const OCEAN_BASE_COLOR = new THREE.Color(0x1f7fb4).convertSRGBToLinear();
 
 function updateDayNightTint(minutes) {
@@ -2461,6 +2486,8 @@ function updateDayNightTint(minutes) {
     if (waterMat) waterMat.uniforms.uNight.value = 0.35 + 0.65 * dayW;
     // Fireflies fade in after dark, invisible by day
     if (fireflyMatRef) fireflyMatRef.opacity = Math.max(0, 1 - dayW * 2.2);
+    // Lighthouse beam only shows after dark
+    if (beaconMatRef) beaconMatRef.opacity = Math.max(0, 1 - dayW * 1.6) * 0.4;
 }
 
 // ---- Ambient critters: butterflies over meadows, gulls over ponds ----
