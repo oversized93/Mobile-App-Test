@@ -963,23 +963,30 @@ function paintAlbedoCell(hole, c, r) {
         }
         g.stroke();
     } else if (t === T.GREEN) {
-        // Fringe: cells bordering non-green get a darker inset band
+        // Fringe: cells bordering non-green get a darker inset band,
+        // finished with a thin teal accent line (reference trim color)
         const fringe = shadeHex(ALBEDO_COLORS.base[T.GREEN], -0.22);
-        g.fillStyle = fringe;
         const fw = 3;
-        if (n !== T.GREEN && n !== t) g.fillRect(x, y, px, fw);
-        if (s !== T.GREEN && s !== t) g.fillRect(x, y + px - fw, px, fw);
-        if (w !== T.GREEN && w !== t) g.fillRect(x, y, fw, px);
-        if (e !== T.GREEN && e !== t) g.fillRect(x + px - fw, y, fw, px);
+        if (n !== T.GREEN) { g.fillStyle = fringe; g.fillRect(x, y, px, fw);
+            g.fillStyle = 'rgba(70,205,222,0.55)'; g.fillRect(x, y, px, 1.4); }
+        if (s !== T.GREEN) { g.fillStyle = fringe; g.fillRect(x, y + px - fw, px, fw);
+            g.fillStyle = 'rgba(70,205,222,0.55)'; g.fillRect(x, y + px - 1.4, px, 1.4); }
+        if (w !== T.GREEN) { g.fillStyle = fringe; g.fillRect(x, y, fw, px);
+            g.fillStyle = 'rgba(70,205,222,0.55)'; g.fillRect(x, y, 1.4, px); }
+        if (e !== T.GREEN) { g.fillStyle = fringe; g.fillRect(x + px - fw, y, fw, px);
+            g.fillStyle = 'rgba(70,205,222,0.55)'; g.fillRect(x + px - 1.4, y, 1.4, px); }
     } else if (t === T.TEE) {
-        // Tee pad: bright inset rim reads as a launch platform
+        // Tee pad: bright inset rim + teal accent — a launch platform
         const rim2 = shadeHex(ALBEDO_COLORS.base[T.TEE], 0.4);
-        g.fillStyle = rim2;
         const iw = 2;
-        if (n !== T.TEE) g.fillRect(x, y, px, iw);
-        if (s !== T.TEE) g.fillRect(x, y + px - iw, px, iw);
-        if (w !== T.TEE) g.fillRect(x, y, iw, px);
-        if (e !== T.TEE) g.fillRect(x + px - iw, y, iw, px);
+        if (n !== T.TEE) { g.fillStyle = rim2; g.fillRect(x, y, px, iw);
+            g.fillStyle = 'rgba(70,205,222,0.7)'; g.fillRect(x, y, px, 1); }
+        if (s !== T.TEE) { g.fillStyle = rim2; g.fillRect(x, y + px - iw, px, iw);
+            g.fillStyle = 'rgba(70,205,222,0.7)'; g.fillRect(x, y + px - 1, px, 1); }
+        if (w !== T.TEE) { g.fillStyle = rim2; g.fillRect(x, y, iw, px);
+            g.fillStyle = 'rgba(70,205,222,0.7)'; g.fillRect(x, y, 1, px); }
+        if (e !== T.TEE) { g.fillStyle = rim2; g.fillRect(x + px - iw, y, iw, px);
+            g.fillStyle = 'rgba(70,205,222,0.7)'; g.fillRect(x + px - 1, y, 1, px); }
     } else if (t === T.WATER) {
         // Shore highlight inside the water side
         const lite = shadeHex(ALBEDO_COLORS.base[T.WATER], 0.35);
