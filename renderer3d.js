@@ -810,8 +810,8 @@ function albedoCellColor(hole, c, r) {
     const t = hole.grid[r][c];
     let col = ALBEDO_COLORS.base[t] || '#3e9e53';
     if (t === T.FAIRWAY) {
-        // Crisp mow stripes, alternating every 3 rows
-        if (Math.floor(r / 3) % 2 === 1) col = shadeHex(col, -0.14);
+        // Crisp diagonal mow stripes — reads more dynamic than row bands
+        if (Math.floor((c + r) / 3) % 2 === 1) col = shadeHex(col, -0.14);
     } else if (t === T.GREEN) {
         // Checkerboard mow in 2-cell blocks
         if ((Math.floor(c / 2) + Math.floor(r / 2)) % 2 === 1) col = shadeHex(col, -0.07);
