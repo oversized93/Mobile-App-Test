@@ -237,8 +237,10 @@ function init3D() {
     // low-poly look far better than flat ambient; sun light casts soft shadows.
     const hemiLight = new THREE.HemisphereLight(0xbfd9ff, 0x3a7d44, 0.85);
     scene3d.add(hemiLight);
+    hemiLightRef = hemiLight;
 
     const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.25);
+    dirLightRef = dirLight;
     dirLight.position.set(1400, 2200, 900);
     dirLight.castShadow = true;
     // Ortho shadow frustum sized to cover the 120x80-cell course (~3840x2560
@@ -292,6 +294,7 @@ function init3D() {
         fog: false
     });
     scene3d.add(new THREE.Mesh(skyGeo, skyMat));
+    skyMatRef = skyMat;
 
     // Add some clouds (flat planes in the sky) — grouped so the overworld
     // camera can hide them (seen from above they read as white debris)
@@ -333,6 +336,7 @@ function init3D() {
     groundMesh.rotation.x = -Math.PI / 2;
     groundMesh.position.y = -2.5; // just below course level: island-in-ocean
     scene3d.add(groundMesh);
+    oceanMatRef = groundMat;
 
     // Groups
     terrainGroup = new THREE.Group();
@@ -2154,6 +2158,39 @@ function setupFountains(hole) {
     fountainInst = new THREE.InstancedMesh(geo, mat, fountainSpots.length * FOUNTAIN_DROPS);
     fountainInst.renderOrder = 3;
     terrainGroup.add(fountainInst);
+}
+
+// ---- Day/night lighting cycle driven by the resort world clock ----
+// Never goes truly dark: night floors keep the resort readable, the cycle
+// reads through warm dawns/dusks, sweeping shadows, and a dimmed sky.
+let hemiLightRef = null, dirLightRef = null, skyMatRef = null, oceanMatRef = null;
+
+function updateDayNightTint(minutes) {
+    if (!dirLightRef || !hemiLightRef) return;
+    const h = (((minutes / 60) % 24) + 24) % 24;
+    // 1 at 13:00, 0 at 01:00
+    const dayW = 0.5 + 0.5 * Math.cos((h - 13) / 24 * Math.PI * 2);
+    // Golden-hour bumps near 07:00 and 19:00
+    const gold = Math.exp(-Math.pow(h - 7, 2) / 2) + Math.exp(-Math.pow(h - 19, 2) / 2);
+    dirLightRef.intensity = 0.55 + 0.75 * dayW;
+    hemiLightRef.intensity = 0.5 + 0.4 * dayW;
+    // Sun color: day white -> gold at the rims -> cool moonlight
+    const day = [1.0, 0.955, 0.88], gd = [1.0, 0.72, 0.45], night = [0.66, 0.74, 1.0];
+    const m = (a, b, k) => a + (b - a) * k;
+    let rr = m(night[0], day[0], dayW), gg = m(night[1], day[1], dayW), bb = m(night[2], day[2], dayW);
+    const gk = Math.min(1, gold);
+    rr = m(rr, gd[0], gk * 0.7); gg = m(gg, gd[1], gk * 0.7); bb = m(bb, gd[2], gk * 0.7);
+    dirLightRef.color.setRGB(rr, gg, bb);
+    // Sun sweeps an arc over the course; low at the rims, high at noon
+    const az = (h - 13) / 24 * Math.PI * 2;
+    dirLightRef.position.set(1920 + Math.sin(az) * 2000,
+                             800 + 1500 * dayW,
+                             1280 + Math.cos(az) * 2000);
+    // Sky dome + ocean dim with the light (material color multiplies
+    // the authored vertex/base colors)
+    const dim = 0.34 + 0.66 * dayW;
+    if (skyMatRef) skyMatRef.color.setRGB(dim * 0.8, dim * 0.88, dim);
+    if (oceanMatRef) oceanMatRef.color.copy(linC(0x1f7fb4)).multiplyScalar(0.35 + 0.65 * dayW);
 }
 
 // ---- Ambient critters: butterflies over meadows, gulls over ponds ----
