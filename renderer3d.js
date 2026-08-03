@@ -2261,12 +2261,14 @@ function updateAmbientNPCs3D(dt, hole) {
 }
 
 // ---- Pond fountains — animated jets on the largest water bodies ----
-let fountainInst = null;
+let fountainInst = null, splashInst = null;
 let fountainSpots = [];
 const FOUNTAIN_DROPS = 16;
+const SPLASH_TMP_COLOR = new THREE.Color();
 
 function setupFountains(hole) {
     fountainInst = null;
+    splashInst = null;
     fountainSpots = [];
     // Flood-fill water into blobs, crown the two largest with a fountain
     const seen = [];
@@ -2329,6 +2331,17 @@ function setupFountains(hole) {
     fountainInst = new THREE.InstancedMesh(geo, mat, fountainSpots.length * FOUNTAIN_DROPS);
     fountainInst.renderOrder = 3;
     terrainGroup.add(fountainInst);
+    // Splash rings expanding where the droplets land
+    const ringGeo = new THREE.RingGeometry(0.8, 1.15, 14);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xdff4fb, transparent: true, opacity: 0.45,
+        depthWrite: false, side: THREE.DoubleSide
+    });
+    ringMat.toneMapped = false;
+    splashInst = new THREE.InstancedMesh(ringGeo, ringMat, fountainSpots.length * 3);
+    splashInst.renderOrder = 3;
+    terrainGroup.add(splashInst);
 }
 
 // ---- Ocean buoys bobbing off the coastline ----
@@ -2756,6 +2769,28 @@ function updateFountains3D() {
         }
     }
     fountainInst.instanceMatrix.needsUpdate = true;
+    if (splashInst) {
+        let si = 0;
+        for (let f = 0; f < fountainSpots.length; f++) {
+            const spot = fountainSpots[f];
+            for (let k = 0; k < 3; k++) {
+                const ck = (t * 0.5 + k / 3 + f * 0.31) % 1;
+                const rad = 3 + ck * 10;
+                dummy.position.set(spot.x, -1.1, spot.z);
+                dummy.rotation.set(0, 0, 0);
+                dummy.scale.set(rad, 1, rad);
+                dummy.updateMatrix();
+                splashInst.setMatrixAt(si, dummy.matrix);
+                // Fade by darkening toward the water as the ring expands
+                if (splashInst.setColorAt) {
+                    splashInst.setColorAt(si, SPLASH_TMP_COLOR.setScalar(1 - ck * 0.85));
+                }
+                si++;
+            }
+        }
+        splashInst.instanceMatrix.needsUpdate = true;
+        if (splashInst.instanceColor) splashInst.instanceColor.needsUpdate = true;
+    }
 }
 
 // ---- Hover bots — groundskeeper drones skimming the fairways ----
