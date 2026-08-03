@@ -3,7 +3,7 @@
 const { chromium } = require('playwright-core');
 const { spawn } = require('child_process');
 
-const REPO = require('path').resolve(__dirname, '..');
+const REPO = '/home/user/Mobile-App-Test';
 const OUT = process.argv[2] || 'shot.png';
 const STATE = process.argv[3] || 'overworld';
 const DIST = parseInt(process.argv[4] || '2000', 10);
@@ -16,7 +16,7 @@ const PR = parseFloat(process.argv[6] || '40');
     await new Promise(r => setTimeout(r, 800));
 
     const browser = await chromium.launch({
-        executablePath: process.env.PW_CHROMIUM || '/opt/pw-browsers/chromium',
+        executablePath: '/opt/pw-browsers/chromium',
         args: [
             '--no-sandbox',
             '--enable-unsafe-swiftshader',
@@ -106,6 +106,30 @@ const PR = parseFloat(process.argv[6] || '40');
                     tee: { x: 22, y: 52 }, pin: { x: 48, y: 28 },
                     waypoints: [{ x: 24, y: 36 }]
                 });
+                // Hole 2: southeast dogleg
+                paint(58, 62, 62, 66, T_.TEE);
+                paint(60, 56, 78, 64, T_.FAIRWAY);
+                paint(76, 48, 88, 58, T_.FAIRWAY);
+                paint(86, 46, 92, 52, T_.GREEN);
+                paint(70, 66, 76, 70, T_.SAND);
+                worldCourse.holes.push({
+                    id: 2, par: 4,
+                    tee: { x: 60, y: 64 }, pin: { x: 89, y: 49 },
+                    waypoints: [{ x: 78, y: 60 }]
+                });
+                // Hole 3: short north par 3
+                paint(98, 18, 102, 22, T_.TEE);
+                paint(84, 12, 98, 20, T_.FAIRWAY);
+                paint(78, 10, 84, 16, T_.GREEN);
+                paint(90, 22, 96, 26, T_.SAND);
+                worldCourse.holes.push({
+                    id: 3, par: 3,
+                    tee: { x: 100, y: 20 }, pin: { x: 80, y: 12 },
+                    waypoints: []
+                });
+                paint(60, 42, 62, 62, T_.PATH);
+                paint(96, 26, 98, 42, T_.PATH);
+                paint(62, 42, 96, 44, T_.PATH);
                 refreshWorldHeights();
                 enterOverworld();
                 // Frame the demo area nicely
