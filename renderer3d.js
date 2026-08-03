@@ -1219,6 +1219,33 @@ function buildTerrain3D(hole, opts) {
     terrainColorAttrRef = terrainGeo.getAttribute('color');
     terrainHoleRef = hole;
 
+    // ---- Build-mode grid overlay: cell lines draped over the terrain,
+    // shown only while a paint tool or the hole wizard is active ----
+    {
+        const gpos = [];
+        const hAtV = (vc, vr) => computeVertexColorHeight(hole, vc, vr).y;
+        for (let r = 0; r <= hole.rows; r++) {
+            for (let c = 0; c < hole.cols; c++) {
+                gpos.push(c * cellSize, hAtV(c, r) + 0.7, r * cellSize,
+                          (c + 1) * cellSize, hAtV(c + 1, r) + 0.7, r * cellSize);
+            }
+        }
+        for (let c = 0; c <= hole.cols; c++) {
+            for (let r = 0; r < hole.rows; r++) {
+                gpos.push(c * cellSize, hAtV(c, r) + 0.7, r * cellSize,
+                          c * cellSize, hAtV(c, r + 1) + 0.7, (r + 1) * cellSize);
+            }
+        }
+        const gridGeo = new THREE.BufferGeometry();
+        gridGeo.setAttribute('position', new THREE.Float32BufferAttribute(gpos, 3));
+        const gridMat = new THREE.LineBasicMaterial({
+            color: 0x08230f, transparent: true, opacity: 0.22
+        });
+        buildGridRef = new THREE.LineSegments(gridGeo, gridMat);
+        buildGridRef.visible = false;
+        terrainGroup.add(buildGridRef);
+    }
+
     // ---- Rocky cliff skirt around the island edge ----
     // Perimeter strip from the terrain lip down past the waterline: soil
     // lip, jittered rock mid-band, dark base. Flat shading gives facets.
@@ -2209,6 +2236,12 @@ function setupFountains(hole) {
     fountainInst = new THREE.InstancedMesh(geo, mat, fountainSpots.length * FOUNTAIN_DROPS);
     fountainInst.renderOrder = 3;
     terrainGroup.add(fountainInst);
+}
+
+// ---- Build-mode grid overlay toggle ----
+let buildGridRef = null;
+function setBuildGridVisible(v) {
+    if (buildGridRef) buildGridRef.visible = !!v;
 }
 
 // ---- Fireflies: warm motes drifting over the rough after dark ----

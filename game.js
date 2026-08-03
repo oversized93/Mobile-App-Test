@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt23';
+const BUILD_TAG = 'gt24';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4953,6 +4953,7 @@ function gameLoop(time) {
             if (typeof updateAmbientNPCs3D === 'function') updateAmbientNPCs3D(dt, worldCourse);
             if (typeof updateArcBalls3D === 'function') updateArcBalls3D();
             if (typeof updateDayNightTint === 'function') updateDayNightTint(resort.worldClock || 0);
+            if (typeof setBuildGridVisible === 'function') setBuildGridVisible((owTool && owTool !== 'hand') || !!holeWizard);
             updateTarget3D(0, 0, false);
             // Continuous rotate/tilt while a HUD button is held
             tickOverworldCamera(dt);
