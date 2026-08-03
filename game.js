@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt27';
+const BUILD_TAG = 'gt28';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2089,13 +2089,25 @@ function manageLayout() {
 }
 
 function drawManage() {
-    // Warm resort-y gradient
-    const bg = ctx.createLinearGradient(0, 0, 0, H());
-    bg.addColorStop(0, '#0b2a1c');
-    bg.addColorStop(0.5, '#144f33');
-    bg.addColorStop(1, '#08170f');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W(), H());
+    if (menuOrbitReady && scene3dReady) {
+        // Live resort orbits underneath — heavier scrim than the menu
+        // since this screen carries dense text
+        ctx.clearRect(0, 0, W(), H());
+        const bg = ctx.createLinearGradient(0, 0, 0, H());
+        bg.addColorStop(0, 'rgba(8,26,16,0.88)');
+        bg.addColorStop(0.5, 'rgba(12,36,22,0.62)');
+        bg.addColorStop(1, 'rgba(6,18,11,0.85)');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W(), H());
+    } else {
+        // Warm resort-y gradient
+        const bg = ctx.createLinearGradient(0, 0, 0, H());
+        bg.addColorStop(0, '#0b2a1c');
+        bg.addColorStop(0.5, '#144f33');
+        bg.addColorStop(1, '#08170f');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W(), H());
+    }
 
     const L = manageLayout();
 
@@ -4957,12 +4969,12 @@ function gameLoop(time) {
 
     // 3D rendering for gameplay states, overworld, AND the menu backdrop
     const use3D = scene3dReady && (state === 'playing' || state === 'holeDone'
-        || state === 'overworld' || state === 'menu');
+        || state === 'overworld' || state === 'menu' || state === 'manage');
     if (use3D) {
         show3D();
 
-        // Menu backdrop: the live resort slowly orbiting under the UI
-        if (state === 'menu') {
+        // Menu/manage backdrop: the live resort slowly orbiting under the UI
+        if (state === 'menu' || state === 'manage') {
             if (!menuOrbitReady) {
                 if (!worldCourse.heights) refreshWorldHeights();
                 buildTerrain3D(worldCourse, { distantScenery: false });
