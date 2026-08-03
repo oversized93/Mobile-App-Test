@@ -1603,6 +1603,31 @@ function buildTerrain3D(hole, opts) {
             terrainGroup.add(ring);
             pinRings.push(ring);
         }
+        // Tee marker balls flanking each tee, set perpendicular to the
+        // opening leg so they frame the drive line
+        const teeMarkGeo = new THREE.SphereGeometry(1.8, 8, 6);
+        const teeMarkMat = new THREE.MeshStandardMaterial({ color: linC(0xe53935), roughness: 0.5 });
+        const teeMarks = new THREE.InstancedMesh(teeMarkGeo, teeMarkMat, hole.holes.length * 2);
+        const tmDummy = new THREE.Object3D();
+        let tmIdx = 0;
+        for (const rec of hole.holes) {
+            const next = (rec.waypoints && rec.waypoints[0]) || rec.pin;
+            const ddx = next.x - rec.tee.x, ddy = next.y - rec.tee.y;
+            const dl = Math.hypot(ddx, ddy) || 1;
+            const perpX = -ddy / dl, perpZ = ddx / dl;
+            const cx = (rec.tee.x + 0.5) * CELL, cz = (rec.tee.y + 0.5) * CELL;
+            const ty = hAt2(rec.tee);
+            for (let side = -1; side <= 1; side += 2) {
+                tmDummy.position.set(cx + perpX * side * CELL * 0.42, ty + 1.6,
+                                     cz + perpZ * side * CELL * 0.42);
+                tmDummy.rotation.set(0, 0, 0);
+                tmDummy.scale.set(1, 1, 1);
+                tmDummy.updateMatrix();
+                teeMarks.setMatrixAt(tmIdx++, tmDummy.matrix);
+            }
+        }
+        teeMarks.castShadow = true;
+        terrainGroup.add(teeMarks);
     }
 
     // ---- Floating 3D hole numbers over each tee (reference-style) ----
