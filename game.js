@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt16';
+const BUILD_TAG = 'gt17';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2596,6 +2596,17 @@ function drawOverworld() {
                 ctx.fill();
                 ry += 26;
             }
+            // Flyover button
+            const flyGrad = ctx.createLinearGradient(hc.flyX, hc.flyY, hc.flyX + hc.flyW, hc.flyY);
+            flyGrad.addColorStop(0, '#0097a7');
+            flyGrad.addColorStop(1, '#006064');
+            ctx.fillStyle = flyGrad;
+            roundRect(hc.flyX, hc.flyY, hc.flyW, hc.flyH, hc.flyH / 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 13px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('\u{1F3A5} Flyover', hc.flyX + hc.flyW / 2, hc.flyY + hc.flyH / 2 + 5);
             // Test Play button
             const playGrad = ctx.createLinearGradient(hc.playX, hc.playY, hc.playX + hc.playW, hc.playY);
             playGrad.addColorStop(0, '#2e7d32');
@@ -2716,11 +2727,65 @@ function undoLastStroke() {
 
 // Hole inspector card geometry (shared by draw + hit-test)
 function holeCardLayout() {
-    const w = 216, h = 210;
+    const w = 216, h = 254;
     const x = W() - w - 10, y = 58;
     return { x, y, w, h,
+             flyX: x + 12, flyY: y + h - 132, flyW: w - 24, flyH: 34,
              playX: x + 12, playY: y + h - 88, playW: w - 24, playH: 34,
              delX: x + 12, delY: y + h - 44, delW: w - 24, delH: 34 };
+}
+
+// ---- Hole flyover: camera sweeps tee -> waypoints -> pin, then restores ----
+let owFlyover = null;
+
+function startHoleFlyover(rec) {
+    const pts = [rec.tee, ...(rec.waypoints || []), rec.pin]
+        .map(p => ({ x: (p.x + 0.5) * CELL, z: (p.y + 0.5) * CELL }));
+    if (pts.length < 2) return;
+    const segs = [];
+    let total = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+        const L = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
+        segs.push(L);
+        total += L;
+    }
+    if (total < 1) return;
+    owFlyover = {
+        pts: pts, segs: segs, total: total,
+        t0: performance.now(),
+        dur: 2500 + total * 1.1,
+        yaw: cam3dYaw,
+        saved: { px: cam3dPivotX, pz: cam3dPivotZ, dist: cam3dDistance,
+                 pitch: cam3dPitch, yaw: cam3dYaw }
+    };
+}
+
+function tickHoleFlyover() {
+    if (!owFlyover) return;
+    const f = owFlyover;
+    const u = (performance.now() - f.t0) / f.dur;
+    if (u >= 1) {
+        setCameraOrbit(f.saved.px, f.saved.pz, f.saved.dist, f.saved.pitch, f.saved.yaw);
+        owFlyover = null;
+        return;
+    }
+    const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+    let d = e * f.total, i = 0;
+    while (i < f.segs.length - 1 && d > f.segs[i]) { d -= f.segs[i]; i++; }
+    const L = Math.max(1e-6, f.segs[i]);
+    const k = Math.min(1, d / L);
+    const a = f.pts[i], b = f.pts[i + 1];
+    const x = a.x + (b.x - a.x) * k;
+    const z = a.z + (b.z - a.z) * k;
+    // Ease the yaw toward each leg's heading so doglegs pan smoothly
+    const heading = Math.atan2(b.x - a.x, b.z - a.z) + Math.PI;
+    let dy = heading - f.yaw;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    f.yaw += dy * 0.06;
+    // Swoop low over the route, rising near the ends
+    const dist = 640 - Math.sin(Math.PI * e) * 200;
+    setCameraOrbit(x, z, dist, 0.62, f.yaw);
 }
 
 // Which camera control button is currently being held down (null when none).
@@ -3042,6 +3107,8 @@ function overworldTouchStart(sx, sy) {
         saveData('coachSeen', true);
         return;
     }
+    // Any touch cancels a running flyover, leaving the camera where it is
+    if (owFlyover) owFlyover = null;
     const hit = overworldHUDHit(sx, sy);
     if (hit === 'close') { exitOverworld(); return; }
     if (hit === 'undo') { undoLastStroke(); return; }
@@ -3121,6 +3188,10 @@ function overworldTouchStart(sx, sy) {
         const hc = holeCardLayout();
         const selHole = worldCourse.holes.find(h => h.id === owSelectedHole);
         if (selHole && hitBtn(sx, sy, hc.x, hc.y, hc.w, hc.h)) {
+            if (hitBtn(sx, sy, hc.flyX, hc.flyY, hc.flyW, hc.flyH)) {
+                startHoleFlyover(selHole);
+                return;
+            }
             if (hitBtn(sx, sy, hc.playX, hc.playY, hc.playW, hc.playH)) {
                 startWorldHolePlaytest(selHole);
                 return;
@@ -4884,6 +4955,7 @@ function gameLoop(time) {
             updateTarget3D(0, 0, false);
             // Continuous rotate/tilt while a HUD button is held
             tickOverworldCamera(dt);
+            tickHoleFlyover();
             if (typeof cam3dSkipLerp !== 'undefined') cam3dSkipLerp = scouting || owDragPainting;
             updateCamera3D(dt);
             render3D();
