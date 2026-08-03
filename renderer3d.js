@@ -420,7 +420,7 @@ const ASSET_SPECIES = {
     flag:  ['flag-red'],
     prop:  ['bench', 'trash', 'flowers', 'park-entrance', 'stall-food',
             'stall-drinks', 'station-fence', 'bridge_wood', 'bridge_woodRound'],
-    hero:  ['clubhouse', 'golfcart', 'windmill', 'archsign', 'fountainstatue']
+    hero:  ['clubhouse', 'golfcart', 'windmill', 'archsign', 'fountainstatue', 'lighthouse']
 };
 // Non-Kenney asset locations
 const ASSET_PATH_NAME = {
@@ -428,7 +428,8 @@ const ASSET_PATH_NAME = {
     'golfcart': 'assets/meshy/golfcart.glb',
     'windmill': 'assets/meshy/windmill.glb',
     'archsign': 'assets/meshy/archsign.glb',
-    'fountainstatue': 'assets/meshy/fountainstatue.glb'
+    'fountainstatue': 'assets/meshy/fountainstatue.glb',
+    'lighthouse': 'assets/meshy/lighthouse.glb'
 };
 // Per-model height overrides (props vary too much for one species target)
 // Sized to the world's stylized chunky proportions (realistic scale reads
@@ -438,7 +439,7 @@ const ASSET_TARGET_H_NAME = {
     'stall-food': 62, 'stall-drinks': 62, 'station-fence': 18,
     'clubhouse': 148, 'golfcart': 34, 'windmill': 170,
     'bridge_wood': 26, 'bridge_woodRound': 30, 'archsign': 110,
-    'fountainstatue': 52
+    'fountainstatue': 52, 'lighthouse': 210
 };
 // Target world heights per species (CELL = 32; a good tree spans ~2 cells)
 const ASSET_TARGET_H = {
@@ -1573,6 +1574,9 @@ function buildTerrain3D(hole, opts) {
                 }
             }
         }
+        // Lighthouse landmark on the island's northeast corner, looking
+        // out over the cliff edge to sea
+        put('lighthouse', hole.cols - 4.5, 3.5, Math.PI);
         // Benches + trash along the entry path
         put('bench', ec - 2.1, er - 5, Math.PI / 2);
         put('bench', ec + 2.6, er - 7.5, -Math.PI / 2);
