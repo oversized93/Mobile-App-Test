@@ -707,7 +707,8 @@ function buildWaterSurface(hole) {
                 uDeep: { value: new THREE.Color('#177fb4') },
                 uLite: { value: new THREE.Color('#45c8e8') },
                 uShore: { value: null },
-                uWorld: { value: new THREE.Vector2(1, 1) }
+                uWorld: { value: new THREE.Vector2(1, 1) },
+                uNight: { value: 1.0 }
             },
             vertexShader: [
                 'varying vec2 vPos;',
@@ -723,6 +724,7 @@ function buildWaterSurface(hole) {
                 'uniform vec3 uLite;',
                 'uniform sampler2D uShore;',
                 'uniform vec2 uWorld;',
+                'uniform float uNight;',
                 'varying vec2 vPos;',
                 'void main() {',
                 '    float w1 = sin(vPos.x * 0.085 + uTime * 1.1)',
@@ -738,7 +740,7 @@ function buildWaterSurface(hole) {
                 '    float pulse = 0.6 + 0.4 * sin(uTime * 1.8 + shore * 14.0);',
                 '    col = mix(col, vec3(0.55, 0.93, 0.98), band * 0.55 * pulse);',
                 '    col += band * 0.12;',
-                '    gl_FragColor = vec4(col, 0.86);',
+                '    gl_FragColor = vec4(col * uNight, 0.86);',
                 '}'
             ].join('\n')
         });
@@ -1991,6 +1993,7 @@ function setupAmbientNPCs(hole) {
     setupCartDrive(hole);
     setupCritters(hole);
     setupPathLamps(hole);
+    setupFireflies(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -2055,6 +2058,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updatePinRings3D();
     updateCartDrive3D(dt, hole);
     updateCritters3D(hole);
+    updateFireflies3D(hole);
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = new THREE.Object3D();
     const t = windClock.value;
@@ -2161,6 +2165,65 @@ function setupFountains(hole) {
     terrainGroup.add(fountainInst);
 }
 
+// ---- Fireflies: warm motes drifting over the rough after dark ----
+let fireflyInst = null, fireflyStates = [], fireflyMatRef = null;
+
+function setupFireflies(hole) {
+    fireflyInst = null;
+    fireflyStates = [];
+    fireflyMatRef = null;
+    const spots = [];
+    for (let r = 2; r < hole.rows - 2; r++) {
+        for (let c = 2; c < hole.cols - 2; c++) {
+            const t = hole.grid[r][c];
+            if ((t === T.ROUGH || t === T.TREE)
+                && ((((c * 48611) ^ (r * 75503)) >>> 0) % 131) === 0) {
+                spots.push({ c: c, r: r });
+            }
+        }
+    }
+    const n = Math.min(24, spots.length);
+    if (!n) return;
+    const geo = new THREE.SphereGeometry(1.1, 5, 4);
+    const mat = new THREE.MeshBasicMaterial({
+        color: 0xd8f26a, transparent: true, opacity: 0
+    });
+    mat.toneMapped = false;
+    fireflyMatRef = mat;
+    fireflyInst = new THREE.InstancedMesh(geo, mat, n);
+    for (let i = 0; i < n; i++) {
+        const sp = spots[Math.floor(i * spots.length / n)];
+        fireflyStates.push({
+            x: (sp.c + 0.5) * CELL, z: (sp.r + 0.5) * CELL,
+            phase: i * 2.7, rad: 5 + (i % 4) * 3
+        });
+    }
+    terrainGroup.add(fireflyInst);
+}
+
+function updateFireflies3D(hole) {
+    if (!fireflyInst || !fireflyStates.length) return;
+    if (fireflyMatRef && fireflyMatRef.opacity <= 0.01) return; // daytime: skip
+    const t = windClock.value;
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < fireflyStates.length; i++) {
+        const s = fireflyStates[i];
+        const a = t * 0.55 + s.phase;
+        const x = s.x + Math.cos(a) * s.rad + Math.sin(a * 2.3) * 2;
+        const z = s.z + Math.sin(a * 0.8) * s.rad;
+        const gy = (hole && hole.heights)
+            ? ((hole.heights[Math.floor(z / CELL)] || [])[Math.floor(x / CELL)] || 0) : 0;
+        // Blink: each mote pulses scale on its own rhythm
+        const blink = 0.4 + 0.6 * Math.max(0, Math.sin(t * 2.6 + s.phase * 3));
+        dummy.position.set(x, gy + 6 + Math.sin(t * 1.4 + s.phase) * 2.5, z);
+        dummy.scale.set(blink, blink, blink);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        fireflyInst.setMatrixAt(i, dummy.matrix);
+    }
+    fireflyInst.instanceMatrix.needsUpdate = true;
+}
+
 // ---- Path lamps: warm globes on posts along the walkways ----
 // The head material brightens at night via updateDayNightTint.
 let lampHeadMatRef = null;
@@ -2244,6 +2307,9 @@ function updateDayNightTint(minutes) {
         const nw = 1 - dayW;
         lampHeadMatRef.color.setRGB(m(0.74, 1.0, nw), m(0.71, 0.85, nw), m(0.62, 0.5, nw));
     }
+    if (waterMat) waterMat.uniforms.uNight.value = 0.35 + 0.65 * dayW;
+    // Fireflies fade in after dark, invisible by day
+    if (fireflyMatRef) fireflyMatRef.opacity = Math.max(0, 1 - dayW * 2.2);
 }
 
 // ---- Ambient critters: butterflies over meadows, gulls over ponds ----
