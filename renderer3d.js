@@ -2166,11 +2166,13 @@ function setupAmbientNPCs(hole) {
             const pts = [rec.tee, ...(rec.waypoints || []), rec.pin]
                 .map(p => ({ x: (p.x + 0.5) * CELL, z: (p.y + 0.5) * CELL }));
             if (pts.length >= 2) {
-                // Harder holes command higher green fees
-                const fee = (typeof holeDifficulty === 'function')
-                    ? 3 + 2 * holeDifficulty(rec) : 5;
-                routeGolfers.push({ pts: pts, off: 0, fee: fee, holeId: rec.id, par: rec.par || 4 });
-                routeGolfers.push({ pts: pts, off: 1, fee: fee, holeId: rec.id, par: rec.par || 4 });
+                // Harder holes command higher green fees — and punish play:
+                // the same star rating scales duff/missed-putt odds below
+                const diff = (typeof holeDifficulty === 'function')
+                    ? holeDifficulty(rec) : 2;
+                const fee = 3 + 2 * diff;
+                routeGolfers.push({ pts: pts, off: 0, fee: fee, holeId: rec.id, par: rec.par || 4, diff: diff });
+                routeGolfers.push({ pts: pts, off: 1, fee: fee, holeId: rec.id, par: rec.par || 4, diff: diff });
             }
         }
     }
@@ -2229,7 +2231,8 @@ function setupAmbientNPCs(hole) {
             speed: 14 + rg.off * 3, phase: rg.off * 2.1, idle: false,
             route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5, fee: rg.fee,
             name: GOLFER_NAMES[gnIdx++ % GOLFER_NAMES.length],
-            holeId: rg.holeId, strokes: 0, lastRound: null, par: rg.par
+            holeId: rg.holeId, strokes: 0, lastRound: null, par: rg.par,
+            diff: rg.diff
         });
     }
     for (let i = 0; i < total; i++) {
@@ -2314,7 +2317,8 @@ function updateAmbientNPCs3D(dt, hole) {
                 if (!nxt) {
                     // Holed out: bank the green fee, then restart at the tee
                     s.lastRound = (s.strokes || 0) + 1; // the holing putt
-                    if (Math.random() < 0.25) s.lastRound++; // lipped-out first putt
+                    // Trickier greens lip out more first putts
+                    if (Math.random() < 0.13 + 0.05 * (s.diff || 2)) s.lastRound++;
                     s.strokes = 0;
                     window.__golfFees = (window.__golfFees || 0) + (s.fee || 5);
                     const pinPt = s.route[s.route.length - 1];
@@ -2361,8 +2365,10 @@ function updateAmbientNPCs3D(dt, hole) {
                         s.pause = 3;
                         s.strokes = (s.strokes || 0) + 1; // playing the next shot
                         // Occasional duff: an extra recovery stroke keeps
-                        // scores varied instead of every round being identical
-                        if (Math.random() < 0.3) { s.strokes++; s.pause += 2; }
+                        // scores varied — and harder holes duff more often,
+                        // so a hole's play record tracks its star rating
+                        const duffP = 0.12 + 0.07 * (s.diff || 2);
+                        if (Math.random() < duffP) { s.strokes++; s.pause += 2; }
                     } else {
                         // Walk toward the next point, but sidestep water:
                         // slide perpendicular along the shore instead of
