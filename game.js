@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt38';
+const BUILD_TAG = 'gt39';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -740,6 +740,13 @@ function generateHeights(hole) {
             // so the global water surface (y=-1.4) only ever shows inside
             // carved ponds.
             let q = Math.max(0, height);
+            if (t === T.SAND) {
+                // Bunkers dip into a shallow bowl below the surrounding
+                // turf. Floor stays above the global water plane (-1.4)
+                // so the sea never peeks through the sand.
+                h[r][c] = Math.max(q * 0.4 - 6, -1.1);
+                continue;
+            }
             // Terraced plateaus (reference terrain language): flat steps
             // with short steep lips — cliff faces pick up the slope-soil
             // shading automatically
