@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt79';
+const BUILD_TAG = 'gt80';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1932,11 +1932,20 @@ function playCustomCourses() {
 
 // ---- Character Creator ----
 function drawCharacter() {
-    const bg = ctx.createLinearGradient(0, 0, 0, H());
-    bg.addColorStop(0, '#0d2818');
-    bg.addColorStop(1, '#1a472a');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W(), H());
+    if (menuOrbitReady && scene3dReady) {
+        ctx.clearRect(0, 0, W(), H());
+        const bg = ctx.createLinearGradient(0, 0, 0, H());
+        bg.addColorStop(0, 'rgba(8,26,16,0.85)');
+        bg.addColorStop(1, 'rgba(10,30,19,0.7)');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W(), H());
+    } else {
+        const bg = ctx.createLinearGradient(0, 0, 0, H());
+        bg.addColorStop(0, '#0d2818');
+        bg.addColorStop(1, '#1a472a');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W(), H());
+    }
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
@@ -5361,12 +5370,12 @@ function gameLoop(time) {
 
     // 3D rendering for gameplay states, overworld, AND the menu backdrop
     const use3D = scene3dReady && (state === 'playing' || state === 'holeDone'
-        || state === 'overworld' || state === 'menu' || state === 'manage');
+        || state === 'overworld' || state === 'menu' || state === 'manage' || state === 'character');
     if (use3D) {
         show3D();
 
         // Menu/manage backdrop: the live resort slowly orbiting under the UI
-        if (state === 'menu' || state === 'manage') {
+        if (state === 'menu' || state === 'manage' || state === 'character') {
             if (!menuOrbitReady) {
                 if (!worldCourse.heights) refreshWorldHeights();
                 buildTerrain3D(worldCourse, { distantScenery: false });

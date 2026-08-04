@@ -602,7 +602,7 @@ function finishAssets(loaded) {
     worldAssetsLoading = false;
     // Rebuild whatever scene is showing so real models replace primitives
     if (typeof scene3dReady !== 'undefined' && scene3dReady && typeof state !== 'undefined') {
-        if ((state === 'overworld' || state === 'menu' || state === 'manage') && typeof worldCourse !== 'undefined') {
+        if ((state === 'overworld' || state === 'menu' || state === 'manage' || state === 'character') && typeof worldCourse !== 'undefined') {
             buildTerrain3D(worldCourse, { distantScenery: false });
         } else if ((state === 'playing' || state === 'holeDone') && typeof currentHole !== 'undefined' && currentHole) {
             buildTerrain3D(currentHole);
