@@ -299,6 +299,34 @@ function init3D() {
     scene3d.add(new THREE.Mesh(skyGeo, skyMat));
     skyMatRef = skyMat;
 
+    // Starfield: fades in after dark via the day/night pass
+    {
+        const starPos = [];
+        for (let i = 0; i < 220; i++) {
+            // Deterministic scatter over the upper hemisphere
+            const a = (i * 2.39996) % (Math.PI * 2); // golden angle
+            const u = 0.15 + ((i * 73) % 100) / 118;  // elevation bias upward
+            const r = 11000;
+            starPos.push(
+                Math.cos(a) * Math.sqrt(1 - u * u) * r,
+                u * r,
+                Math.sin(a) * Math.sqrt(1 - u * u) * r
+            );
+        }
+        const starGeo = new THREE.BufferGeometry();
+        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+        const starMat = new THREE.PointsMaterial({
+            color: 0xeef4ff, size: 70, sizeAttenuation: true,
+            transparent: true, opacity: 0, depthWrite: false
+        });
+        starMat.toneMapped = false;
+        starMatRef = starMat;
+        const stars = new THREE.Points(starGeo, starMat);
+        stars.renderOrder = -9;
+        stars.frustumCulled = false;
+        scene3d.add(stars);
+    }
+
     // Add some clouds (flat planes in the sky) — grouped so the overworld
     // camera can hide them (seen from above they read as white debris)
     cloudsGroup = new THREE.Group();
@@ -2807,6 +2835,7 @@ function updateRain3D(dt) {
 // Never goes truly dark: night floors keep the resort readable, the cycle
 // reads through warm dawns/dusks, sweeping shadows, and a dimmed sky.
 let hemiLightRef = null, dirLightRef = null, skyMatRef = null, oceanMatRef = null;
+let starMatRef = null;
 let beaconGroups = [], beaconMats = [];
 
 // Rotating lighthouse beacon: two opposed light cones from the lantern
@@ -2859,6 +2888,8 @@ function updateDayNightTint(minutes) {
     const dim = (0.34 + 0.66 * dayW) * (1 - rainEnvNow * 0.3);
     if (skyMatRef) skyMatRef.color.setRGB(dim * 0.8, dim * 0.88, dim);
     if (oceanMatRef) oceanMatRef.color.copy(OCEAN_BASE_COLOR).multiplyScalar(0.35 + 0.65 * dayW);
+    // Stars pierce through once the sky is properly dark
+    if (starMatRef) starMatRef.opacity = Math.max(0, 1 - dayW * 3) * (1 - rainEnvNow);
     // Lamp globes: dull stone by day, warm glow after dark
     if (lampHeadMatRef) {
         const nw = 1 - dayW;
