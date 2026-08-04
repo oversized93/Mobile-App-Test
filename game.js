@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt57';
+const BUILD_TAG = 'gt58';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5305,6 +5305,25 @@ function initAmbientAudio() {
         windGain.connect(audioMaster);
         noise.start();
         lfo.start();
+        // Rain patter: high-passed copy of the noise bed, faded in and
+        // out by the renderer's shower envelope
+        const rainNoise = audioCtx.createBufferSource();
+        rainNoise.buffer = buf;
+        rainNoise.loop = true;
+        const hp = audioCtx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 1400;
+        const rainGain = audioCtx.createGain();
+        rainGain.gain.value = 0;
+        rainNoise.connect(hp);
+        hp.connect(rainGain);
+        rainGain.connect(audioMaster);
+        rainNoise.start();
+        setInterval(() => {
+            if (!audioCtx) return;
+            const env = (typeof rainEnvNow === 'number') ? rainEnvNow : 0;
+            rainGain.gain.linearRampToValueAtTime(env * 0.5, audioCtx.currentTime + 0.25);
+        }, 250);
         scheduleChirp();
         // Club strikes: poll the tee-launch cycles (same math as the
         // renderer's synced swings) and play a soft tock on each wrap
@@ -5350,7 +5369,8 @@ function scheduleChirp() {
         try {
             const h = ((((resort.worldClock || 0) / 60) % 24) + 24) % 24;
             const sceneOk = state === 'overworld' || state === 'menu' || state === 'playing';
-            if (h > 5.5 && h < 20 && sceneOk) {
+            const raining = typeof rainEnvNow === 'number' && rainEnvNow > 0.3;
+            if (h > 5.5 && h < 20 && sceneOk && !raining) {
                 // A short randomized birdsong phrase
                 const t0 = audioCtx.currentTime;
                 const notes = 2 + Math.floor(Math.random() * 3);
