@@ -2053,6 +2053,7 @@ const sharedDummy3D = new THREE.Object3D();
 let npcBodyInst = null, npcHeadInst = null, npcClubInst = null;
 let npcStates = [];
 let npcPathCells = [];
+let npcSocialSpots = [];
 let npcWalkerCount = 0;
 const NPC_COUNT = 10;
 const NPC_COLORS = [0xe5533d, 0x3d7de5, 0xe5b13d, 0x8e44ad,
@@ -2110,12 +2111,22 @@ function setupAmbientNPCs(hole) {
     const headMat = new THREE.MeshStandardMaterial({ color: linC(0xf0c8a0), roughness: 0.85 });
     npcHeadInst = new THREE.InstancedMesh(headGeo, headMat, total);
     npcBodyInst.castShadow = true;
+    // Social rest spots: placed benches and gazebos attract walkers
+    npcSocialSpots = [];
+    if (hole.decor) {
+        for (const d of hole.decor) {
+            if (d.t === 'bench' || d.t === 'gazebo') {
+                npcSocialSpots.push({ x: d.x * CELL, z: d.y * CELL });
+            }
+        }
+    }
     for (let i = 0; i < walkerCount; i++) {
         const start = npcPathCells[(i * 37) % npcPathCells.length];
         npcStates.push({
             x: (start.c + 0.5) * CELL, z: (start.r + 0.5) * CELL,
             tx: (start.c + 0.5) * CELL, tz: (start.r + 0.5) * CELL,
-            speed: 11 + (i % 4) * 2.5, phase: i * 1.7, idle: false
+            speed: 11 + (i % 4) * 2.5, phase: i * 1.7, idle: false,
+            pause: 0
         });
     }
     for (let g = 0; g < golfers.length; g++) {
@@ -2200,18 +2211,35 @@ function updateAmbientNPCs3D(dt, hole) {
                     }
                 }
             }
+        } else if (s.pause > 0) {
+            s.pause -= dt; // resting at a bench/gazebo
         } else if (d < 3) {
-            // Pick a new stroll target on the path network
-            const next = npcPathCells[Math.floor((t * 7 + i * 131) % npcPathCells.length)];
-            s.tx = (next.c + 0.5) * CELL;
-            s.tz = (next.r + 0.5) * CELL;
+            if (s.arriveSit) {
+                // Reached the rest spot: linger a while
+                s.pause = 3.5 + (i % 3) * 1.5;
+                s.arriveSit = false;
+            } else {
+                const h = Math.floor(t * 7 + i * 131);
+                if (npcSocialSpots.length && h % 4 === 0) {
+                    // Detour to a bench or gazebo for a rest
+                    const sp = npcSocialSpots[(i * 31 + h) % npcSocialSpots.length];
+                    s.tx = sp.x;
+                    s.tz = sp.z;
+                    s.arriveSit = true;
+                } else {
+                    // Pick a new stroll target on the path network
+                    const next = npcPathCells[h % npcPathCells.length];
+                    s.tx = (next.c + 0.5) * CELL;
+                    s.tz = (next.r + 0.5) * CELL;
+                }
+            }
         } else {
             s.x += (dx / d) * s.speed * dt;
             s.z += (dz / d) * s.speed * dt;
         }
         const gy = (hole && hole.heights)
             ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
-        const still = s.idle || (s.route && s.pause > 0);
+        const still = s.idle || s.pause > 0;
         let bob = still ? Math.sin(t * 2.2 + s.phase) * 0.3
                         : Math.sin(t * 9 + s.phase) * 0.7;
         // Holed out: celebratory hops at the pin before the walk back
