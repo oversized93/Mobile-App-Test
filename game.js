@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt53';
+const BUILD_TAG = 'gt54';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5260,7 +5260,41 @@ function initAmbientAudio() {
         noise.start();
         lfo.start();
         scheduleChirp();
+        // Club strikes: poll the tee-launch cycles (same math as the
+        // renderer's synced swings) and play a soft tock on each wrap
+        const prevCycles = {};
+        setInterval(() => {
+            if (!audioCtx || state !== 'overworld') return;
+            if (typeof npcStates === 'undefined' || !npcStates.length) return;
+            const t = performance.now() / 1000;
+            for (const s of npcStates) {
+                if (!s.idle || s.arcIdx == null) continue;
+                const cyc = (t * 0.45 + s.arcIdx * 0.37) % 1.6;
+                if (prevCycles[s.arcIdx] != null && cyc < prevCycles[s.arcIdx]
+                    && Math.random() < 0.7) {
+                    playStrikeTock();
+                }
+                prevCycles[s.arcIdx] = cyc;
+            }
+        }, 90);
     } catch (e) { audioCtx = null; }
+}
+
+function playStrikeTock() {
+    try {
+        const t0 = audioCtx.currentTime;
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(950, t0);
+        o.frequency.exponentialRampToValueAtTime(320, t0 + 0.05);
+        g.gain.setValueAtTime(0.18, t0);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.07);
+        o.connect(g);
+        g.connect(audioMaster);
+        o.start(t0);
+        o.stop(t0 + 0.08);
+    } catch (e) {}
 }
 
 function scheduleChirp() {
@@ -5288,6 +5322,22 @@ function scheduleChirp() {
                     g.connect(audioMaster);
                     o.start(ts);
                     o.stop(ts + 0.13);
+                }
+            } else if (sceneOk) {
+                // Night: sparse cricket trills, quieter and lower
+                const t0 = audioCtx.currentTime;
+                for (let i = 0; i < 3; i++) {
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    const ts = t0 + i * 0.045;
+                    o.frequency.setValueAtTime(1450 + Math.random() * 250, ts);
+                    g.gain.setValueAtTime(0, ts);
+                    g.gain.linearRampToValueAtTime(0.07, ts + 0.012);
+                    g.gain.exponentialRampToValueAtTime(0.001, ts + 0.04);
+                    o.connect(g);
+                    g.connect(audioMaster);
+                    o.start(ts);
+                    o.stop(ts + 0.05);
                 }
             }
         } catch (e) {}
