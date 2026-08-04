@@ -2136,7 +2136,11 @@ function setupAmbientNPCs(hole) {
             }
         }
     }
-    const walkerCount = npcPathCells.length >= 4 ? NPC_COUNT : 0;
+    // Crowd size follows membership: a young resort feels quiet, a big
+    // one bustles (refreshes on the next terrain rebuild)
+    const memberCrowd = (typeof resort !== 'undefined' && resort && resort.members)
+        ? Math.min(24, 4 + Math.floor(resort.members / 3)) : NPC_COUNT;
+    const walkerCount = npcPathCells.length >= 4 ? memberCrowd : 0;
     npcWalkerCount = walkerCount;
     const total = walkerCount + golfers.length + routeGolfers.length;
     if (total === 0) return;
