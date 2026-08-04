@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt82';
+const BUILD_TAG = 'gt83';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -179,6 +179,8 @@ function saveWorldCourse() {
 function enterOverworld() { setState('overworld'); }
 
 function stateEnterOverworld() {
+    owRosterOpen = false;
+    owRosterChip = null;
     if (!worldCourse.heights) refreshWorldHeights();
     if (scene3dReady) {
         buildTerrain3D(worldCourse, { distantScenery: false });
@@ -291,6 +293,8 @@ const OW_TOOL_PARENT = {
     dclubhouse: 'decor', dgazebo: 'decor', dstatue: 'decor'
 };
 let owRailOpen = false;   // build rail expanded?
+let owRosterOpen = false; // golfer roster panel visible?
+let owRosterChip = null;  // screen rect of the roster chip (set each draw)
 let owFlyout = null;      // parent id whose sub-options are showing
 let owCategory = 'surface'; // retained for save-compat; no longer drives UI
 
@@ -2768,6 +2772,59 @@ function drawOverworld() {
         ctx.fillStyle = '#fff';
         ctx.textAlign = 'center';
         ctx.fillText(label, cx0 + cw / 2, L.undoY + 23);
+
+        // Golfer roster chip — how many named golfers are out playing.
+        // Tap toggles the roster panel below.
+        const onCourse = (typeof npcStates !== 'undefined')
+            ? npcStates.filter(s => s.name) : [];
+        const rLabel = '⛳ ' + onCourse.length;
+        const rw = ctx.measureText(rLabel).width + 26;
+        const rx0 = cx0 - 10 - rw;
+        glossyRect(rx0, L.undoY + 3, rw, 30, 15, owRosterOpen ? '#3f7a4d' : '#2c3a42');
+        ctx.fillStyle = '#fff';
+        ctx.fillText(rLabel, rx0 + rw / 2, L.undoY + 23);
+        owRosterChip = { x: rx0, y: L.undoY + 3, w: rw, h: 30 };
+
+        // Roster panel — everyone on the course and how their round is going
+        if (owRosterOpen) {
+            const rows = onCourse.slice(0, 8);
+            const pw = 258, rowH = 30, headH = 34;
+            const ph = headH + Math.max(rows.length, 1) * rowH + 10;
+            const px = Math.min(rx0, W() - pw - 8);
+            const py = L.undoY + 40;
+            ctx.fillStyle = 'rgba(12,22,28,0.92)';
+            roundRect(px, py, pw, ph, 12); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+            ctx.lineWidth = 1;
+            roundRect(px, py, pw, ph, 12); ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('ON THE COURSE', px + 14, py + 21);
+            if (!rows.length) {
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = '12px -apple-system,sans-serif';
+                ctx.fillText('No golfers out — build more holes!', px + 14, py + headH + 18);
+            }
+            for (let i = 0; i < rows.length; i++) {
+                const s = rows[i];
+                const ry = py + headH + i * rowH;
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 12px -apple-system,sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(s.name, px + 14, ry + 19);
+                ctx.fillStyle = 'rgba(255,255,255,0.55)';
+                ctx.font = '11px -apple-system,sans-serif';
+                ctx.textAlign = 'right';
+                const prog = 'H' + s.holeId + ' • '
+                    + (s.strokes ? s.strokes + ' str' : 'tee')
+                    + (s.lastRound ? ' • last ' + s.lastRound : '');
+                ctx.fillText(prog, px + pw - 14, ry + 19);
+            }
+            owRosterChip.panel = { x: px, y: py, w: pw, h: ph };
+        } else if (owRosterChip) {
+            owRosterChip.panel = null;
+        }
     }
 
     // Close X — glossy red
@@ -3407,6 +3464,11 @@ function overworldHUDHit(sx, sy) {
     const L = overworldLayout();
     if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) return 'close';
     if (hitBtn(sx, sy, L.undoX, L.undoY, L.undoSize, L.undoSize)) return 'undo';
+    if (owRosterChip && hitBtn(sx, sy, owRosterChip.x, owRosterChip.y,
+        owRosterChip.w, owRosterChip.h)) return 'roster';
+    if (owRosterOpen && owRosterChip && owRosterChip.panel
+        && hitBtn(sx, sy, owRosterChip.panel.x, owRosterChip.panel.y,
+            owRosterChip.panel.w, owRosterChip.panel.h)) return 'roster:panel';
     // Camera control rail
     for (let i = 0; i < L.camBtns.length; i++) {
         const by = L.camY0 + i * (L.camBtnSize + L.camBtnGap);
@@ -3487,6 +3549,11 @@ function overworldTouchStart(sx, sy) {
     const hit = overworldHUDHit(sx, sy);
     if (hit === 'close') { exitOverworld(); return; }
     if (hit === 'undo') { undoLastStroke(); return; }
+    if (hit === 'roster') { owRosterOpen = !owRosterOpen; return; }
+    if (hit === 'roster:panel') return; // absorb taps on the open panel
+    // Tapping anywhere else dismisses the roster (and absorbs the tap so a
+    // stray dismiss can't paint terrain underneath)
+    if (owRosterOpen) { owRosterOpen = false; return; }
     if (hit && hit.startsWith('cam:')) {
         const op = hit.slice(4);
         if (op === 'reset') {

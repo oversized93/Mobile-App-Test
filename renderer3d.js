@@ -2228,7 +2228,7 @@ function setupAmbientNPCs(hole) {
             tx: rg.pts[1].x, tz: rg.pts[1].z,
             speed: 14 + rg.off * 3, phase: rg.off * 2.1, idle: false,
             route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5, fee: rg.fee,
-            name: GOLFER_NAMES[(rg.holeId * 2 + rg.off + gnIdx++) % GOLFER_NAMES.length],
+            name: GOLFER_NAMES[gnIdx++ % GOLFER_NAMES.length],
             holeId: rg.holeId, strokes: 0, lastRound: null
         });
     }
