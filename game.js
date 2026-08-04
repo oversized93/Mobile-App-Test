@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt81';
+const BUILD_TAG = 'gt82';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3590,6 +3590,28 @@ function overworldTouchStart(sx, sy) {
             const near = (pt) => pt && !pt.behind
                 && (sx - pt.x) * (sx - pt.x) + (sy - pt.y) * (sy - pt.y) < 22 * 22;
             if (near(ts) || near(ps)) { owSelectedHole = hole.id; return; }
+        }
+        // ---- Tap a golfer to see who they are and how their round is going.
+        // Only route golfers carry a name; ambient walkers are anonymous.
+        if (scene3dReady && typeof npcStates !== 'undefined'
+            && typeof worldToScreen3D === 'function') {
+            let best = null, bd = 26 * 26;
+            for (const s of npcStates) {
+                if (!s.name) continue;
+                const gp = worldToScreen3D(s.x, s.z);
+                if (!gp || gp.behind) continue;
+                const dd = (sx - gp.x) * (sx - gp.x) + (sy - gp.y) * (sy - gp.y);
+                if (dd < bd) { bd = dd; best = s; }
+            }
+            if (best) {
+                let msg = '⛳ ' + best.name + ' — hole ' + best.holeId
+                    + ', ' + (best.strokes ? best.strokes + ' stroke'
+                        + (best.strokes > 1 ? 's' : '') + ' so far'
+                        : 'teeing off');
+                if (best.lastRound) msg += ' · last round: ' + best.lastRound;
+                notify(msg);
+                return;
+            }
         }
     }
 

@@ -2169,8 +2169,8 @@ function setupAmbientNPCs(hole) {
                 // Harder holes command higher green fees
                 const fee = (typeof holeDifficulty === 'function')
                     ? 3 + 2 * holeDifficulty(rec) : 5;
-                routeGolfers.push({ pts: pts, off: 0, fee: fee });
-                routeGolfers.push({ pts: pts, off: 1, fee: fee });
+                routeGolfers.push({ pts: pts, off: 0, fee: fee, holeId: rec.id });
+                routeGolfers.push({ pts: pts, off: 1, fee: fee, holeId: rec.id });
             }
         }
     }
@@ -2218,12 +2218,18 @@ function setupAmbientNPCs(hole) {
             arcIdx: gp.arcIdx != null ? gp.arcIdx : null
         });
     }
+    const GOLFER_NAMES = ['Ace Watson', 'Birdie Chen', 'Chip Alvarez', 'Divot Dan',
+        'Eagle Kim', 'Fairway Fran', 'Gimme Grace', 'Hook Harper',
+        'Iron Ivy', 'Jorge Links', 'Kara Putt', 'Loft Lucas'];
+    let gnIdx = 0;
     for (const rg of routeGolfers) {
         npcStates.push({
             x: rg.pts[0].x + rg.off * 6, z: rg.pts[0].z + 4,
             tx: rg.pts[1].x, tz: rg.pts[1].z,
             speed: 14 + rg.off * 3, phase: rg.off * 2.1, idle: false,
-            route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5, fee: rg.fee
+            route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5, fee: rg.fee,
+            name: GOLFER_NAMES[(rg.holeId * 2 + rg.off + gnIdx++) % GOLFER_NAMES.length],
+            holeId: rg.holeId, strokes: 0, lastRound: null
         });
     }
     for (let i = 0; i < total; i++) {
@@ -2307,6 +2313,8 @@ function updateAmbientNPCs3D(dt, hole) {
                 const nxt = s.route[s.ptIdx + 1];
                 if (!nxt) {
                     // Holed out: bank the green fee, then restart at the tee
+                    s.lastRound = (s.strokes || 0) + 1; // the holing putt
+                    s.strokes = 0;
                     window.__golfFees = (window.__golfFees || 0) + (s.fee || 5);
                     const pinPt = s.route[s.route.length - 1];
                     (window.__feePopups = window.__feePopups || []).push({
@@ -2324,6 +2332,7 @@ function updateAmbientNPCs3D(dt, hole) {
                     if (rd < 2.5) {
                         s.ptIdx++;
                         s.pause = 3;
+                        s.strokes = (s.strokes || 0) + 1; // playing the next shot
                     } else {
                         // Walk toward the next point, but sidestep water:
                         // slide perpendicular along the shore instead of
