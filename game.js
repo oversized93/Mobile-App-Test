@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt44';
+const BUILD_TAG = 'gt45';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2478,6 +2478,25 @@ function drawOverworld() {
 
     // ---- Placed holes: dotted polyline + tee/pin markers on the 3D scene ----
     for (const hole of worldCourse.holes) drawPlacedHole(hole, hole.id === owSelectedHole);
+
+    // ---- Decor handles: with a decor tool armed, ring every placed item
+    // so taps have a visible target. Same-type items brighten (they rotate
+    // on tap); others dim (switch tool or use erase).
+    if (OW_TOOL_PARENT[owTool] === 'decor' && worldCourse.decor) {
+        const armed = currentTool();
+        for (const d of worldCourse.decor) {
+            const p = cellCenterScreen(d.x - 0.5, d.y - 0.5);
+            if (!p || p.behind) continue;
+            const same = armed && armed.decor === d.t;
+            ctx.strokeStyle = same ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = same ? 2 : 1;
+            ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, same ? 17 : 12, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    }
 
     // ---- Active hole wizard overlay (if any) ----
     if (holeWizard) drawHoleWizardOverlay();
