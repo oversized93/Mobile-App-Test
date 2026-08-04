@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt78';
+const BUILD_TAG = 'gt79';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -543,7 +543,12 @@ function simulateRound(course) {
         const r = simulateHole(hole.par);
         totalStrokes += r.strokes;
         totalPar += r.par;
-        coins += coinsForScore(r.par, r.strokes);
+        // Exhibition payout aligned with the green-fee economy: double
+        // the hole's fee, plus a birdie/eagle bonus. The old per-score
+        // formula printed ~6x what ambient golfers earn.
+        const fee = 3 + 2 * holeDifficulty(hole);
+        const under = Math.max(0, r.par - r.strokes);
+        coins += fee * 2 + under * 5;
     }
     return { totalStrokes, totalPar, coins };
 }
