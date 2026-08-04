@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt67';
+const BUILD_TAG = 'gt68';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3198,6 +3198,24 @@ function drawHoleWizardOverlay() {
     ctx.font = 'bold 13px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(msg, W() / 2, bannerY + bannerH / 2 + 5);
+
+    // Live design readout while shaping: length, par, stars, fee
+    if (w.step === 'shape' && w.tee && w.pin) {
+        const yds = Math.round(polylineLengthYards(w));
+        const par = parFromYards(yds);
+        const diff = holeDifficulty(w);
+        const fee = 3 + 2 * diff;
+        const info = yds + ' yds  •  Par ' + par + '  •  '
+            + '★'.repeat(diff) + '☆'.repeat(5 - diff) + '  •  $' + fee + ' fee';
+        const infoW = Math.min(W() - 20, 340);
+        const infoY = bannerY + bannerH + 8;
+        ctx.fillStyle = 'rgba(10,26,38,0.85)';
+        roundRect((W() - infoW) / 2, infoY, infoW, 26, 13);
+        ctx.fill();
+        ctx.fillStyle = '#8fe3ec';
+        ctx.font = 'bold 12px -apple-system,sans-serif';
+        ctx.fillText(info, W() / 2, infoY + 17);
+    }
 
     // Tee ghost (step 1) — follows finger last position
     if (w.step === 'tee' && owLastGhostCell) {
