@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt45';
+const BUILD_TAG = 'gt46';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -225,6 +225,7 @@ const OW_TOOLS = [
     { id: 'darch',       label: 'Arch',       icon: '⛩️', color: '#a1887f', decor: 'arch' },
     { id: 'dwindmill',   label: 'Windmill',   icon: '\u{1F3E1}', color: '#ffb74d', decor: 'windmill' },
     { id: 'dlighthouse', label: 'Lighthouse', icon: '\u{1F5FC}', color: '#ef5350', decor: 'lighthouse' },
+    { id: 'dgazebo',     label: 'Gazebo',     icon: '\u26FA', color: '#26a69a', decor: 'gazebo' },
     { id: 'dclubhouse',  label: 'Clubhouse',  icon: '\u{1F3DB}️', color: '#66bb6a', decor: 'clubhouse' },
 ];
 const OW_BRUSH_SIZES = [1, 3, 5, 7, 9, 11];
@@ -241,7 +242,7 @@ const OW_RAIL = [
     { id: 'path',    icon: '\u{1F6B6}', label: 'PATHS' },
     { id: 'decor',   icon: '\u{1FA91}', label: 'DECOR',
       flyout: ['dbench', 'dflowers', 'dkiosk', 'dstall', 'dcart', 'darch',
-               'dwindmill', 'dlighthouse', 'dclubhouse'] },
+               'dwindmill', 'dlighthouse', 'dgazebo', 'dclubhouse'] },
     { id: 'hole',    icon: '\u26F3',    label: 'HOLES' },
     { id: 'erase',   icon: '\u267B',    label: 'ERASE' },
     { id: 'size',    icon: null,         label: 'BRUSH', flyout: 'sizes' },
@@ -252,7 +253,7 @@ const OW_TOOL_PARENT = {
     sand: 'surface', water: 'nature', trees: 'nature', path: 'path', erase: 'erase',
     dbench: 'decor', dflowers: 'decor', dkiosk: 'decor', dstall: 'decor',
     dcart: 'decor', darch: 'decor', dwindmill: 'decor', dlighthouse: 'decor',
-    dclubhouse: 'decor'
+    dclubhouse: 'decor', dgazebo: 'decor'
 };
 let owRailOpen = false;   // build rail expanded?
 let owFlyout = null;      // parent id whose sub-options are showing
