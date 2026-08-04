@@ -842,6 +842,11 @@ const ALBEDO_COLORS = {
 };
 
 function albedoCellColor(hole, c, r) {
+    // Chamfers ask for corner-neighbor colors that can sit off-grid on
+    // classic course maps (the overworld's OOB ring masked this)
+    if (r < 0 || r >= hole.rows || c < 0 || c >= hole.cols) {
+        return ALBEDO_COLORS.base[T.OOB];
+    }
     const t = hole.grid[r][c];
     let col = ALBEDO_COLORS.base[t] || '#3e9e53';
     if (t === T.FAIRWAY) {
