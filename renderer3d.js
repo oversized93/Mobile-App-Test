@@ -2319,8 +2319,27 @@ function updateAmbientNPCs3D(dt, hole) {
                         s.ptIdx++;
                         s.pause = 3;
                     } else {
-                        s.x += (rdx / rd) * s.speed * dt;
-                        s.z += (rdz / rd) * s.speed * dt;
+                        // Walk toward the next point, but sidestep water:
+                        // slide perpendicular along the shore instead of
+                        // wading straight through a hazard
+                        let mx = (rdx / rd) * s.speed * dt;
+                        let mz = (rdz / rd) * s.speed * dt;
+                        const tc = Math.floor((s.x + mx * 8) / CELL);
+                        const tr = Math.floor((s.z + mz * 8) / CELL);
+                        if (hole.grid[tr] && hole.grid[tr][tc] === T.WATER) {
+                            const px2 = -rdz / rd, pz2 = rdx / rd;
+                            for (let side = 1; side >= -1; side -= 2) {
+                                const oc = Math.floor((s.x + px2 * side * CELL) / CELL);
+                                const orr = Math.floor((s.z + pz2 * side * CELL) / CELL);
+                                if (hole.grid[orr] && hole.grid[orr][oc] !== T.WATER) {
+                                    mx = px2 * side * s.speed * dt;
+                                    mz = pz2 * side * s.speed * dt;
+                                    break;
+                                }
+                            }
+                        }
+                        s.x += mx;
+                        s.z += mz;
                     }
                 }
             }
