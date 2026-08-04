@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt60';
+const BUILD_TAG = 'gt61';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -520,6 +520,7 @@ function tickWorld(dt) {
     // incremented by the renderer when a playing group finishes)
     if (window.__golfHoleOuts) {
         resort.coins += 5 * window.__golfHoleOuts;
+        resort.feesEarned = (resort.feesEarned || 0) + 5 * window.__golfHoleOuts;
         window.__golfHoleOuts = 0;
     }
     // Membership drifts toward what the resort deserves: holes draw
@@ -2314,6 +2315,13 @@ function drawManage() {
     ctx.font = 'bold 11px -apple-system,sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('AMENITIES', L.contentX + 4, L.amenityLabelY + 14);
+    // Course report: holes and lifetime green fees, right-aligned
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.fillText(worldCourse.holes.length + ' holes  •  green fees $' + (resort.feesEarned || 0),
+                 L.contentX + L.contentW - 4, L.amenityLabelY + 14);
+    ctx.textAlign = 'left';
 
     // Amenity cards (full-width of content area, stacked)
     for (let i = 0; i < AMENITIES.length; i++) {
