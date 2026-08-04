@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt52';
+const BUILD_TAG = 'gt53';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5217,6 +5217,85 @@ function gameLoop(time) {
     drawNotification(dt);
 }
 
+
+// ---- Ambient audio: synthesized wind bed + birdsong ----
+// Created lazily on the first touch (iOS blocks AudioContext until a
+// user gesture). Everything is generated — no audio assets to load.
+let audioCtx = null, audioMaster = null;
+
+function initAmbientAudio() {
+    if (audioCtx) return;
+    try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioMaster = audioCtx.createGain();
+        audioMaster.gain.value = 0.13;
+        audioMaster.connect(audioCtx.destination);
+        // Wind bed: looped pink-ish noise through a slowly-swept lowpass
+        const len = audioCtx.sampleRate * 2;
+        const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+        const data = buf.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < len; i++) {
+            last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+            data[i] = last * 3.5;
+        }
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buf;
+        noise.loop = true;
+        const lp = audioCtx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 420;
+        lp.Q.value = 0.4;
+        const windGain = audioCtx.createGain();
+        windGain.gain.value = 0.5;
+        const lfo = audioCtx.createOscillator();
+        lfo.frequency.value = 0.09;
+        const lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = 180;
+        lfo.connect(lfoGain);
+        lfoGain.connect(lp.frequency);
+        noise.connect(lp);
+        lp.connect(windGain);
+        windGain.connect(audioMaster);
+        noise.start();
+        lfo.start();
+        scheduleChirp();
+    } catch (e) { audioCtx = null; }
+}
+
+function scheduleChirp() {
+    if (!audioCtx) return;
+    setTimeout(() => {
+        if (!audioCtx) return;
+        try {
+            const h = ((((resort.worldClock || 0) / 60) % 24) + 24) % 24;
+            const sceneOk = state === 'overworld' || state === 'menu' || state === 'playing';
+            if (h > 5.5 && h < 20 && sceneOk) {
+                // A short randomized birdsong phrase
+                const t0 = audioCtx.currentTime;
+                const notes = 2 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < notes; i++) {
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    const f = 2300 + Math.random() * 1800;
+                    const ts = t0 + i * (0.09 + Math.random() * 0.06);
+                    o.frequency.setValueAtTime(f, ts);
+                    o.frequency.exponentialRampToValueAtTime(f * (1.25 + Math.random() * 0.3), ts + 0.06);
+                    g.gain.setValueAtTime(0, ts);
+                    g.gain.linearRampToValueAtTime(0.16, ts + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.001, ts + 0.11);
+                    o.connect(g);
+                    g.connect(audioMaster);
+                    o.start(ts);
+                    o.stop(ts + 0.13);
+                }
+            }
+        } catch (e) {}
+        scheduleChirp();
+    }, 1800 + Math.random() * 4200);
+}
+document.addEventListener('touchstart', initAmbientAudio, { once: true });
+document.addEventListener('mousedown', initAmbientAudio, { once: true });
 
 // ---- Start! ----
 // Offline catch-up runs HERE, not at module evaluation: it can call
