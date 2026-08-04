@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt73';
+const BUILD_TAG = 'gt74';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2722,8 +2722,11 @@ function drawOverworld() {
     const nameW = ctx.measureText(worldCourse.name).width;
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '11px -apple-system,sans-serif';
-    const subtitle = worldCourse.holes.length + ' holes \u2022 '
+    let subtitle = worldCourse.holes.length + ' holes \u2022 '
         + worldCourse.facilities.length + ' facilities \u2022 build ' + BUILD_TAG;
+    if (location.search.indexOf('fps=1') >= 0) {
+        subtitle += ' \u2022 ' + Math.round(window.__fps || 0) + ' fps';
+    }
     ctx.fillText(subtitle, L.pad + 6 + nameW + 12, 28);
 
     // Balance chip (top center) — gold glossy
@@ -5295,6 +5298,8 @@ function gameLoop(time) {
     if (!lastFrameTime) lastFrameTime = time;
     let dt = (time - lastFrameTime) / 1000;
     lastFrameTime = time;
+    // Smoothed FPS for the ?fps=1 diagnostic readout (raw dt, pre-clamp)
+    if (dt > 0) window.__fps = (window.__fps || 60) * 0.95 + (1 / dt) * 0.05;
     if (dt > 0.1) dt = 0.1;
 
     // Update
