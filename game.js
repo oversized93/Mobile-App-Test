@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt63';
+const BUILD_TAG = 'gt64';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2314,6 +2314,18 @@ function drawManage() {
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = 'bold 11px -apple-system,sans-serif';
     ctx.textAlign = 'left';
+    // Share / Load buttons beside the close X
+    glossyRect(L.closeX - 200, L.closeY, 92, L.closeSize, 10, '#00695c');
+    glossyRect(L.closeX - 100, L.closeY, 92, L.closeSize, 10, '#37474f');
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u{1F4E4} Share', L.closeX - 154, L.closeY + L.closeSize / 2 + 4);
+    ctx.fillText('\u{1F4E5} Load', L.closeX - 54, L.closeY + L.closeSize / 2 + 4);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '10px -apple-system,sans-serif';
     ctx.fillText('AMENITIES', L.contentX + 4, L.amenityLabelY + 14);
     // Course report: holes and lifetime green fees, right-aligned
     ctx.textAlign = 'right';
@@ -2413,6 +2425,53 @@ function drawManage() {
     ctx.fillText('\u26F3  Play', L.playX + L.actionBw / 2, L.actionsY + L.actionsRowH / 2 + 6);
 }
 
+// ---- Course share codes: the whole resort design in the clipboard ----
+// Heights are derived, so a code is just grid + holes + decor. Unicode-
+// safe base64 keeps it paste-able anywhere.
+function exportCourseCode() {
+    try {
+        const { heights, ...persistable } = worldCourse;
+        const code = 'GTC1.' + btoa(unescape(encodeURIComponent(JSON.stringify(persistable))));
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(
+                () => notify('Course code copied — send it to a friend!'),
+                () => notify('Could not reach the clipboard'));
+        } else {
+            notify('Clipboard not available in this browser');
+        }
+    } catch (e) {
+        notify('Share failed');
+    }
+}
+
+function importCourseCode() {
+    if (!(navigator.clipboard && navigator.clipboard.readText)) {
+        notify('Clipboard not available in this browser');
+        return;
+    }
+    navigator.clipboard.readText().then((txt) => {
+        try {
+            if (!txt || txt.indexOf('GTC1.') !== 0) {
+                notify('No course code in the clipboard');
+                return;
+            }
+            const data = JSON.parse(decodeURIComponent(escape(atob(txt.slice(5)))));
+            if (!data || data.cols !== COURSE_COLS || data.rows !== COURSE_ROWS
+                || !Array.isArray(data.grid) || !Array.isArray(data.holes)) {
+                notify('That code is not a valid course');
+                return;
+            }
+            worldCourse = data;
+            refreshWorldHeights();
+            saveWorldCourse();
+            if (scene3dReady) buildTerrain3D(worldCourse, { distantScenery: false });
+            notify('Course loaded! Enter the resort to see it');
+        } catch (e) {
+            notify('That code could not be read');
+        }
+    }, () => notify('Clipboard read was blocked'));
+}
+
 function manageTouchStart(sx, sy) {
     const L = manageLayout();
 
@@ -2421,6 +2480,16 @@ function manageTouchStart(sx, sy) {
         resort.lastTickMs = Date.now();
         saveResort();
         setState('menu');
+        return;
+    }
+
+    // Share / Load course codes (buttons left of the close X)
+    if (hitBtn(sx, sy, L.closeX - 200, L.closeY, 92, L.closeSize)) {
+        exportCourseCode();
+        return;
+    }
+    if (hitBtn(sx, sy, L.closeX - 100, L.closeY, 92, L.closeSize)) {
+        importCourseCode();
         return;
     }
 
