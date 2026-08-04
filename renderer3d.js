@@ -2115,7 +2115,8 @@ function setupAmbientNPCs(hole) {
     npcSocialSpots = [];
     if (hole.decor) {
         for (const d of hole.decor) {
-            if (d.t === 'bench' || d.t === 'gazebo') {
+            if (d.t === 'bench' || d.t === 'gazebo'
+                || d.t === 'kiosk' || d.t === 'stall') {
                 npcSocialSpots.push({ x: d.x * CELL, z: d.y * CELL });
             }
         }

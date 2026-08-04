@@ -31,6 +31,33 @@ trailer + dev demo). Update this file when milestones ship or scope decisions ch
 - Structural debt: 4,377-line game.js, ~127 globals, ad-hoc state machine,
   no save versioning, economy gated to the Manage screen, two hole schemas.
 
+## GolfTopia parity run — status (gt1–gt48, autonomous polish loop)
+
+Shipped by the looped polish sessions. The visual/ambience layer is far
+ahead of the original milestone plan; economy depth (M2.5) is now the
+biggest remaining gap.
+
+- **Terrain**: painted albedo ground with mow stripes (diagonal), first-cut
+  bands, teal fringe/tee trim, rake-lined recessed bunker bowls, crowned
+  greens, terraced relief, rocky cliff skirt, sandy coastline coves
+- **Atmosphere**: day/night cycle on the resort clock (golden hours, cool
+  nights, sweeping sun shadows), gradient sky (fog bug fixed), night water
+  dimming, path lamps, fireflies, lighthouse beacon
+- **Life**: walking golfer pairs playing every hole (pause-to-swing,
+  celebration hops), wandering visitors who rest at benches/gazebos and
+  stop at kiosks, driving golf cart, hover groundskeeper bots, gulls,
+  butterflies, drifting leaves, pond fountains with splash rings, bobbing
+  buoys, circling sailboat
+- **Signature look**: teal shot arcs with flying balls, pulsing pin rings,
+  floating hole badges, glossy UI, navy hole inspector with stat bars,
+  hole flyover camera, live 3D backdrops behind menu and manage screens
+- **Player agency**: full decor system — 10 placeable props (Meshy-generated
+  clubhouse, arch, kiosk, gazebo, windmill, lighthouse, fountain + Kenney
+  bench/flowers/stall/cart), tap-to-rotate, erase, tap-target rings,
+  build-mode grid overlay; brush sizes 1–11 cover tile-precise editing
+- **Pipeline**: commit-pinned jsDelivr releases, screenshot harness with
+  3-hole demo resort, Meshy text-to-3d pipeline scripts
+
 ## Milestones
 
 ### M1 — Foundation sprint (in progress)
