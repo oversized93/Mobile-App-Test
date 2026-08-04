@@ -3245,6 +3245,7 @@ function updateHoverBots3D(dt, hole) {
 // ---- Balls flying the shot arcs — one glint per arc segment ----
 let arcCurves = [];
 let arcBallInst = null;
+let arcEndSand = [];
 let pinRings = [];
 
 function updatePinRings3D() {
@@ -3261,6 +3262,13 @@ function updatePinRings3D() {
 function setupArcBalls() {
     arcBallInst = null;
     if (!arcCurves.length) return;
+    // Landing surface per arc: sand deadens the touchdown bounce
+    arcEndSand = arcCurves.map((curve) => {
+        const p = curve.getPoint(1);
+        const c = Math.floor(p.x / CELL), r = Math.floor(p.z / CELL);
+        return !!(terrainHoleRef && terrainHoleRef.grid[r]
+                  && terrainHoleRef.grid[r][c] === T.SAND);
+    });
     const geo = new THREE.SphereGeometry(2.6, 8, 6);
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     mat.toneMapped = false;
@@ -3281,11 +3289,14 @@ function updateArcBalls3D() {
             dummy.position.copy(p);
             dummy.scale.set(1, 1, 1);
         } else if (cycle < 1.3) {
-            // Touchdown: two decaying bounces at the landing point
+            // Touchdown: two decaying bounces — unless it's a bunker,
+            // where the ball plugs with barely a hop
             const p = arcCurves[i].getPoint(1);
             const b = (cycle - 1) / 0.3;
+            const amp = arcEndSand[i] ? 1.8 : 7;
+            const waves = arcEndSand[i] ? 1.2 : 2.5;
             dummy.position.set(p.x,
-                p.y + Math.abs(Math.sin(b * Math.PI * 2.5)) * 7 * (1 - b), p.z);
+                p.y + Math.abs(Math.sin(b * Math.PI * waves)) * amp * (1 - b), p.z);
             dummy.scale.set(1, 1, 1);
         } else {
             dummy.position.set(0, -500, 0);
