@@ -2081,10 +2081,15 @@ function setupAmbientNPCs(hole) {
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
     if (hole.holes) {
+        // arcIdx ties the primary tee golfer's swing to the launch cycle
+        // of that hole's first shot arc (same iteration order as the arc
+        // builder, so segment indices line up)
+        let segBase = 0;
         for (const rec of hole.holes) {
-            golfers.push({ c: rec.tee.x + 0.9, r: rec.tee.y + 0.4 });
-            golfers.push({ c: rec.tee.x - 0.5, r: rec.tee.y + 1.1 });
-            golfers.push({ c: rec.pin.x - 0.8, r: rec.pin.y + 0.7 });
+            golfers.push({ c: rec.tee.x + 0.9, r: rec.tee.y + 0.4, arcIdx: segBase });
+            golfers.push({ c: rec.tee.x - 0.5, r: rec.tee.y + 1.1, arcIdx: null });
+            golfers.push({ c: rec.pin.x - 0.8, r: rec.pin.y + 0.7, arcIdx: null });
+            segBase += (rec.waypoints ? rec.waypoints.length : 0) + 1;
         }
     }
     // Playing groups: pairs that walk each hole's route, pausing to hit
@@ -2135,7 +2140,8 @@ function setupAmbientNPCs(hole) {
         npcStates.push({
             x: (gp.c + 0.5) * CELL, z: (gp.r + 0.5) * CELL,
             tx: (gp.c + 0.5) * CELL, tz: (gp.r + 0.5) * CELL,
-            speed: 0, phase: g * 2.3, idle: true
+            speed: 0, phase: g * 2.3, idle: true,
+            arcIdx: gp.arcIdx != null ? gp.arcIdx : null
         });
     }
     for (const rg of routeGolfers) {
@@ -2258,12 +2264,23 @@ function updateAmbientNPCs3D(dt, hole) {
         dummy.updateMatrix();
         npcHeadInst.setMatrixAt(i, dummy.matrix);
         if (s.idle && npcClubInst) {
-            // Swing loop: long address, quick backswing, snap through, settle
-            const cyc = (t * 0.5 + s.phase) % 4;
             let ang = 0.55;
-            if (cyc > 3.0 && cyc < 3.35) ang = 0.55 - ((cyc - 3.0) / 0.35) * 2.9;
-            else if (cyc >= 3.35 && cyc < 3.5) ang = -2.35 + ((cyc - 3.35) / 0.15) * 4.5;
-            else if (cyc >= 3.5 && cyc < 3.95) ang = 2.15 - ((cyc - 3.5) / 0.45) * 1.6;
+            if (s.arcIdx != null && arcCurves.length) {
+                // Synced to the shot arc: strike lands exactly when the
+                // arc ball launches from this tee (cycle wrap = launch)
+                const u = ((t * 0.45 + s.arcIdx * 0.37) % 1.6) / 1.6;
+                const w = (((u - 0.96) % 1) + 1) % 1; // time since strike
+                if (u >= 0.86 && u < 0.96) ang = 0.55 - ((u - 0.86) / 0.10) * 2.9;
+                else if (w < 0.07) ang = -2.35 + (w / 0.07) * 4.5;
+                else if (w < 0.22) ang = 2.15 - ((w - 0.07) / 0.15) * 1.6;
+            } else {
+                // Free-running swing loop: long address, quick backswing,
+                // snap through, settle
+                const cyc = (t * 0.5 + s.phase) % 4;
+                if (cyc > 3.0 && cyc < 3.35) ang = 0.55 - ((cyc - 3.0) / 0.35) * 2.9;
+                else if (cyc >= 3.35 && cyc < 3.5) ang = -2.35 + ((cyc - 3.35) / 0.15) * 4.5;
+                else if (cyc >= 3.5 && cyc < 3.95) ang = 2.15 - ((cyc - 3.5) / 0.45) * 1.6;
+            }
             dummy.position.set(s.x + Math.cos(yaw) * 4.2, gy + 12.5 + bob, s.z - Math.sin(yaw) * 4.2);
             dummy.rotation.set(0, yaw, ang);
             dummy.updateMatrix();
