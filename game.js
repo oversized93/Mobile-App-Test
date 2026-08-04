@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt39';
+const BUILD_TAG = 'gt40';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -734,6 +734,23 @@ function generateHeights(hole) {
             if (t === T.TEE || t === T.GREEN) height *= 0.1;
             else if (t === T.FAIRWAY) height *= 0.35;
             else if (t === T.PATH) height *= 0.28;
+            if (t === T.GREEN) {
+                // Crowned green: rises gently toward the center (distance
+                // to the nearest non-green cell, ring-scanned to 3)
+                let d = 4;
+                outer: for (let ring = 1; ring <= 3; ring++) {
+                    for (let dy = -ring; dy <= ring; dy++) {
+                        for (let dx = -ring; dx <= ring; dx++) {
+                            if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+                            const nr = r + dy, nc = c + dx;
+                            const nt = (nr >= 0 && nr < hole.rows && nc >= 0 && nc < hole.cols)
+                                ? hole.grid[nr][nc] : T.OOB;
+                            if (nt !== T.GREEN) { d = ring; break outer; }
+                        }
+                    }
+                }
+                height += (Math.min(d, 4) - 1) * 1.4;
+            }
             // Water vertices sit at 0 so they match surrounding terrain flat
             if (t === T.WATER) height = 0;
             // Fold valleys up to ground level: land never dips below y=0,
@@ -745,6 +762,11 @@ function generateHeights(hole) {
                 // turf. Floor stays above the global water plane (-1.4)
                 // so the sea never peeks through the sand.
                 h[r][c] = Math.max(q * 0.4 - 6, -1.1);
+                continue;
+            }
+            if (t === T.GREEN) {
+                // Keep the crown smooth — terracing would flatten it away
+                h[r][c] = q;
                 continue;
             }
             // Terraced plateaus (reference terrain language): flat steps
