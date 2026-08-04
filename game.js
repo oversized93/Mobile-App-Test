@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt71';
+const BUILD_TAG = 'gt72';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -101,7 +101,8 @@ if (!worldCourse || worldCourse.cols !== COURSE_COLS || worldCourse.rows !== COU
 // stays free — sculpting is the core fantasy, decor is the money sink.
 const DECOR_COSTS = {
     bench: 25, flowers: 10, kiosk: 150, stall: 150, cart: 75,
-    arch: 200, windmill: 300, lighthouse: 400, gazebo: 120, clubhouse: 500
+    arch: 200, windmill: 300, lighthouse: 400, gazebo: 120, clubhouse: 500,
+    statue: 250
 };
 
 // ---- Player-placeable decor ----
@@ -233,6 +234,7 @@ const OW_TOOLS = [
     { id: 'dwindmill',   label: 'Windmill',   icon: '\u{1F3E1}', color: '#ffb74d', decor: 'windmill' },
     { id: 'dlighthouse', label: 'Lighthouse', icon: '\u{1F5FC}', color: '#ef5350', decor: 'lighthouse' },
     { id: 'dgazebo',     label: 'Gazebo',     icon: '\u26FA', color: '#26a69a', decor: 'gazebo' },
+    { id: 'dstatue',     label: 'Statue',     icon: '\u{1F3C6}', color: '#b8860b', decor: 'statue' },
     { id: 'dclubhouse',  label: 'Clubhouse',  icon: '\u{1F3DB}️', color: '#66bb6a', decor: 'clubhouse' },
 ];
 const OW_BRUSH_SIZES = [1, 3, 5, 7, 9, 11];
@@ -249,7 +251,7 @@ const OW_RAIL = [
     { id: 'path',    icon: '\u{1F6B6}', label: 'PATHS' },
     { id: 'decor',   icon: '\u{1FA91}', label: 'DECOR',
       flyout: ['dbench', 'dflowers', 'dkiosk', 'dstall', 'dcart', 'darch',
-               'dwindmill', 'dlighthouse', 'dgazebo', 'dclubhouse'] },
+               'dwindmill', 'dlighthouse', 'dgazebo', 'dstatue', 'dclubhouse'] },
     { id: 'hole',    icon: '\u26F3',    label: 'HOLES' },
     { id: 'erase',   icon: '\u267B',    label: 'ERASE' },
     { id: 'size',    icon: null,         label: 'BRUSH', flyout: 'sizes' },
@@ -260,7 +262,7 @@ const OW_TOOL_PARENT = {
     sand: 'surface', water: 'nature', trees: 'nature', path: 'path', erase: 'erase',
     dbench: 'decor', dflowers: 'decor', dkiosk: 'decor', dstall: 'decor',
     dcart: 'decor', darch: 'decor', dwindmill: 'decor', dlighthouse: 'decor',
-    dclubhouse: 'decor', dgazebo: 'decor'
+    dclubhouse: 'decor', dgazebo: 'decor', dstatue: 'decor'
 };
 let owRailOpen = false;   // build rail expanded?
 let owFlyout = null;      // parent id whose sub-options are showing

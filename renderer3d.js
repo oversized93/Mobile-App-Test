@@ -451,7 +451,7 @@ const ASSET_SPECIES = {
     flag:  ['flag-red'],
     prop:  ['bench', 'trash', 'flowers', 'park-entrance', 'stall-food',
             'stall-drinks', 'station-fence', 'bridge_wood', 'bridge_woodRound'],
-    hero:  ['clubhouse', 'golfcart', 'windmill', 'archsign', 'fountainstatue', 'lighthouse', 'kiosk', 'gazebo']
+    hero:  ['clubhouse', 'golfcart', 'windmill', 'archsign', 'fountainstatue', 'lighthouse', 'kiosk', 'gazebo', 'statue']
 };
 // Non-Kenney asset locations
 const ASSET_PATH_NAME = {
@@ -462,7 +462,8 @@ const ASSET_PATH_NAME = {
     'fountainstatue': 'assets/meshy/fountainstatue.glb',
     'lighthouse': 'assets/meshy/lighthouse.glb',
     'kiosk': 'assets/meshy/kiosk.glb',
-    'gazebo': 'assets/meshy/gazebo.glb'
+    'gazebo': 'assets/meshy/gazebo.glb',
+    'statue': 'assets/meshy/statue.glb'
 };
 // Per-model height overrides (props vary too much for one species target)
 // Sized to the world's stylized chunky proportions (realistic scale reads
@@ -472,7 +473,7 @@ const ASSET_TARGET_H_NAME = {
     'stall-food': 62, 'stall-drinks': 62, 'station-fence': 18,
     'clubhouse': 148, 'golfcart': 34, 'windmill': 170,
     'bridge_wood': 26, 'bridge_woodRound': 30, 'archsign': 110,
-    'fountainstatue': 52, 'lighthouse': 210, 'kiosk': 68, 'gazebo': 84
+    'fountainstatue': 52, 'lighthouse': 210, 'kiosk': 68, 'gazebo': 84, 'statue': 58
 };
 // Target world heights per species (CELL = 32; a good tree spans ~2 cells)
 const ASSET_TARGET_H = {
@@ -1596,7 +1597,7 @@ function buildTerrain3D(hole, opts) {
             bench: 'bench', flowers: 'flowers', kiosk: 'kiosk',
             stall: 'stall-drinks', cart: 'golfcart', arch: 'archsign',
             windmill: 'windmill', lighthouse: 'lighthouse',
-            clubhouse: 'clubhouse', gazebo: 'gazebo'
+            clubhouse: 'clubhouse', gazebo: 'gazebo', statue: 'statue'
         };
         beaconGroups = [];
         beaconMats = [];
