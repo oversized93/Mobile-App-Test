@@ -2077,6 +2077,7 @@ function setupAmbientNPCs(hole) {
     setupBuoys(hole);
     setupBoat(hole);
     setupLeaves(hole);
+    setupHazardStakes(hole);
 
     // Walkers on paths + golfers stationed at every hole's tee and green
     const golfers = [];
@@ -2374,6 +2375,50 @@ function setupFountains(hole) {
     splashInst = new THREE.InstancedMesh(ringGeo, ringMat, fountainSpots.length * 3);
     splashInst.renderOrder = 3;
     terrainGroup.add(splashInst);
+}
+
+// ---- Red hazard stakes ringing the water hazards ----
+let stakeInst = null;
+
+function setupHazardStakes(hole) {
+    stakeInst = null;
+    const spots = [];
+    for (let r = 1; r < hole.rows - 1 && spots.length < 90; r++) {
+        for (let c = 1; c < hole.cols - 1 && spots.length < 90; c++) {
+            if (hole.grid[r][c] !== T.WATER) continue;
+            if ((c * 13 + r * 29) % 3 !== 0) continue;
+            const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+            for (let k = 0; k < 4; k++) {
+                const dc = nb[k][0], dr = nb[k][1];
+                const nt = hole.grid[r + dr][c + dc];
+                if (nt !== T.WATER && nt !== T.OOB) {
+                    spots.push({
+                        x: (c + 0.5 + dc * 0.65) * CELL,
+                        z: (r + 0.5 + dr * 0.65) * CELL,
+                        c: c + dc, r: r + dr
+                    });
+                    break;
+                }
+            }
+        }
+    }
+    if (!spots.length) return;
+    const geo = new THREE.CylinderGeometry(0.55, 0.55, 12, 5);
+    geo.translate(0, 6, 0);
+    const mat = new THREE.MeshStandardMaterial({ color: linC(0xd63b2f), roughness: 0.6 });
+    stakeInst = new THREE.InstancedMesh(geo, mat, spots.length);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < spots.length; i++) {
+        const sp = spots[i];
+        const gy = (hole.heights && hole.heights[sp.r]) ? (hole.heights[sp.r][sp.c] || 0) : 0;
+        dummy.position.set(sp.x, gy, sp.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        stakeInst.setMatrixAt(i, dummy.matrix);
+    }
+    stakeInst.castShadow = true;
+    terrainGroup.add(stakeInst);
 }
 
 // ---- Ocean buoys bobbing off the coastline ----
