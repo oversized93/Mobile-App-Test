@@ -2081,7 +2081,7 @@ function hide3D() {
 // allocating Object3Ds each frame churns GC on mobile. Every user must
 // set position/rotation/scale before updateMatrix (no field survives).
 const sharedDummy3D = new THREE.Object3D();
-let npcBodyInst = null, npcHeadInst = null, npcClubInst = null;
+let npcBodyInst = null, npcHeadInst = null, npcClubInst = null, npcUmbrellaInst = null;
 let npcStates = [];
 let npcPathCells = [];
 let npcSocialSpots = [];
@@ -2196,6 +2196,21 @@ function setupAmbientNPCs(hole) {
     if (npcBodyInst.instanceColor) npcBodyInst.instanceColor.needsUpdate = true;
     terrainGroup.add(npcBodyInst);
     terrainGroup.add(npcHeadInst);
+    // Umbrellas: popped open over walkers while a shower passes
+    npcUmbrellaInst = null;
+    if (walkerCount > 0) {
+        const umbGeo = new THREE.ConeGeometry(6.5, 3.2, 8);
+        const umbMat = new THREE.MeshStandardMaterial({ roughness: 0.7 });
+        npcUmbrellaInst = new THREE.InstancedMesh(umbGeo, umbMat, walkerCount);
+        for (let i = 0; i < walkerCount; i++) {
+            if (npcUmbrellaInst.setColorAt) {
+                npcUmbrellaInst.setColorAt(i,
+                    new THREE.Color(NPC_COLORS[(i + 3) % NPC_COLORS.length]).convertSRGBToLinear());
+            }
+        }
+        if (npcUmbrellaInst.instanceColor) npcUmbrellaInst.instanceColor.needsUpdate = true;
+        terrainGroup.add(npcUmbrellaInst);
+    }
     if (golfers.length) {
         // Club shaft held by each stationed golfer, grip at origin so
         // rotating the instance swings the club around the hands
@@ -2306,6 +2321,18 @@ function updateAmbientNPCs3D(dt, hole) {
         dummy.position.y = gy + 18.5 + bob;
         dummy.updateMatrix();
         npcHeadInst.setMatrixAt(i, dummy.matrix);
+        if (npcUmbrellaInst && i < npcWalkerCount) {
+            if (rainEnvNow > 0.4) {
+                dummy.position.y = gy + 25 + bob;
+                dummy.scale.set(1, 1, 1);
+            } else {
+                dummy.position.set(0, -500, 0);
+                dummy.scale.set(0.001, 0.001, 0.001);
+            }
+            dummy.updateMatrix();
+            npcUmbrellaInst.setMatrixAt(i, dummy.matrix);
+            dummy.scale.set(1, 1, 1);
+        }
         if (s.idle && npcClubInst) {
             let ang = 0.55;
             if (s.arcIdx != null && arcCurves.length) {
@@ -2333,6 +2360,7 @@ function updateAmbientNPCs3D(dt, hole) {
     npcBodyInst.instanceMatrix.needsUpdate = true;
     npcHeadInst.instanceMatrix.needsUpdate = true;
     if (npcClubInst) npcClubInst.instanceMatrix.needsUpdate = true;
+    if (npcUmbrellaInst) npcUmbrellaInst.instanceMatrix.needsUpdate = true;
 }
 
 // ---- Pond fountains — animated jets on the largest water bodies ----
