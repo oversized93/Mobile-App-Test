@@ -1131,6 +1131,7 @@ function computeVertexColorHeight(hole, vc, vr) {
 
 // Live repaint refs — the currently-built terrain mesh + its source course
 let terrainColorAttrRef = null;
+let terrainMatRef = null;
 let terrainHoleRef = null;
 
 // Recompute vertex colors around edited cells only. Heights/geometry are
@@ -1237,6 +1238,7 @@ function buildTerrain3D(hole, opts) {
     const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
     terrainMesh.receiveShadow = true;
     terrainGroup.add(terrainMesh);
+    terrainMatRef = terrainMat;
     // Register refs for the live mid-stroke color repaint
     terrainColorAttrRef = terrainGeo.getAttribute('color');
     terrainHoleRef = hole;
@@ -2831,6 +2833,8 @@ function updateDayNightTint(minutes) {
         lampHeadMatRef.color.setRGB(m(0.74, 1.0, nw), m(0.71, 0.85, nw), m(0.62, 0.5, nw));
     }
     if (waterMat) waterMat.uniforms.uNight.value = 0.35 + 0.65 * dayW;
+    // Wet ground: turf darkens while a shower passes
+    if (terrainMatRef) terrainMatRef.color.setScalar(1 - rainEnvNow * 0.18);
     // Fireflies fade in after dark, invisible by day
     if (fireflyMatRef) fireflyMatRef.opacity = Math.max(0, 1 - dayW * 2.2);
     // Lighthouse beams only show after dark

@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt58';
+const BUILD_TAG = 'gt59';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -521,6 +521,18 @@ function tickWorld(dt) {
     if (window.__golfHoleOuts) {
         resort.coins += 5 * window.__golfHoleOuts;
         window.__golfHoleOuts = 0;
+    }
+    // Membership drifts toward what the resort deserves: holes draw
+    // players, decor investment draws hangers-on. One member per game
+    // minute so growth feels earned, not instant.
+    const memberTarget = 5 + worldCourse.holes.length * 4
+        + Math.floor((worldCourse.decor || []).reduce(
+            (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) / 100);
+    if (resort.__memTick == null) resort.__memTick = resort.worldClock;
+    if (resort.worldClock - resort.__memTick > 60) {
+        resort.__memTick = resort.worldClock;
+        if (resort.members < memberTarget) resort.members++;
+        else if (resort.members > memberTarget) resort.members--;
     }
     resort.coinsFrac = (resort.coinsFrac || 0) + resort.members * 0.2 * dt;
     if (resort.coinsFrac >= 1) {
