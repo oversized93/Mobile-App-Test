@@ -31,7 +31,7 @@ trailer + dev demo). Update this file when milestones ship or scope decisions ch
 - Structural debt: 4,377-line game.js, ~127 globals, ad-hoc state machine,
   no save versioning, economy gated to the Manage screen, two hole schemas.
 
-## GolfTopia parity run — status (gt1–gt48, autonomous polish loop)
+## GolfTopia parity run — status (gt1–gt77, autonomous polish loop)
 
 Shipped by the looped polish sessions. The visual/ambience layer is far
 ahead of the original milestone plan; economy depth (M2.5) is now the
@@ -55,6 +55,22 @@ biggest remaining gap.
   clubhouse, arch, kiosk, gazebo, windmill, lighthouse, fountain + Kenney
   bench/flowers/stall/cart), tap-to-rotate, erase, tap-target rings,
   build-mode grid overlay; brush sizes 1–11 cover tile-precise editing
+- **Weather + night**: passing rain showers (streaks, dimmed light, wet
+  turf, umbrellas, patter audio, sheltering birds), starfield, lighthouse
+  beacon, moonlit water, night crickets
+- **Audio**: synthesized wind bed, daytime birdsong, night crickets, rain
+  patter, club-strike tocks synced to tee launches (no audio assets)
+- **Economy loop**: decor build costs + half-refund erase, green fees
+  scaled by computed hole difficulty (corridor hazard analysis), floating
+  fee popups, membership growth from holes/decor, crowd size follows
+  membership, lifetime fees on the manage screen
+- **Design feedback (M2 start)**: per-hole difficulty stars in the
+  inspector and a live yards/par/stars/fee readout inside the hole wizard
+- **Sharing**: GTC1 course codes — Share/Load via clipboard on the manage
+  screen, validated on import
+- **Reliability**: veteran-save migration verified, classic Career mode
+  crash fixed (albedo edge chamfers off-grid) and career rounds now tick
+  the full ambient world; ?fps=1 diagnostic readout
 - **Pipeline**: commit-pinned jsDelivr releases, screenshot harness with
   3-hole demo resort, Meshy text-to-3d pipeline scripts
 
