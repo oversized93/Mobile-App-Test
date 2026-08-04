@@ -2342,6 +2342,10 @@ function updateAmbientNPCs3D(dt, hole) {
                             txt: call[0], col: call[1], name: s.name || '',
                             stack: live
                         });
+                        // Feed the round into per-hole play statistics
+                        (window.__holeOuts = window.__holeOuts || []).push({
+                            holeId: s.holeId, score: s.lastRound, par: s.par
+                        });
                     }
                     s.ptIdx = 0;
                     s.x = s.route[0].x;

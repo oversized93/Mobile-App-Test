@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt84';
+const BUILD_TAG = 'gt85';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -598,6 +598,7 @@ function applyOfflineCatchup() {
 // upkeep, all hang off this one clock. (Previously income only ticked while
 // the Manage screen was open, which made every economy feature screen-gated.)
 let _worldSaveAcc = 0;
+let _worldStatsDirty = false;
 function tickWorld(dt) {
     resort.worldClock = (resort.worldClock || 0) + dt;
     // Green fees: ambient golfers holing out pay per-hole fees scaled by
@@ -606,6 +607,20 @@ function tickWorld(dt) {
         resort.coins += window.__golfFees;
         resort.feesEarned = (resort.feesEarned || 0) + window.__golfFees;
         window.__golfFees = 0;
+    }
+    // Per-hole play stats: fold finished ambient rounds into the course
+    // record so the hole inspector can show how each hole really plays
+    if (window.__holeOuts && window.__holeOuts.length) {
+        worldCourse.holeStats = worldCourse.holeStats || {};
+        for (const ho of window.__holeOuts) {
+            const st = worldCourse.holeStats[ho.holeId]
+                || (worldCourse.holeStats[ho.holeId] = { n: 0, sum: 0, sub: 0 });
+            st.n++;
+            st.sum += ho.score;
+            if (ho.score < ho.par) st.sub++; // rounds under par
+        }
+        window.__holeOuts = [];
+        _worldStatsDirty = true;
     }
     // Membership drifts toward what the resort deserves: holes draw
     // players, decor investment draws hangers-on. One member per game
@@ -631,6 +646,10 @@ function tickWorld(dt) {
     if (_worldSaveAcc >= 10) {
         _worldSaveAcc = 0;
         saveResort();
+        if (_worldStatsDirty) {
+            _worldStatsDirty = false;
+            saveWorldCourse();
+        }
     }
 }
 
@@ -3029,6 +3048,23 @@ function drawOverworld() {
                 ctx.fill();
                 ry += 26;
             }
+            // Play record from ambient rounds — how the hole ACTUALLY plays
+            {
+                const st = (worldCourse.holeStats || {})[selHole.id];
+                ctx.textAlign = 'left';
+                ctx.font = '10px -apple-system,sans-serif';
+                if (st && st.n) {
+                    const avg = (st.sum / st.n).toFixed(1);
+                    const pct = Math.round(100 * st.sub / st.n);
+                    ctx.fillStyle = '#ffd24a';
+                    ctx.font = 'bold 10px -apple-system,sans-serif';
+                    ctx.fillText('Avg ' + avg + ' • ' + pct + '% under par • '
+                        + st.n + ' rounds', hc.x + 14, ry);
+                } else {
+                    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                    ctx.fillText('No rounds played yet', hc.x + 14, ry);
+                }
+            }
             // Flyover button
             const flyGrad = ctx.createLinearGradient(hc.flyX, hc.flyY, hc.flyX + hc.flyW, hc.flyY);
             flyGrad.addColorStop(0, '#0097a7');
@@ -3160,7 +3196,7 @@ function undoLastStroke() {
 
 // Hole inspector card geometry (shared by draw + hit-test)
 function holeCardLayout() {
-    const w = 216, h = 254;
+    const w = 216, h = 278;
     const x = W() - w - 10, y = 58;
     return { x, y, w, h,
              flyX: x + 12, flyY: y + h - 132, flyW: w - 24, flyH: 34,
