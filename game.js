@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt83';
+const BUILD_TAG = 'gt84';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2712,6 +2712,37 @@ function drawOverworld() {
             ctx.strokeText(feeTxt, sp.x, sp.y - 20 - k * 34);
             ctx.fillStyle = '#8be06a';
             ctx.fillText(feeTxt, sp.x, sp.y - 20 - k * 34);
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    // ---- Score callouts (Birdie! / Bogey / ACE!!) as rounds finish ----
+    if (window.__scorePopups && window.__scorePopups.length) {
+        const now = performance.now();
+        window.__scorePopups = window.__scorePopups.filter(p => now - p.t0 < 2200);
+        for (const p of window.__scorePopups) {
+            const k = (now - p.t0) / 2200;
+            const sp = (scene3dReady && typeof worldToScreen3D === 'function')
+                ? worldToScreen3D(p.x, p.z) : null;
+            if (!sp || sp.behind) continue;
+            // Pop in (overshoot scale), drift up, fade out at the end
+            const pop = k < 0.12 ? 0.6 + (k / 0.12) * 0.55 : 1.15 - Math.min(0.15, (k - 0.12) * 0.5);
+            ctx.globalAlpha = k > 0.75 ? (1 - k) / 0.25 : 1;
+            ctx.textAlign = 'center';
+            ctx.font = 'bold ' + Math.round(19 * pop) + 'px -apple-system,sans-serif';
+            ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+            ctx.lineWidth = 4;
+            const yy = sp.y - 46 - k * 26 - (p.stack || 0) * 34;
+            ctx.strokeText(p.txt, sp.x, yy);
+            ctx.fillStyle = p.col;
+            ctx.fillText(p.txt, sp.x, yy);
+            if (p.name) {
+                ctx.font = 'bold 10px -apple-system,sans-serif';
+                ctx.lineWidth = 3;
+                ctx.strokeText(p.name, sp.x, yy + 13);
+                ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                ctx.fillText(p.name, sp.x, yy + 13);
+            }
             ctx.globalAlpha = 1;
         }
     }

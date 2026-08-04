@@ -2169,8 +2169,8 @@ function setupAmbientNPCs(hole) {
                 // Harder holes command higher green fees
                 const fee = (typeof holeDifficulty === 'function')
                     ? 3 + 2 * holeDifficulty(rec) : 5;
-                routeGolfers.push({ pts: pts, off: 0, fee: fee, holeId: rec.id });
-                routeGolfers.push({ pts: pts, off: 1, fee: fee, holeId: rec.id });
+                routeGolfers.push({ pts: pts, off: 0, fee: fee, holeId: rec.id, par: rec.par || 4 });
+                routeGolfers.push({ pts: pts, off: 1, fee: fee, holeId: rec.id, par: rec.par || 4 });
             }
         }
     }
@@ -2229,7 +2229,7 @@ function setupAmbientNPCs(hole) {
             speed: 14 + rg.off * 3, phase: rg.off * 2.1, idle: false,
             route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5, fee: rg.fee,
             name: GOLFER_NAMES[gnIdx++ % GOLFER_NAMES.length],
-            holeId: rg.holeId, strokes: 0, lastRound: null
+            holeId: rg.holeId, strokes: 0, lastRound: null, par: rg.par
         });
     }
     for (let i = 0; i < total; i++) {
@@ -2314,12 +2314,35 @@ function updateAmbientNPCs3D(dt, hole) {
                 if (!nxt) {
                     // Holed out: bank the green fee, then restart at the tee
                     s.lastRound = (s.strokes || 0) + 1; // the holing putt
+                    if (Math.random() < 0.25) s.lastRound++; // lipped-out first putt
                     s.strokes = 0;
                     window.__golfFees = (window.__golfFees || 0) + (s.fee || 5);
                     const pinPt = s.route[s.route.length - 1];
                     (window.__feePopups = window.__feePopups || []).push({
                         x: pinPt.x, z: pinPt.z, t0: performance.now(), amt: s.fee || 5
                     });
+                    // Score callout vs par — the little dopamine hit that
+                    // makes the ambient sim feel like real rounds
+                    if (s.par) {
+                        const diff = s.lastRound - s.par;
+                        const call = s.lastRound === 1 ? ['ACE!!', '#ffd24a']
+                            : diff <= -2 ? ['Eagle!', '#ffd24a']
+                            : diff === -1 ? ['Birdie!', '#8be06a']
+                            : diff === 0 ? ['Par', '#eaf4ff']
+                            : diff === 1 ? ['Bogey', '#f0a860']
+                            : ['+' + diff, '#e77d6a'];
+                        // Stack callouts that land on the same pin within a
+                        // couple seconds (playing partners holing out together)
+                        window.__scorePopups = window.__scorePopups || [];
+                        const live = window.__scorePopups.filter(q =>
+                            Math.abs(q.x - pinPt.x) < 30 && Math.abs(q.z - pinPt.z) < 30
+                            && performance.now() - q.t0 < 2200).length;
+                        window.__scorePopups.push({
+                            x: pinPt.x, z: pinPt.z, t0: performance.now(),
+                            txt: call[0], col: call[1], name: s.name || '',
+                            stack: live
+                        });
+                    }
                     s.ptIdx = 0;
                     s.x = s.route[0].x;
                     s.z = s.route[0].z;
@@ -2333,6 +2356,9 @@ function updateAmbientNPCs3D(dt, hole) {
                         s.ptIdx++;
                         s.pause = 3;
                         s.strokes = (s.strokes || 0) + 1; // playing the next shot
+                        // Occasional duff: an extra recovery stroke keeps
+                        // scores varied instead of every round being identical
+                        if (Math.random() < 0.3) { s.strokes++; s.pause += 2; }
                     } else {
                         // Walk toward the next point, but sidestep water:
                         // slide perpendicular along the shore instead of
