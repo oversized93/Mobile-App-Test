@@ -3021,6 +3021,13 @@ function updateArcBalls3D() {
             const p = arcCurves[i].getPoint(cycle);
             dummy.position.copy(p);
             dummy.scale.set(1, 1, 1);
+        } else if (cycle < 1.3) {
+            // Touchdown: two decaying bounces at the landing point
+            const p = arcCurves[i].getPoint(1);
+            const b = (cycle - 1) / 0.3;
+            dummy.position.set(p.x,
+                p.y + Math.abs(Math.sin(b * Math.PI * 2.5)) * 7 * (1 - b), p.z);
+            dummy.scale.set(1, 1, 1);
         } else {
             dummy.position.set(0, -500, 0);
             dummy.scale.set(0.001, 0.001, 0.001);
