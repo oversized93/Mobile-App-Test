@@ -3058,6 +3058,7 @@ function updateCritters3D(hole) {
 
 // ---- A golf cart cruising the walkway network ----
 let cartGroup = null, cartState = null, cartPathSet = null;
+let cartRiders = [];
 
 function setupCartDrive(hole) {
     cartGroup = null;
@@ -3075,6 +3076,23 @@ function setupCartDrive(hole) {
     grp.scale.setScalar(model.scale);
     terrainGroup.add(grp);
     cartGroup = grp;
+    // Two riders follow the cart (world-space so the GLB scale doesn't
+    // shrink them): side-by-side on the bench seat
+    cartRiders = [];
+    const riderCols = [0xe5533d, 0x3d7de5];
+    for (let k = 0; k < 2; k++) {
+        const rider = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.9, 9, 7),
+            new THREE.MeshStandardMaterial({ color: new THREE.Color(riderCols[k]).convertSRGBToLinear(), roughness: 0.9 }));
+        body.position.y = 4.5;
+        rider.add(body);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(2.5, 7, 6),
+            new THREE.MeshStandardMaterial({ color: linC(0xf0c8a0), roughness: 0.85 }));
+        head.position.y = 11;
+        rider.add(head);
+        terrainGroup.add(rider);
+        cartRiders.push({ grp: rider, side: k === 0 ? 2.6 : -2.6 });
+    }
     const start = npcPathCells[Math.floor(npcPathCells.length / 2)];
     cartState = {
         c: start.c, r: start.r,
@@ -3120,6 +3138,16 @@ function updateCartDrive3D(dt, hole) {
     s.yaw += dy * Math.min(1, dt * 8);
     cartGroup.position.set(s.x, gy, s.z);
     cartGroup.rotation.y = s.yaw;
+    // Seat the riders: slightly behind center, side by side, facing forward
+    const fwdX = Math.sin(s.yaw), fwdZ = Math.cos(s.yaw);
+    const sideX = Math.cos(s.yaw), sideZ = -Math.sin(s.yaw);
+    for (const rider of cartRiders) {
+        rider.grp.position.set(
+            s.x - fwdX * 2 + sideX * rider.side,
+            gy + 7,
+            s.z - fwdZ * 2 + sideZ * rider.side);
+        rider.grp.rotation.y = s.yaw;
+    }
 }
 
 function updateFountains3D() {
