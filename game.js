@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt86';
+const BUILD_TAG = 'gt87';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -608,6 +608,15 @@ function tickWorld(dt) {
         resort.feesEarned = (resort.feesEarned || 0) + window.__golfFees;
         window.__golfFees = 0;
     }
+    // Daily tournament: noon to 3 PM, every finished round counts toward
+    // the leaderboard (score relative to par so mixed holes compare fairly)
+    const minsOfDay = Math.floor((resort.worldClock || 0) % 1440);
+    const tourneyActive = minsOfDay >= 720 && minsOfDay < 900
+        && worldCourse.holes.length > 0;
+    if (tourneyActive && !window.__tourney) {
+        window.__tourney = { board: {} };
+        notify('\u{1F3C6} Tournament teed off! Runs noon–3 PM');
+    }
     // Per-hole play stats: fold finished ambient rounds into the course
     // record so the hole inspector can show how each hole really plays
     if (window.__holeOuts && window.__holeOuts.length) {
@@ -618,9 +627,37 @@ function tickWorld(dt) {
             st.n++;
             st.sum += ho.score;
             if (ho.score < ho.par) st.sub++; // rounds under par
+            if (window.__tourney && ho.name) {
+                const tb = window.__tourney.board[ho.name]
+                    || (window.__tourney.board[ho.name] = { n: 0, rel: 0 });
+                tb.n++;
+                tb.rel += ho.score - ho.par;
+            }
         }
         window.__holeOuts = [];
         _worldStatsDirty = true;
+    }
+    if (!tourneyActive && window.__tourney) {
+        // Award ceremony: best total-to-par with at least 2 rounds (falls
+        // back to anyone) — winner's crowd spends a purse at the resort
+        const entries = Object.entries(window.__tourney.board);
+        window.__tourney = null;
+        const qualified = entries.filter(e => e[1].n >= 2);
+        const pool = qualified.length ? qualified : entries;
+        if (pool.length) {
+            pool.sort((a, b) => (a[1].rel / a[1].n) - (b[1].rel / b[1].n));
+            const name = pool[0][0], tb = pool[0][1];
+            const purse = 40 + 2 * (resort.members || 0);
+            resort.coins += purse;
+            const relAvg = tb.rel / tb.n;
+            const relTxt = (relAvg <= 0 ? '' : '+') + relAvg.toFixed(1);
+            resort.lastTourney = {
+                winner: name, rel: relTxt, rounds: tb.n, purse: purse,
+                day: Math.floor((resort.worldClock || 0) / 1440) + 1
+            };
+            notify('\u{1F3C6} ' + name + ' wins the tournament (' + relTxt
+                + ' avg)! Gallery spends $' + purse);
+        }
     }
     // Membership drifts toward what the resort deserves: holes draw
     // players, decor investment draws hangers-on. One member per game
@@ -2806,6 +2843,26 @@ function drawOverworld() {
     ctx.textAlign = 'center';
     ctx.fillText('$ ' + Math.floor(resort.coins).toLocaleString(), W() / 2, bpY + bpH / 2 + 5);
 
+    // Tournament banner — live leader while the daily event runs
+    if (window.__tourney) {
+        const entries = Object.entries(window.__tourney.board)
+            .sort((a, b) => (a[1].rel / a[1].n) - (b[1].rel / b[1].n));
+        let tTxt = '\u{1F3C6} TOURNAMENT';
+        if (entries.length) {
+            const rel = entries[0][1].rel / entries[0][1].n;
+            tTxt += ' • ' + entries[0][0] + ' leads ('
+                + (rel <= 0 ? '' : '+') + rel.toFixed(1) + ')';
+        } else {
+            tTxt += ' • first scores coming in…';
+        }
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        const tw = ctx.measureText(tTxt).width + 24;
+        glossyRect((W() - tw) / 2, L.topBarH + 8, tw, 24, 12, '#8a6d1d');
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText(tTxt, W() / 2, L.topBarH + 24);
+    }
+
     // Game clock chip — Day N + time, driven by the persistent world clock
     {
         const mins = Math.floor((resort.worldClock || 0) / 1);
@@ -2839,7 +2896,8 @@ function drawOverworld() {
         if (owRosterOpen) {
             const rows = onCourse.slice(0, 8);
             const pw = 258, rowH = 30, headH = 34;
-            const ph = headH + Math.max(rows.length, 1) * rowH + 10;
+            const footH = resort.lastTourney ? 24 : 0;
+            const ph = headH + Math.max(rows.length, 1) * rowH + footH + 10;
             const px = Math.min(rx0, W() - pw - 8);
             const py = L.undoY + 40;
             ctx.fillStyle = 'rgba(12,22,28,0.92)';
@@ -2870,6 +2928,15 @@ function drawOverworld() {
                     + (s.strokes ? s.strokes + ' str' : 'tee')
                     + (s.lastRound ? ' • last ' + s.lastRound : '');
                 ctx.fillText(prog, px + pw - 14, ry + 19);
+            }
+            if (resort.lastTourney) {
+                const lt = resort.lastTourney;
+                const fy = py + headH + Math.max(rows.length, 1) * rowH + 16;
+                ctx.fillStyle = '#ffd24a';
+                ctx.font = 'bold 10px -apple-system,sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('\u{1F3C6} Day ' + lt.day + ' champ: ' + lt.winner
+                    + ' (' + lt.rel + ')', px + 14, fy);
             }
             owRosterChip.panel = { x: px, y: py, w: pw, h: ph };
         } else if (owRosterChip) {

@@ -2348,7 +2348,8 @@ function updateAmbientNPCs3D(dt, hole) {
                         });
                         // Feed the round into per-hole play statistics
                         (window.__holeOuts = window.__holeOuts || []).push({
-                            holeId: s.holeId, score: s.lastRound, par: s.par
+                            holeId: s.holeId, score: s.lastRound, par: s.par,
+                            name: s.name || ''
                         });
                     }
                     s.ptIdx = 0;
