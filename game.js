@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt72';
+const BUILD_TAG = 'gt73';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -78,13 +78,39 @@ function makeStarterCourse() {
     for (let r = entranceR0 - 12; r < entranceR0 - 1; r++)
         for (let c = entranceCx - 1; c <= entranceCx + 1; c++)
             if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = T.PATH;
+    // A finished opening hole so a new resort feels alive from minute one:
+    // tee by the path, dogleg fairway, crowned green, guard bunker, pond.
+    const paint = (c0, r0, c1, r1, t) => {
+        for (let r = r0; r <= r1; r++)
+            for (let c = c0; c <= c1; c++)
+                if (r >= border && r < rows - border && c >= border && c < cols - border)
+                    grid[r][c] = t;
+    };
+    paint(entranceCx - 8, entranceR0 - 16, entranceCx - 4, entranceR0 - 12, T.TEE);
+    paint(entranceCx - 10, entranceR0 - 34, entranceCx - 2, entranceR0 - 16, T.FAIRWAY);
+    paint(entranceCx - 2, entranceR0 - 40, entranceCx + 10, entranceR0 - 30, T.FAIRWAY);
+    paint(entranceCx + 10, entranceR0 - 42, entranceCx + 16, entranceR0 - 36, T.GREEN);
+    paint(entranceCx + 2, entranceR0 - 30, entranceCx + 7, entranceR0 - 26, T.SAND);
+    paint(entranceCx - 20, entranceR0 - 30, entranceCx - 13, entranceR0 - 20, T.WATER);
+    // Path spur from the entrance walk to the tee
+    paint(entranceCx - 6, entranceR0 - 13, entranceCx - 1, entranceR0 - 12, T.PATH);
+    // A young forest framing the fairway's north side
+    for (let r = entranceR0 - 44; r < entranceR0 - 36; r++)
+        for (let c = entranceCx - 14; c < entranceCx + 8; c++)
+            if (grid[r] && grid[r][c] === T.ROUGH && ((c * 7 + r * 13) % 5) < 3)
+                grid[r][c] = T.TREE;
     return {
         id: 'course_1',
         name: 'My Resort',
         biome: 'meadows',
         cols, rows, border,
         grid,
-        holes: [],      // { id, par, tee:{x,y}, pin:{x,y}, waypoints:[{x,y}] }
+        holes: [{
+            id: 1, par: 4,
+            tee: { x: entranceCx - 6, y: entranceR0 - 14 },
+            pin: { x: entranceCx + 13, y: entranceR0 - 39 },
+            waypoints: [{ x: entranceCx - 5, y: entranceR0 - 25 }]
+        }],
         facilities: [], // future: { type, x, y, rot }
         scenery: []     // future: { type, x, y }
     };
