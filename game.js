@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt65';
+const BUILD_TAG = 'gt66';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -405,6 +405,53 @@ function polylineLengthYards(w) {
         dist += Math.sqrt(dx * dx + dy * dy);
     }
     return dist / YDS_TO_WORLD;
+}
+
+// Design difficulty 1-5, derived from what the route actually crosses:
+// hazard density in a corridor along the polyline, green size, and raw
+// length. Pure grid analysis — no physics fork.
+function holeDifficulty(rec) {
+    if (!rec || !rec.tee || !rec.pin) return 1;
+    const pts = [rec.tee, ...(rec.waypoints || []), rec.pin];
+    let samples = 0, hazard = 0;
+    for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+        const steps = Math.max(2, Math.ceil(segLen * 2));
+        for (let s = 0; s <= steps; s++) {
+            const cx = Math.round(a.x + (b.x - a.x) * (s / steps));
+            const cy = Math.round(a.y + (b.y - a.y) * (s / steps));
+            // 2-cell corridor around the line
+            for (let dy = -2; dy <= 2; dy++) {
+                for (let dx = -2; dx <= 2; dx++) {
+                    const r = cy + dy, c = cx + dx;
+                    if (r < 0 || r >= worldCourse.rows || c < 0 || c >= worldCourse.cols) continue;
+                    const t = worldCourse.grid[r][c];
+                    samples++;
+                    if (t === T.WATER) hazard += 1.6;
+                    else if (t === T.SAND) hazard += 1.0;
+                    else if (t === T.TREE) hazard += 0.8;
+                    else if (t === T.ROUGH || t === T.GRASS) hazard += 0.25;
+                }
+            }
+        }
+    }
+    const hazardFrac = samples ? hazard / samples : 0;
+    // Small greens putt harder
+    let greenCells = 0;
+    for (let dy = -4; dy <= 4; dy++) {
+        for (let dx = -4; dx <= 4; dx++) {
+            const r = rec.pin.y + dy, c = rec.pin.x + dx;
+            if (r >= 0 && r < worldCourse.rows && c >= 0 && c < worldCourse.cols
+                && worldCourse.grid[r][c] === T.GREEN) greenCells++;
+        }
+    }
+    const yds = polylineLengthYards(rec);
+    let score = 1
+        + Math.min(1.5, yds / 380)          // length pressure
+        + hazardFrac * 3.2                   // corridor danger
+        + Math.max(0, (20 - greenCells)) / 14; // tiny target
+    return Math.max(1, Math.min(5, Math.round(score)));
 }
 
 function parFromYards(yds) {
@@ -2824,10 +2871,11 @@ function drawOverworld() {
             ctx.fillText('Hole ' + selHole.id, hc.x + 14, hc.y + 21);
             // Reference-style stat rows: label left, value right, bar fill
             const yds = Math.round(polylineLengthYards(selHole));
+            const diff = holeDifficulty(selHole);
             const rows = [
                 ['Par', String(selHole.par), Math.min(1, selHole.par / 5), '#66bb6a'],
                 ['Length', yds + ' yds', Math.min(1, yds / 550), '#42a5f5'],
-                ['Bends', String(selHole.waypoints.length), Math.min(1, selHole.waypoints.length / 4), '#ffca28']
+                ['Difficulty', '★'.repeat(diff) + '☆'.repeat(5 - diff), diff / 5, '#ef5350']
             ];
             let ry = hc.y + 44;
             for (const [label, val, frac, col] of rows) {
