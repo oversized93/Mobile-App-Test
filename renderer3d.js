@@ -2410,6 +2410,16 @@ function updateAmbientNPCs3D(dt, hole) {
                     s.tx = sp.x;
                     s.tz = sp.z;
                     s.arriveSit = true;
+                } else if (window.__tourney && hole.holes && hole.holes.length
+                    && (i % 3) !== 0) {
+                    // Tournament gallery: most strollers ring a pin to watch
+                    // the action, lingering like spectators
+                    const rec = hole.holes[(i * 13 + (h >> 4)) % hole.holes.length];
+                    const ang = i * 2.4 + (h % 8) * 0.35;
+                    const rad = CELL * (1.6 + (i % 4) * 0.45);
+                    s.tx = (rec.pin.x + 0.5) * CELL + Math.cos(ang) * rad;
+                    s.tz = (rec.pin.y + 0.5) * CELL + Math.sin(ang) * rad;
+                    s.arriveSit = true;
                 } else {
                     // Pick a new stroll target on the path network
                     const next = npcPathCells[h % npcPathCells.length];
