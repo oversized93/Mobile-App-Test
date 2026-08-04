@@ -825,6 +825,15 @@ function albedoCellColor(hole, c, r) {
         const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
         const j = (h % 9) - 4;
         col = shadeHex(col, j * 0.006);
+        if (t === T.OOB) {
+            // Sandy cove stretches along the outer coastline break up the
+            // dark boundary ring (hash-picked ~40% of 9-cell segments)
+            const edge = Math.min(c, r, hole.cols - 1 - c, hole.rows - 1 - r);
+            if (edge <= 3
+                && ((Math.floor(c / 9) * 73 + Math.floor(r / 9) * 131) % 5) < 2) {
+                col = shadeHex('#7d6b45', j * 0.008);
+            }
+        }
         if (t === T.ROUGH || t === T.GRASS) {
             // First cut: a lighter semi-rough band hugging mowed surfaces
             for (let dr = -1; dr <= 1; dr++) {
