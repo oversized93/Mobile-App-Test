@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt66';
+const BUILD_TAG = 'gt67';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -563,12 +563,12 @@ function applyOfflineCatchup() {
 let _worldSaveAcc = 0;
 function tickWorld(dt) {
     resort.worldClock = (resort.worldClock || 0) + dt;
-    // Green fees: ambient golfers holing out pay $5 each (counter is
-    // incremented by the renderer when a playing group finishes)
-    if (window.__golfHoleOuts) {
-        resort.coins += 5 * window.__golfHoleOuts;
-        resort.feesEarned = (resort.feesEarned || 0) + 5 * window.__golfHoleOuts;
-        window.__golfHoleOuts = 0;
+    // Green fees: ambient golfers holing out pay per-hole fees scaled by
+    // difficulty (the renderer accumulates the dollar amounts)
+    if (window.__golfFees) {
+        resort.coins += window.__golfFees;
+        resort.feesEarned = (resort.feesEarned || 0) + window.__golfFees;
+        window.__golfFees = 0;
     }
     // Membership drifts toward what the resort deserves: holes draw
     // players, decor investment draws hangers-on. One member per game
@@ -2662,9 +2662,10 @@ function drawOverworld() {
             ctx.textAlign = 'center';
             ctx.strokeStyle = 'rgba(0,0,0,0.6)';
             ctx.lineWidth = 3;
-            ctx.strokeText('+$5', sp.x, sp.y - 20 - k * 34);
+            const feeTxt = '+$' + (p.amt || 5);
+            ctx.strokeText(feeTxt, sp.x, sp.y - 20 - k * 34);
             ctx.fillStyle = '#8be06a';
-            ctx.fillText('+$5', sp.x, sp.y - 20 - k * 34);
+            ctx.fillText(feeTxt, sp.x, sp.y - 20 - k * 34);
             ctx.globalAlpha = 1;
         }
     }

@@ -2159,8 +2159,11 @@ function setupAmbientNPCs(hole) {
             const pts = [rec.tee, ...(rec.waypoints || []), rec.pin]
                 .map(p => ({ x: (p.x + 0.5) * CELL, z: (p.y + 0.5) * CELL }));
             if (pts.length >= 2) {
-                routeGolfers.push({ pts: pts, off: 0 });
-                routeGolfers.push({ pts: pts, off: 1 });
+                // Harder holes command higher green fees
+                const fee = (typeof holeDifficulty === 'function')
+                    ? 3 + 2 * holeDifficulty(rec) : 5;
+                routeGolfers.push({ pts: pts, off: 0, fee: fee });
+                routeGolfers.push({ pts: pts, off: 1, fee: fee });
             }
         }
     }
@@ -2213,7 +2216,7 @@ function setupAmbientNPCs(hole) {
             x: rg.pts[0].x + rg.off * 6, z: rg.pts[0].z + 4,
             tx: rg.pts[1].x, tz: rg.pts[1].z,
             speed: 14 + rg.off * 3, phase: rg.off * 2.1, idle: false,
-            route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5
+            route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5, fee: rg.fee
         });
     }
     for (let i = 0; i < total; i++) {
@@ -2280,11 +2283,11 @@ function updateAmbientNPCs3D(dt, hole) {
             } else {
                 const nxt = s.route[s.ptIdx + 1];
                 if (!nxt) {
-                    // Holed out: bank a green fee, then restart at the tee
-                    window.__golfHoleOuts = (window.__golfHoleOuts || 0) + 1;
+                    // Holed out: bank the green fee, then restart at the tee
+                    window.__golfFees = (window.__golfFees || 0) + (s.fee || 5);
                     const pinPt = s.route[s.route.length - 1];
                     (window.__feePopups = window.__feePopups || []).push({
-                        x: pinPt.x, z: pinPt.z, t0: performance.now()
+                        x: pinPt.x, z: pinPt.z, t0: performance.now(), amt: s.fee || 5
                     });
                     s.ptIdx = 0;
                     s.x = s.route[0].x;
