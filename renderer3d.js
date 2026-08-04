@@ -2212,6 +2212,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateBuoys3D();
     updateBoat3D(hole);
     updateLeaves3D(hole);
+    updateRain3D(dt);
     for (const bg of beaconGroups) bg.rotation.y = windClock.value * 0.9;
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = sharedDummy3D;
@@ -2711,6 +2712,63 @@ function setupPathLamps(hole) {
     terrainGroup.add(headInst);
 }
 
+// ---- Passing rain showers ----
+// Deterministic episodes from the wind clock (two slow sines beating);
+// streaks live in scene3d so terrain rebuilds don't kill them, and they
+// respawn around the camera pivot so rain always falls in view.
+let rainInst = null, rainDrops = [], rainEnvNow = 0;
+const RAIN_COUNT = 240;
+
+function updateRain3D(dt) {
+    const t = windClock.value;
+    const w = Math.sin(t * 0.011) + Math.sin(t * 0.0073);
+    const target = w > 1.15 ? 1 : 0;
+    rainEnvNow += (target - rainEnvNow) * Math.min(1, dt * 0.3);
+    if (rainEnvNow < 0.02) {
+        if (rainInst) rainInst.visible = false;
+        return;
+    }
+    if (!rainInst && typeof scene3d !== 'undefined' && scene3d) {
+        const geo = new THREE.BoxGeometry(0.5, 15, 0.5);
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0xbcd8ea, transparent: true, opacity: 0.3, depthWrite: false
+        });
+        mat.toneMapped = false;
+        rainInst = new THREE.InstancedMesh(geo, mat, RAIN_COUNT);
+        rainInst.renderOrder = 5;
+        scene3d.add(rainInst);
+        for (let i = 0; i < RAIN_COUNT; i++) {
+            rainDrops.push({ x: 0, y: (i * 97) % 240, z: 0, spd: 340 + (i * 37) % 120, live: false });
+        }
+    }
+    if (!rainInst) return;
+    rainInst.visible = true;
+    rainInst.material.opacity = 0.3 * rainEnvNow;
+    const px = (typeof cam3dPivotX !== 'undefined') ? cam3dPivotX : 1920;
+    const pz = (typeof cam3dPivotZ !== 'undefined') ? cam3dPivotZ : 1280;
+    const dummy = sharedDummy3D;
+    for (let i = 0; i < RAIN_COUNT; i++) {
+        const d = rainDrops[i];
+        if (!d.live) {
+            d.x = px + ((i * 131) % 1400) - 700 + Math.sin(t + i) * 40;
+            d.z = pz + ((i * 211) % 1400) - 700;
+            d.live = true;
+        }
+        d.y -= d.spd * dt;
+        if (d.y < 0) {
+            d.y += 240;
+            d.x = px + ((i * 131 + Math.floor(t * 13)) % 1400) - 700;
+            d.z = pz + ((i * 211 + Math.floor(t * 7)) % 1400) - 700;
+        }
+        dummy.position.set(d.x, d.y, d.z);
+        dummy.rotation.set(0, 0, 0.06);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        rainInst.setMatrixAt(i, dummy.matrix);
+    }
+    rainInst.instanceMatrix.needsUpdate = true;
+}
+
 // ---- Day/night lighting cycle driven by the resort world clock ----
 // Never goes truly dark: night floors keep the resort readable, the cycle
 // reads through warm dawns/dusks, sweeping shadows, and a dimmed sky.
@@ -2748,8 +2806,8 @@ function updateDayNightTint(minutes) {
     const dayW = 0.5 + 0.5 * Math.cos((h - 13) / 24 * Math.PI * 2);
     // Golden-hour bumps near 07:00 and 19:00
     const gold = Math.exp(-Math.pow(h - 7, 2) / 2) + Math.exp(-Math.pow(h - 19, 2) / 2);
-    dirLightRef.intensity = 0.55 + 0.75 * dayW;
-    hemiLightRef.intensity = 0.5 + 0.4 * dayW;
+    dirLightRef.intensity = (0.55 + 0.75 * dayW) * (1 - rainEnvNow * 0.45);
+    hemiLightRef.intensity = (0.5 + 0.4 * dayW) * (1 - rainEnvNow * 0.2);
     // Sun color: day white -> gold at the rims -> cool moonlight
     const day = [1.0, 0.955, 0.88], gd = [1.0, 0.72, 0.45], night = [0.66, 0.74, 1.0];
     const m = (a, b, k) => a + (b - a) * k;
@@ -2764,7 +2822,7 @@ function updateDayNightTint(minutes) {
                              1280 + Math.cos(az) * 2000);
     // Sky dome + ocean dim with the light (material color multiplies
     // the authored vertex/base colors)
-    const dim = 0.34 + 0.66 * dayW;
+    const dim = (0.34 + 0.66 * dayW) * (1 - rainEnvNow * 0.3);
     if (skyMatRef) skyMatRef.color.setRGB(dim * 0.8, dim * 0.88, dim);
     if (oceanMatRef) oceanMatRef.color.copy(OCEAN_BASE_COLOR).multiplyScalar(0.35 + 0.65 * dayW);
     // Lamp globes: dull stone by day, warm glow after dark
