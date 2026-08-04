@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt54';
+const BUILD_TAG = 'gt55';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -96,6 +96,13 @@ let worldCourse = loadData('course', null);
 if (!worldCourse || worldCourse.cols !== COURSE_COLS || worldCourse.rows !== COURSE_ROWS) {
     worldCourse = makeStarterCourse();
 }
+
+// Build prices per decor type; erase refunds half. Terrain painting
+// stays free — sculpting is the core fantasy, decor is the money sink.
+const DECOR_COSTS = {
+    bench: 25, flowers: 10, kiosk: 150, stall: 150, cart: 75,
+    arch: 200, windmill: 300, lighthouse: 400, gazebo: 120, clubhouse: 500
+};
 
 // ---- Player-placeable decor ----
 // Saves that predate the decor system get the old auto-dressed layout
@@ -509,6 +516,12 @@ function applyOfflineCatchup() {
 let _worldSaveAcc = 0;
 function tickWorld(dt) {
     resort.worldClock = (resort.worldClock || 0) + dt;
+    // Green fees: ambient golfers holing out pay $5 each (counter is
+    // incremented by the renderer when a playing group finishes)
+    if (window.__golfHoleOuts) {
+        resort.coins += 5 * window.__golfHoleOuts;
+        window.__golfHoleOuts = 0;
+    }
     resort.coinsFrac = (resort.coinsFrac || 0) + resort.members * 0.2 * dt;
     if (resort.coinsFrac >= 1) {
         const whole = Math.floor(resort.coinsFrac);
@@ -2668,7 +2681,9 @@ function drawOverworld() {
                             ctx.font = '15px -apple-system,sans-serif';
                             ctx.fillText(tool.icon, L.flyX + 10, fy + L.flyH / 2 + 6);
                             ctx.font = (active ? 'bold ' : '') + '12px -apple-system,sans-serif';
-                            ctx.fillText(tool.label, L.flyX + 36, fy + L.flyH / 2 + 4);
+                            const priceTag = tool.decor && DECOR_COSTS[tool.decor]
+                                ? '  $' + DECOR_COSTS[tool.decor] : '';
+                            ctx.fillText(tool.label + priceTag, L.flyX + 36, fy + L.flyH / 2 + 4);
                         }
                         fy += L.flyH + L.flyGap;
                     }
@@ -3390,8 +3405,15 @@ function overworldTouchStart(sx, sy) {
                 d.rot = ((d.rot || 0) + Math.PI / 4) % (Math.PI * 2);
                 notify('Rotated ↻ tap again for more');
             } else {
+                const cost = DECOR_COSTS[tool.decor] || 0;
+                if (resort.coins < cost) {
+                    notify('Need $' + cost + ' for a ' + tool.label.toLowerCase());
+                    return;
+                }
+                resort.coins -= cost;
+                saveData('resort', resort);
                 worldCourse.decor.push({ t: tool.decor, x: cell.c + 0.5, y: cell.r + 0.5, rot: 0 });
-                notify(tool.label + ' placed — tap it to rotate, erase removes');
+                notify(tool.label + ' placed  −$' + cost);
             }
             if (scene3dReady) buildTerrain3D(worldCourse, { distantScenery: false });
             saveWorldCourse();
@@ -3408,9 +3430,12 @@ function overworldTouchStart(sx, sy) {
             }
             if (best >= 0) {
                 const gone = worldCourse.decor.splice(best, 1)[0];
+                const refund = Math.floor((DECOR_COSTS[gone.t] || 0) / 2);
+                resort.coins += refund;
+                saveData('resort', resort);
                 if (scene3dReady) buildTerrain3D(worldCourse, { distantScenery: false });
                 saveWorldCourse();
-                notify('Removed ' + gone.t);
+                notify('Removed ' + gone.t + (refund ? '  +$' + refund : ''));
                 return;
             }
         }

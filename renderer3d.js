@@ -2230,6 +2230,8 @@ function updateAmbientNPCs3D(dt, hole) {
             } else {
                 const nxt = s.route[s.ptIdx + 1];
                 if (!nxt) {
+                    // Holed out: bank a green fee, then restart at the tee
+                    window.__golfHoleOuts = (window.__golfHoleOuts || 0) + 1;
                     s.ptIdx = 0;
                     s.x = s.route[0].x;
                     s.z = s.route[0].z;
