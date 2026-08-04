@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt77';
+const BUILD_TAG = 'gt78';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2846,35 +2846,35 @@ function drawOverworld() {
                 const parent = pi >= 0 ? OW_RAIL[pi] : null;
                 if (parent && parent.flyout) {
                     const list = parent.flyout === 'sizes' ? OW_BRUSH_SIZES : parent.flyout;
-                    const totalH = list.length * (L.flyH + L.flyGap);
-                    let fy = Math.min(L.railY + (pi + 1) * (L.railBtn + L.railGap),
-                                      H() - 10 - totalH);
-                    for (const entry of list) {
+                    const FL = flyoutColsLayout(pi, list, L);
+                    for (let li = 0; li < list.length; li++) {
+                        const entry = list[li];
+                        const fx = L.flyX + Math.floor(li / FL.perCol) * (L.flyW + 8);
+                        const fy = FL.fy0 + (li % FL.perCol) * (L.flyH + L.flyGap);
                         if (parent.flyout === 'sizes') {
                             const active = entry === owBrushSize;
-                            glossyRect(L.flyX, fy, L.flyW, L.flyH, 10,
+                            glossyRect(fx, fy, L.flyW, L.flyH, 10,
                                        active ? '#1976d2' : '#2c3a42',
                                        active ? { stroke: 'rgba(255,255,255,0.75)' } : undefined);
                             ctx.textAlign = 'center';
                             ctx.fillStyle = '#fff';
                             ctx.font = (active ? 'bold ' : '') + '14px -apple-system,sans-serif';
-                            ctx.fillText(entry + ' \u00D7 ' + entry, L.flyX + L.flyW / 2, fy + L.flyH / 2 + 5);
+                            ctx.fillText(entry + ' \u00D7 ' + entry, fx + L.flyW / 2, fy + L.flyH / 2 + 5);
                         } else {
                             const tool = OW_TOOLS.find(t => t.id === entry);
                             const active = owTool === entry;
-                            glossyRect(L.flyX, fy, L.flyW, L.flyH, 10,
+                            glossyRect(fx, fy, L.flyW, L.flyH, 10,
                                        active ? tool.color : '#2c3a42',
                                        active ? { stroke: 'rgba(255,255,255,0.75)' } : undefined);
                             ctx.textAlign = 'left';
                             ctx.fillStyle = '#fff';
                             ctx.font = '15px -apple-system,sans-serif';
-                            ctx.fillText(tool.icon, L.flyX + 10, fy + L.flyH / 2 + 6);
+                            ctx.fillText(tool.icon, fx + 10, fy + L.flyH / 2 + 6);
                             ctx.font = (active ? 'bold ' : '') + '12px -apple-system,sans-serif';
                             const priceTag = tool.decor && DECOR_COSTS[tool.decor]
                                 ? '  $' + DECOR_COSTS[tool.decor] : '';
-                            ctx.fillText(tool.label + priceTag, L.flyX + 36, fy + L.flyH / 2 + 4);
+                            ctx.fillText(tool.label + priceTag, fx + 36, fy + L.flyH / 2 + 4);
                         }
-                        fy += L.flyH + L.flyGap;
                     }
                 }
             }
@@ -3117,6 +3117,18 @@ function tickHoleFlyover() {
     // Swoop low over the route, rising near the ends
     const dist = 640 - Math.sin(Math.PI * e) * 200;
     setCameraOrbit(x, z, dist, 0.62, f.yaw);
+}
+
+// Flyout entries wrap into columns when the list is taller than the
+// screen (11 decor items vs a 375px phone). Shared by draw + hit-test.
+function flyoutColsLayout(pi, list, L) {
+    const perCol = Math.max(1, Math.floor((H() - 20) / (L.flyH + L.flyGap)));
+    const rows = Math.min(list.length, perCol);
+    const totalH = rows * (L.flyH + L.flyGap);
+    let fy0 = Math.min(L.railY + (pi + 1) * (L.railBtn + L.railGap),
+                       H() - 10 - totalH);
+    if (fy0 < 10) fy0 = 10;
+    return { perCol: perCol, fy0: fy0 };
 }
 
 // Which camera control button is currently being held down (null when none).
@@ -3399,14 +3411,14 @@ function overworldHUDHit(sx, sy) {
                 const parent = pi >= 0 ? OW_RAIL[pi] : null;
                 if (parent && parent.flyout) {
                     const list = parent.flyout === 'sizes' ? OW_BRUSH_SIZES : parent.flyout;
-                    const totalH = list.length * (L.flyH + L.flyGap);
-                    let fy = Math.min(L.railY + (pi + 1) * (L.railBtn + L.railGap),
-                                      H() - 10 - totalH);
-                    for (const entry of list) {
-                        if (hitBtn(sx, sy, L.flyX, fy, L.flyW, L.flyH)) {
+                    const FL = flyoutColsLayout(pi, list, L);
+                    for (let li = 0; li < list.length; li++) {
+                        const entry = list[li];
+                        const fx = L.flyX + Math.floor(li / FL.perCol) * (L.flyW + 8);
+                        const fy = FL.fy0 + (li % FL.perCol) * (L.flyH + L.flyGap);
+                        if (hitBtn(sx, sy, fx, fy, L.flyW, L.flyH)) {
                             return parent.flyout === 'sizes' ? 'size:' + entry : 'tool:' + entry;
                         }
-                        fy += L.flyH + L.flyGap;
                     }
                 }
             }
