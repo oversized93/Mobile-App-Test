@@ -1559,12 +1559,24 @@ function buildTerrain3D(hole, opts) {
             grp.rotation.y = yaw || 0;
             terrainGroup.add(grp);
         };
-        // Gate arch over the walkway just inside the boundary
-        put('archsign', ec + 0.5, er - 1.2, 0, 1);
-        // The clubhouse — resort landmark beside the entrance walk
-        put('clubhouse', ec - 8.5, er - 7.5, Math.PI / 2);
-        // A cart parked off the path
-        put('golfcart', ec + 4.2, er - 14.6, -Math.PI / 3);
+        // Player-placeable decor, data-driven from worldCourse.decor.
+        // Legacy auto-layouts are seeded into decor on load (game.js).
+        const DECOR_MODELS = {
+            bench: 'bench', flowers: 'flowers', kiosk: 'kiosk',
+            stall: 'stall-drinks', cart: 'golfcart', arch: 'archsign',
+            windmill: 'windmill', lighthouse: 'lighthouse',
+            clubhouse: 'clubhouse'
+        };
+        beaconGroups = [];
+        beaconMats = [];
+        if (hole.decor) {
+            for (const d of hole.decor) {
+                const name = DECOR_MODELS[d.t];
+                if (!name) continue;
+                put(name, d.x, d.y, d.rot || 0);
+                if (d.t === 'lighthouse') addLighthouseBeacon(d.x * CELL, hAt(d.x, d.y) + 195, d.y * CELL);
+            }
+        }
         // Wooden bridges wherever the walkway crosses water
         for (let r = 1; r < hole.rows - 1; r++) {
             for (let c = 1; c < hole.cols - 1; c++) {
@@ -1575,55 +1587,9 @@ function buildTerrain3D(hole, opts) {
                 else if (eWater) put('bridge_woodRound', c + 0.5, r + 0.5, 0, 1.4);
             }
         }
-        // Windmill on the first pond's bank — classic resort landmark
-        let placedMill = false;
-        for (let r = 2; r < hole.rows - 2 && !placedMill; r++) {
-            for (let c = 2; c < hole.cols - 2 && !placedMill; c++) {
-                if (hole.grid[r][c] !== T.WATER) continue;
-                // shore cell: land to the east of water
-                if (hole.grid[r][c + 1] !== T.WATER && hole.grid[r][c + 2] !== T.WATER) {
-                    put('windmill', c + 2.6, r + 0.5, -Math.PI / 2);
-                    placedMill = true;
-                }
-            }
-        }
-        // Lighthouse landmark on the island's northeast corner, looking
-        // out over the cliff edge to sea
-        put('lighthouse', hole.cols - 4.5, 3.5, Math.PI);
-        // Rotating beacon: two opposed light cones from the lantern room,
-        // faded in after dark by the day/night pass
-        {
-            const lx = (hole.cols - 4.5) * CELL, lz = 3.5 * CELL;
-            const ly = hAt(hole.cols - 4.5, 3.5) + 195;
-            const beamGeo = new THREE.ConeGeometry(22, 300, 8, 1, true);
-            beamGeo.rotateZ(Math.PI / 2);
-            beamGeo.translate(150, 0, 0); // apex at lantern, base outward
-            const beamMat = new THREE.MeshBasicMaterial({
-                color: 0xfff2c0, transparent: true, opacity: 0,
-                depthWrite: false, side: THREE.DoubleSide
-            });
-            beamMat.toneMapped = false;
-            beaconMatRef = beamMat;
-            beaconGroupRef = new THREE.Group();
-            const b1 = new THREE.Mesh(beamGeo, beamMat);
-            const b2 = new THREE.Mesh(beamGeo, beamMat);
-            b2.rotation.y = Math.PI;
-            beaconGroupRef.add(b1);
-            beaconGroupRef.add(b2);
-            beaconGroupRef.position.set(lx, ly, lz);
-            terrainGroup.add(beaconGroupRef);
-        }
-        // Benches + trash along the entry path
-        put('bench', ec - 2.1, er - 5, Math.PI / 2);
-        put('bench', ec + 2.6, er - 7.5, -Math.PI / 2);
+        // Site furniture that stays automatic: trash bin + fence runs at
+        // the entrance mouth (tied to entrance geometry, not decor)
         put('trash', ec - 2.1, er - 6.2, 0);
-        // Refreshment plaza: Meshy kiosk on one side, drinks stall opposite
-        put('kiosk', ec - 4.6, er - 10.5, Math.PI / 2);
-        put('stall-drinks', ec + 4.9, er - 11.5, -Math.PI / 2);
-        // Flower planters + fence run flanking the walkway mouth
-        put('flowers', ec - 2.2, er - 3.2, 0);
-        put('flowers', ec + 2.7, er - 3.6, 0);
-        put('flowers', ec + 2.7, er - 10.2, 0);
         for (let i = 0; i < 4; i++) {
             put('station-fence', ec - 2.6, er - 4.5 - i * 1.6, Math.PI / 2, 1.2);
             put('station-fence', ec + 3.1, er - 4.9 - i * 1.6, Math.PI / 2, 1.2);
@@ -2197,7 +2163,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateBuoys3D();
     updateBoat3D(hole);
     updateLeaves3D(hole);
-    if (beaconGroupRef) beaconGroupRef.rotation.y = windClock.value * 0.9;
+    for (const bg of beaconGroups) bg.rotation.y = windClock.value * 0.9;
     if (!npcBodyInst || !npcStates.length) return;
     const dummy = sharedDummy3D;
     const t = windClock.value;
@@ -2622,7 +2588,30 @@ function setupPathLamps(hole) {
 // Never goes truly dark: night floors keep the resort readable, the cycle
 // reads through warm dawns/dusks, sweeping shadows, and a dimmed sky.
 let hemiLightRef = null, dirLightRef = null, skyMatRef = null, oceanMatRef = null;
-let beaconGroupRef = null, beaconMatRef = null;
+let beaconGroups = [], beaconMats = [];
+
+// Rotating lighthouse beacon: two opposed light cones from the lantern
+// room, faded in after dark by the day/night pass. One per lighthouse.
+function addLighthouseBeacon(x, y, z) {
+    const beamGeo = new THREE.ConeGeometry(22, 300, 8, 1, true);
+    beamGeo.rotateZ(Math.PI / 2);
+    beamGeo.translate(150, 0, 0); // apex at lantern, base outward
+    const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xfff2c0, transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide
+    });
+    beamMat.toneMapped = false;
+    const grp = new THREE.Group();
+    const b1 = new THREE.Mesh(beamGeo, beamMat);
+    const b2 = new THREE.Mesh(beamGeo, beamMat);
+    b2.rotation.y = Math.PI;
+    grp.add(b1);
+    grp.add(b2);
+    grp.position.set(x, y, z);
+    terrainGroup.add(grp);
+    beaconGroups.push(grp);
+    beaconMats.push(beamMat);
+}
 const OCEAN_BASE_COLOR = new THREE.Color(0x1f7fb4).convertSRGBToLinear();
 
 function updateDayNightTint(minutes) {
@@ -2659,8 +2648,8 @@ function updateDayNightTint(minutes) {
     if (waterMat) waterMat.uniforms.uNight.value = 0.35 + 0.65 * dayW;
     // Fireflies fade in after dark, invisible by day
     if (fireflyMatRef) fireflyMatRef.opacity = Math.max(0, 1 - dayW * 2.2);
-    // Lighthouse beam only shows after dark
-    if (beaconMatRef) beaconMatRef.opacity = Math.max(0, 1 - dayW * 1.6) * 0.4;
+    // Lighthouse beams only show after dark
+    for (const bm of beaconMats) bm.opacity = Math.max(0, 1 - dayW * 1.6) * 0.4;
 }
 
 // ---- Ambient critters: butterflies over meadows, gulls over ponds ----

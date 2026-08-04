@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt42';
+const BUILD_TAG = 'gt43';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -96,6 +96,39 @@ let worldCourse = loadData('course', null);
 if (!worldCourse || worldCourse.cols !== COURSE_COLS || worldCourse.rows !== COURSE_ROWS) {
     worldCourse = makeStarterCourse();
 }
+
+// ---- Player-placeable decor ----
+// Saves that predate the decor system get the old auto-dressed layout
+// seeded as editable data, so nothing vanishes — it becomes movable.
+function seedDefaultDecor(course) {
+    const ec = Math.floor(course.cols / 2);
+    const er = course.rows - course.border;
+    const decor = [
+        { t: 'arch', x: ec + 0.5, y: er - 1.2, rot: 0 },
+        { t: 'clubhouse', x: ec - 8.5, y: er - 7.5, rot: Math.PI / 2 },
+        { t: 'cart', x: ec + 4.2, y: er - 14.6, rot: -Math.PI / 3 },
+        { t: 'bench', x: ec - 2.1, y: er - 5, rot: Math.PI / 2 },
+        { t: 'bench', x: ec + 2.6, y: er - 7.5, rot: -Math.PI / 2 },
+        { t: 'kiosk', x: ec - 4.6, y: er - 10.5, rot: Math.PI / 2 },
+        { t: 'stall', x: ec + 4.9, y: er - 11.5, rot: -Math.PI / 2 },
+        { t: 'flowers', x: ec - 2.2, y: er - 3.2, rot: 0 },
+        { t: 'flowers', x: ec + 2.7, y: er - 3.6, rot: 0 },
+        { t: 'flowers', x: ec + 2.7, y: er - 10.2, rot: 0 },
+        { t: 'lighthouse', x: course.cols - 4.5, y: 3.5, rot: Math.PI }
+    ];
+    // Windmill on the first pond bank, mirroring the old auto-placement
+    outer: for (let r = 2; r < course.rows - 2; r++) {
+        for (let c = 2; c < course.cols - 2; c++) {
+            if (course.grid[r][c] !== T.WATER) continue;
+            if (course.grid[r][c + 1] !== T.WATER && course.grid[r][c + 2] !== T.WATER) {
+                decor.push({ t: 'windmill', x: c + 2.6, y: r + 0.5, rot: -Math.PI / 2 });
+                break outer;
+            }
+        }
+    }
+    return decor;
+}
+if (!worldCourse.decor) worldCourse.decor = seedDefaultDecor(worldCourse);
 // Heights are derived (deterministic noise flattened by terrain type), so
 // they are regenerated on load and after painting, never persisted.
 function refreshWorldHeights() {
@@ -183,6 +216,16 @@ const OW_TOOLS = [
     { id: 'erase',   label: 'Erase',   icon: '\u{267B}',  color: '#888',    terrain: T.ROUGH },
     // Wizard tool
     { id: 'hole',    label: 'New Hole',icon: '\u{26F3}',  color: '#ff6d00', wizard: true },
+    // Decor stamps: tap to place, erase tool removes
+    { id: 'dbench',      label: 'Bench',      icon: '\u{1FA91}', color: '#8d6e63', decor: 'bench' },
+    { id: 'dflowers',    label: 'Flowers',    icon: '\u{1F490}', color: '#ec407a', decor: 'flowers' },
+    { id: 'dkiosk',      label: 'Kiosk',      icon: '\u{1F3EA}', color: '#ef6c00', decor: 'kiosk' },
+    { id: 'dstall',      label: 'Drinks',     icon: '\u{1F964}', color: '#29b6f6', decor: 'stall' },
+    { id: 'dcart',       label: 'Cart',       icon: '\u{1F6FA}', color: '#9ccc65', decor: 'cart' },
+    { id: 'darch',       label: 'Arch',       icon: '⛩️', color: '#a1887f', decor: 'arch' },
+    { id: 'dwindmill',   label: 'Windmill',   icon: '\u{1F3E1}', color: '#ffb74d', decor: 'windmill' },
+    { id: 'dlighthouse', label: 'Lighthouse', icon: '\u{1F5FC}', color: '#ef5350', decor: 'lighthouse' },
+    { id: 'dclubhouse',  label: 'Clubhouse',  icon: '\u{1F3DB}️', color: '#66bb6a', decor: 'clubhouse' },
 ];
 const OW_BRUSH_SIZES = [1, 3, 5, 7, 9, 11];
 
@@ -196,6 +239,9 @@ const OW_RAIL = [
     { id: 'surface', icon: '\u{1F3A8}', label: 'LAND',   flyout: ['fairway', 'green', 'rough', 'sand'] },
     { id: 'nature',  icon: '\u{1F332}', label: 'NATURE', flyout: ['water', 'trees'] },
     { id: 'path',    icon: '\u{1F6B6}', label: 'PATHS' },
+    { id: 'decor',   icon: '\u{1FA91}', label: 'DECOR',
+      flyout: ['dbench', 'dflowers', 'dkiosk', 'dstall', 'dcart', 'darch',
+               'dwindmill', 'dlighthouse', 'dclubhouse'] },
     { id: 'hole',    icon: '\u26F3',    label: 'HOLES' },
     { id: 'erase',   icon: '\u267B',    label: 'ERASE' },
     { id: 'size',    icon: null,         label: 'BRUSH', flyout: 'sizes' },
@@ -203,7 +249,10 @@ const OW_RAIL = [
 // Parent group of each armable tool (drives rail highlight state)
 const OW_TOOL_PARENT = {
     hand: 'hand', fairway: 'surface', green: 'surface', rough: 'surface',
-    sand: 'surface', water: 'nature', trees: 'nature', path: 'path', erase: 'erase'
+    sand: 'surface', water: 'nature', trees: 'nature', path: 'path', erase: 'erase',
+    dbench: 'decor', dflowers: 'decor', dkiosk: 'decor', dstall: 'decor',
+    dcart: 'decor', darch: 'decor', dwindmill: 'decor', dlighthouse: 'decor',
+    dclubhouse: 'decor'
 };
 let owRailOpen = false;   // build rail expanded?
 let owFlyout = null;      // parent id whose sub-options are showing
@@ -3303,6 +3352,32 @@ function overworldTouchStart(sx, sy) {
     // through to the camera-pan block below.
     if (cell) {
         const tool = currentTool();
+        // Decor stamp: tap places the selected prop at the tapped cell
+        if (tool && tool.decor) {
+            worldCourse.decor = worldCourse.decor || [];
+            worldCourse.decor.push({ t: tool.decor, x: cell.c + 0.5, y: cell.r + 0.5, rot: 0 });
+            if (scene3dReady) buildTerrain3D(worldCourse, { distantScenery: false });
+            saveWorldCourse();
+            notify(tool.label + ' placed — erase tool removes it');
+            return;
+        }
+        // Erase tap on a decor item removes it instead of painting
+        if (tool && tool.id === 'erase' && worldCourse.decor && worldCourse.decor.length) {
+            let best = -1, bd = 2.25; // within 1.5 cells
+            for (let i = 0; i < worldCourse.decor.length; i++) {
+                const d = worldCourse.decor[i];
+                const dd = (d.x - cell.c - 0.5) * (d.x - cell.c - 0.5)
+                         + (d.y - cell.r - 0.5) * (d.y - cell.r - 0.5);
+                if (dd < bd) { bd = dd; best = i; }
+            }
+            if (best >= 0) {
+                const gone = worldCourse.decor.splice(best, 1)[0];
+                if (scene3dReady) buildTerrain3D(worldCourse, { distantScenery: false });
+                saveWorldCourse();
+                notify('Removed ' + gone.t);
+                return;
+            }
+        }
         if (tool && tool.terrain != null && !tool.wizard) {
             owDragPainting = true;
             owDragLastCell = cell;
