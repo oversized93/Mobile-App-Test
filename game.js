@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt55';
+const BUILD_TAG = 'gt56';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2509,6 +2509,27 @@ function drawOverworld() {
             ctx.arc(p.x, p.y, same ? 17 : 12, 0, Math.PI * 2);
             ctx.stroke();
             ctx.setLineDash([]);
+        }
+    }
+
+    // ---- Floating green-fee popups over pins as golfers hole out ----
+    if (window.__feePopups && window.__feePopups.length) {
+        const now = performance.now();
+        window.__feePopups = window.__feePopups.filter(p => now - p.t0 < 1500);
+        for (const p of window.__feePopups) {
+            const k = (now - p.t0) / 1500;
+            const sp = (scene3dReady && typeof worldToScreen3D === 'function')
+                ? worldToScreen3D(p.x, p.z) : null;
+            if (!sp || sp.behind) continue;
+            ctx.globalAlpha = 1 - k;
+            ctx.font = 'bold 15px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.lineWidth = 3;
+            ctx.strokeText('+$5', sp.x, sp.y - 20 - k * 34);
+            ctx.fillStyle = '#8be06a';
+            ctx.fillText('+$5', sp.x, sp.y - 20 - k * 34);
+            ctx.globalAlpha = 1;
         }
     }
 

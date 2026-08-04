@@ -2232,6 +2232,10 @@ function updateAmbientNPCs3D(dt, hole) {
                 if (!nxt) {
                     // Holed out: bank a green fee, then restart at the tee
                     window.__golfHoleOuts = (window.__golfHoleOuts || 0) + 1;
+                    const pinPt = s.route[s.route.length - 1];
+                    (window.__feePopups = window.__feePopups || []).push({
+                        x: pinPt.x, z: pinPt.z, t0: performance.now()
+                    });
                     s.ptIdx = 0;
                     s.x = s.route[0].x;
                     s.z = s.route[0].z;
