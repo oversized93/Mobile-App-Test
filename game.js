@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt61';
+const BUILD_TAG = 'gt62';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5230,6 +5230,15 @@ function gameLoop(time) {
         // Horizon-ring scenery only reads right from the high overworld
         // camera; from low play cameras it looks like floating debris
         if (typeof setDistantSceneryVisible === 'function') setDistantSceneryVisible(false);
+        // The ambient world keeps living during world playtests: NPCs
+        // walk, rain falls, the clock ticks the light. Playing a classic
+        // course (no worldCourse terrain) skips harmlessly — the setup
+        // functions rebuilt their instances for that terrain anyway.
+        if (worldPlaytest) {
+            if (typeof updateAmbientNPCs3D === 'function') updateAmbientNPCs3D(dt, worldCourse);
+            if (typeof updateArcBalls3D === 'function') updateArcBalls3D();
+            if (typeof updateDayNightTint === 'function') updateDayNightTint(resort.worldClock || 0);
+        }
         // Update 3D ball position
         updateBall3D(ball.x, ball.y, ball.z, player.ballColor, terrainHeightAt(ball.x, ball.y));
         // Update 3D target
