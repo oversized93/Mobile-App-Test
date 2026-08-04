@@ -1671,6 +1671,35 @@ function buildTerrain3D(hole, opts) {
         }
         teeMarks.castShadow = true;
         terrainGroup.add(teeMarks);
+        // Yardage plates on the route: white = 100y out, red = 150y out
+        // (YDS_TO_WORLD = 16 world units per yard, matching game.js)
+        const plateGeo = new THREE.CylinderGeometry(3.2, 3.2, 1.2, 10);
+        for (const rec of hole.holes) {
+            const rpts = [rec.tee, ...(rec.waypoints || []), rec.pin]
+                .map(p => ({ x: (p.x + 0.5) * CELL, z: (p.y + 0.5) * CELL }));
+            for (const spec of [[100, 0xf5f5f5], [150, 0xd63b2f]]) {
+                let remain = spec[0] * 16;
+                for (let i = rpts.length - 1; i > 0 && remain > 0; i--) {
+                    const a = rpts[i], b = rpts[i - 1];
+                    const segLen = Math.hypot(b.x - a.x, b.z - a.z);
+                    if (segLen >= remain) {
+                        const k = remain / segLen;
+                        const mx = a.x + (b.x - a.x) * k;
+                        const mz = a.z + (b.z - a.z) * k;
+                        const cy = Math.floor(mz / CELL), cx2 = Math.floor(mx / CELL);
+                        const gy = (hole.heights && hole.heights[cy])
+                            ? (hole.heights[cy][cx2] || 0) : 0;
+                        const plate = new THREE.Mesh(plateGeo,
+                            new THREE.MeshStandardMaterial({ color: linC(spec[1]), roughness: 0.5 }));
+                        plate.position.set(mx, gy + 0.6, mz);
+                        terrainGroup.add(plate);
+                        remain = 0;
+                    } else {
+                        remain -= segLen;
+                    }
+                }
+            }
+        }
     }
 
     // ---- Floating 3D hole numbers over each tee (reference-style) ----
