@@ -2110,6 +2110,7 @@ function hide3D() {
 // set position/rotation/scale before updateMatrix (no field survives).
 const sharedDummy3D = new THREE.Object3D();
 let npcBodyInst = null, npcHeadInst = null, npcClubInst = null, npcUmbrellaInst = null;
+let npcHatInst = null;
 let npcStates = [];
 let npcPathCells = [];
 let npcSocialSpots = [];
@@ -2227,6 +2228,22 @@ function setupAmbientNPCs(hole) {
     if (npcBodyInst.instanceColor) npcBodyInst.instanceColor.needsUpdate = true;
     terrainGroup.add(npcBodyInst);
     terrainGroup.add(npcHeadInst);
+    // Sun hats on every other walker — cheap silhouette variety
+    npcHatInst = null;
+    if (walkerCount > 0) {
+        const hatGeo = new THREE.CylinderGeometry(4.4, 4.4, 0.9, 8);
+        const hatMat = new THREE.MeshStandardMaterial({ roughness: 0.85 });
+        npcHatInst = new THREE.InstancedMesh(hatGeo, hatMat, walkerCount);
+        const hatCols = [0xf2e3c0, 0xe57373, 0x90caf9, 0xfff176];
+        for (let i = 0; i < walkerCount; i++) {
+            if (npcHatInst.setColorAt) {
+                npcHatInst.setColorAt(i,
+                    new THREE.Color(hatCols[i % hatCols.length]).convertSRGBToLinear());
+            }
+        }
+        if (npcHatInst.instanceColor) npcHatInst.instanceColor.needsUpdate = true;
+        terrainGroup.add(npcHatInst);
+    }
     // Umbrellas: popped open over walkers while a shower passes
     npcUmbrellaInst = null;
     if (walkerCount > 0) {
@@ -2352,6 +2369,20 @@ function updateAmbientNPCs3D(dt, hole) {
         dummy.position.y = gy + 18.5 + bob;
         dummy.updateMatrix();
         npcHeadInst.setMatrixAt(i, dummy.matrix);
+        if (npcHatInst && i < npcWalkerCount) {
+            // Every other walker wears a hat; the rest hide theirs
+            if (i % 2 === 0) {
+                dummy.position.y = gy + 22 + bob;
+                dummy.scale.set(1, 1, 1);
+            } else {
+                dummy.position.set(0, -500, 0);
+                dummy.scale.set(0.001, 0.001, 0.001);
+            }
+            dummy.updateMatrix();
+            npcHatInst.setMatrixAt(i, dummy.matrix);
+            dummy.position.set(s.x, gy + 18.5 + bob, s.z);
+            dummy.scale.set(1, 1, 1);
+        }
         if (npcUmbrellaInst && i < npcWalkerCount) {
             if (rainEnvNow > 0.4) {
                 dummy.position.y = gy + 25 + bob;
@@ -2392,6 +2423,7 @@ function updateAmbientNPCs3D(dt, hole) {
     npcHeadInst.instanceMatrix.needsUpdate = true;
     if (npcClubInst) npcClubInst.instanceMatrix.needsUpdate = true;
     if (npcUmbrellaInst) npcUmbrellaInst.instanceMatrix.needsUpdate = true;
+    if (npcHatInst) npcHatInst.instanceMatrix.needsUpdate = true;
 }
 
 // ---- Pond fountains — animated jets on the largest water bodies ----
