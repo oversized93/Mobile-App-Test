@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt43';
+const BUILD_TAG = 'gt44';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3352,13 +3352,29 @@ function overworldTouchStart(sx, sy) {
     // through to the camera-pan block below.
     if (cell) {
         const tool = currentTool();
-        // Decor stamp: tap places the selected prop at the tapped cell
+        // Decor stamp: tap places the selected prop at the tapped cell.
+        // Tapping an existing item of the same type rotates it 45° so
+        // placement and orientation share one gesture.
         if (tool && tool.decor) {
             worldCourse.decor = worldCourse.decor || [];
-            worldCourse.decor.push({ t: tool.decor, x: cell.c + 0.5, y: cell.r + 0.5, rot: 0 });
+            let near = -1, nd = 1.44;
+            for (let i = 0; i < worldCourse.decor.length; i++) {
+                const d = worldCourse.decor[i];
+                if (d.t !== tool.decor) continue;
+                const dd = (d.x - cell.c - 0.5) * (d.x - cell.c - 0.5)
+                         + (d.y - cell.r - 0.5) * (d.y - cell.r - 0.5);
+                if (dd < nd) { nd = dd; near = i; }
+            }
+            if (near >= 0) {
+                const d = worldCourse.decor[near];
+                d.rot = ((d.rot || 0) + Math.PI / 4) % (Math.PI * 2);
+                notify('Rotated ↻ tap again for more');
+            } else {
+                worldCourse.decor.push({ t: tool.decor, x: cell.c + 0.5, y: cell.r + 0.5, rot: 0 });
+                notify(tool.label + ' placed — tap it to rotate, erase removes');
+            }
             if (scene3dReady) buildTerrain3D(worldCourse, { distantScenery: false });
             saveWorldCourse();
-            notify(tool.label + ' placed — erase tool removes it');
             return;
         }
         // Erase tap on a decor item removes it instead of painting
