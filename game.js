@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt142';
+const BUILD_TAG = 'gt143';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3719,8 +3719,13 @@ function drawOverworld() {
             .sort((a, b) => (a[1].rel / a[1].n) - (b[1].rel / b[1].n));
         let tTxt = '\u{1F3C6} TOURNAMENT';
         if (entries.length) {
-            const rel = entries[0][1].rel / entries[0][1].n;
-            tTxt += ' • ' + entries[0][0] + ' leads ('
+            // Rotate through the top three every few seconds
+            const top = entries.slice(0, 3);
+            const idx = Math.floor(performance.now() / 2600) % top.length;
+            const [nm, tb] = top[idx];
+            const rel = tb.rel / tb.n;
+            const place = ['leads', '2nd', '3rd'][idx];
+            tTxt += ' • ' + nm + ' ' + place + ' ('
                 + (rel <= 0 ? '' : '+') + rel.toFixed(1) + ')';
         } else {
             tTxt += ' • first scores coming in…';
