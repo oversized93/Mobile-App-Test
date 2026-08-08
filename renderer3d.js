@@ -2460,6 +2460,10 @@ function golferThink(s, text, v) {
     if (s.mood <= 25 && !(s.freakout > 0) && s.name) {
         s.freakout = 3;
         s.freakouts = (s.freakouts || 0) + 1;
+        // Tantrums cost the resort: an annoyed member cancels
+        if (typeof resort !== 'undefined' && resort && resort.members > 5) {
+            resort.members--;
+        }
         s.thoughts.unshift({ t: 'FREAKOUT! Lost my cool out there', v: 0 });
         if (s.thoughts.length > 6) s.thoughts.pop();
         s.mood = 45;
@@ -2713,8 +2717,16 @@ function updateAmbientNPCs3D(dt, hole) {
             s.freakout -= dt;
             bob = Math.abs(Math.sin(t * 14 + s.phase)) * 6;
         }
-        const yaw = s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
-                           : Math.atan2(s.tx - s.x, s.tz - s.z);
+        // Smoothed heading: lerp toward the walk direction (with wrap)
+        // so waypoint turns read as turns, not teleport snaps
+        const yawT = s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
+                            : Math.atan2(s.tx - s.x, s.tz - s.z);
+        if (s.dispYaw == null) s.dispYaw = yawT;
+        let yawD = yawT - s.dispYaw;
+        while (yawD > Math.PI) yawD -= Math.PI * 2;
+        while (yawD < -Math.PI) yawD += Math.PI * 2;
+        s.dispYaw += yawD * Math.min(1, dt * 7);
+        const yaw = s.dispYaw;
         dummy.position.set(s.x, gy + 7.5 + bob, s.z);
         dummy.rotation.set(0, yaw, 0);
         dummy.scale.set(1, 1, 1);
