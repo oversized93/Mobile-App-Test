@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt92';
+const BUILD_TAG = 'gt93';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -297,6 +297,8 @@ const OW_TOOL_PARENT = {
 let owRailOpen = false;   // build rail expanded?
 let owRosterOpen = false; // golfer roster panel visible?
 let owSelectedGolfer = null; // name of golfer whose inspector is open
+let gameSpeed = 1;        // 0 = paused, 1 = normal, 4 = fast-forward
+let owSpeedRects = null;  // screen rects of the speed strip (set each draw)
 let owRosterChip = null;  // screen rect of the roster chip (set each draw)
 let owFlyout = null;      // parent id whose sub-options are showing
 let owCategory = 'surface'; // retained for save-compat; no longer drives UI
@@ -2865,6 +2867,36 @@ function drawOverworld() {
     ctx.textAlign = 'center';
     ctx.fillText('$ ' + Math.floor(resort.coins).toLocaleString(), W() / 2, bpY + bpH / 2 + 5);
 
+    // Speed strip — pause / play / fast-forward, reference-style
+    {
+        const bs = 30, gap = 6;
+        // Right-aligned just under the close/undo buttons — clear of the
+        // build rail (left) and the camera strip (starts mid-screen)
+        const sx0 = W() - L.pad - (bs * 3 + gap * 2), sy0 = L.topBarH + 8;
+        const btns = [[0, '⏸'], [1, '▶'], [4, '⏩']];
+        owSpeedRects = [];
+        for (let i = 0; i < btns.length; i++) {
+            const [spd, icon] = btns[i];
+            const bx = sx0 + i * (bs + gap);
+            glossyRect(bx, sy0, bs, bs, 9,
+                gameSpeed === spd ? (spd === 0 ? '#b0483c' : '#3f7a4d') : '#2c3a42');
+            ctx.fillStyle = gameSpeed === spd ? '#fff' : 'rgba(255,255,255,0.65)';
+            ctx.font = '13px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(icon, bx + bs / 2, sy0 + bs / 2 + 5);
+            owSpeedRects.push({ spd, x: bx, y: sy0, w: bs, h: bs });
+        }
+    }
+    // Paused banner, center-top like the reference
+    if (gameSpeed === 0) {
+        ctx.font = 'bold 13px -apple-system,sans-serif';
+        const pw = ctx.measureText('GAME PAUSED').width + 44;
+        glossyRect((W() - pw) / 2, L.topBarH + 46, pw, 28, 14, '#20535e');
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText('GAME PAUSED', W() / 2, L.topBarH + 65);
+    }
+
     // Tournament banner — live leader while the daily event runs
     if (window.__tourney) {
         const entries = Object.entries(window.__tourney.board)
@@ -3761,6 +3793,11 @@ function overworldHUDHit(sx, sy) {
     const L = overworldLayout();
     if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) return 'close';
     if (hitBtn(sx, sy, L.undoX, L.undoY, L.undoSize, L.undoSize)) return 'undo';
+    if (owSpeedRects) {
+        for (const sr of owSpeedRects) {
+            if (hitBtn(sx, sy, sr.x, sr.y, sr.w, sr.h)) return 'speed:' + sr.spd;
+        }
+    }
     if (owRosterChip && hitBtn(sx, sy, owRosterChip.x, owRosterChip.y,
         owRosterChip.w, owRosterChip.h)) return 'roster';
     if (owRosterOpen && owRosterChip && owRosterChip.panel
@@ -3846,6 +3883,10 @@ function overworldTouchStart(sx, sy) {
     const hit = overworldHUDHit(sx, sy);
     if (hit === 'close') { exitOverworld(); return; }
     if (hit === 'undo') { undoLastStroke(); return; }
+    if (hit && hit.startsWith('speed:')) {
+        gameSpeed = parseInt(hit.slice(6), 10);
+        return;
+    }
     if (hit === 'roster') { owRosterOpen = !owRosterOpen; return; }
     if (hit === 'roster:panel') return; // absorb taps on the open panel
     // Tapping anywhere else dismisses the roster (and absorbs the tap so a
@@ -5798,7 +5839,7 @@ function gameLoop(time) {
             if (ballMesh) ballMesh.visible = false;
             if (typeof cloudsGroup !== 'undefined' && cloudsGroup) cloudsGroup.visible = false;
             if (typeof setDistantSceneryVisible === 'function') setDistantSceneryVisible(true);
-            if (typeof updateAmbientNPCs3D === 'function') updateAmbientNPCs3D(dt, worldCourse);
+            if (typeof updateAmbientNPCs3D === 'function') updateAmbientNPCs3D(dt * gameSpeed, worldCourse);
             if (typeof updateArcBalls3D === 'function') updateArcBalls3D();
             if (typeof updateDayNightTint === 'function') updateDayNightTint(resort.worldClock || 0);
             if (typeof setBuildGridVisible === 'function') setBuildGridVisible((owTool && owTool !== 'hand') || !!holeWizard);
@@ -5861,8 +5902,9 @@ function gameLoop(time) {
         canvas.style.background = '';
     }
 
-    // The world always ticks — economy (and later NPCs) advance on any screen
-    tickWorld(dt);
+    // The world always ticks — economy (and later NPCs) advance on any
+    // screen, scaled by the speed strip (0 pauses, 4 fast-forwards)
+    tickWorld(dt * gameSpeed);
 
     // Draw 2D based on state (HUD overlay when 3D, full render when not)
     switch (state) {
