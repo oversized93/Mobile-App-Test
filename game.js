@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt124';
+const BUILD_TAG = 'gt125';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -898,6 +898,10 @@ function tickWorld(dt) {
             st.n++;
             st.sum += ho.score;
             if (ho.score < ho.par) st.sub++; // rounds under par
+            if (ho.name && (st.best == null || ho.score < st.best)) {
+                st.best = ho.score;   // course record for this hole
+                st.bestBy = ho.name;
+            }
             if (window.__tourney && ho.name) {
                 const tb = window.__tourney.board[ho.name]
                     || (window.__tourney.board[ho.name] = { n: 0, rel: 0 });
@@ -3932,6 +3936,12 @@ function drawOverworld() {
                     ctx.font = 'bold 10px -apple-system,sans-serif';
                     ctx.fillText('Avg ' + avg + ' • ' + pct + '% under par • '
                         + st.n + ' rounds', hc.x + 14, ry);
+                    if (st.best != null) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                        ctx.font = '9px -apple-system,sans-serif';
+                        ctx.fillText('\u{1F3C5} Record: ' + st.best + ' \u2014 '
+                            + (st.bestBy || '?'), hc.x + 14, ry + 12);
+                    }
                 } else {
                     ctx.fillStyle = 'rgba(255,255,255,0.35)';
                     ctx.fillText('No rounds played yet', hc.x + 14, ry);
