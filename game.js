@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt128';
+const BUILD_TAG = 'gt129';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -900,10 +900,23 @@ function tickWorld(dt) {
             if (ho.score < ho.par) st.sub++; // rounds under par
             if (ho.name && (st.best == null || ho.score < st.best)) {
                 const hadRecord = st.best != null && st.n >= 5;
+                const prevBy = st.bestBy;
                 st.best = ho.score;   // course record for this hole
                 st.bestBy = ho.name;
                 // A standing record falling is an event worth celebrating
                 if (hadRecord) {
+                    // Rivalry: the dethroned golfer takes it personally, the
+                    // new holder savors it — both react in their thought logs
+                    if (typeof npcStates !== 'undefined' && typeof golferThink === 'function') {
+                        const loser = npcStates.find(n => n.name === prevBy);
+                        const winner = npcStates.find(n => n.name === ho.name);
+                        if (loser && prevBy !== ho.name) {
+                            golferThink(loser, ho.name.split(' ')[0] + ' took MY record!', -8);
+                        }
+                        if (winner) {
+                            golferThink(winner, 'Course record \u2014 mine now!', 12);
+                        }
+                    }
                     const rec = worldCourse.holes.find(h => h.id === ho.holeId);
                     notify('\u{1F3C5} COURSE RECORD! ' + ho.name + ' shoots '
                         + ho.score + ' on ' + ((rec && rec.name) || ('Hole ' + ho.holeId)));
