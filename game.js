@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt171';
+const BUILD_TAG = 'gt172';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3976,13 +3976,13 @@ function drawOverworld() {
                 ctx.textAlign = 'left';
                 ctx.fillText('CHAMPIONS', px + 14, fy);
                 fy += 14;
-                for (const lt of champs) {
-                    ctx.fillStyle = '#ffd24a';
-                    ctx.font = 'bold 10px -apple-system,sans-serif';
-                    ctx.fillText('\u{1F3C6} Day ' + lt.day + '  ' + lt.winner
-                        + '  (' + lt.rel + ')', px + 14, fy);
+                champs.forEach((lt, ci) => {
+                    ctx.fillStyle = ci === 0 ? '#ffd24a' : 'rgba(255,210,74,0.6)';
+                    ctx.font = (ci === 0 ? 'bold ' : '') + '10px -apple-system,sans-serif';
+                    ctx.fillText((ci === 0 ? '\u{1F451}' : '\u{1F3C6}') + ' Day '
+                        + lt.day + '  ' + lt.winner + '  (' + lt.rel + ')', px + 14, fy);
                     fy += 16;
-                }
+                });
             }
             owRosterChip.panel = { x: px, y: py, w: pw, h: ph };
         } else if (owRosterChip) {
