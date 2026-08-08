@@ -3552,6 +3552,7 @@ function updateDayNightTint(minutes) {
 // ---- Ambient critters: butterflies over meadows, gulls over ponds ----
 let bflyInst = null, bflyStates = [];
 let gullInst = null, gullStates = [];
+let dragonInst = null, dragonStates = [];
 
 function setupCritters(hole) {
     bflyInst = null;
@@ -3588,6 +3589,33 @@ function setupCritters(hole) {
         }
         if (bflyInst.instanceColor) bflyInst.instanceColor.needsUpdate = true;
         terrainGroup.add(bflyInst);
+    }
+    // Dragonflies dart over interior ponds (water away from the map rim)
+    dragonStates = [];
+    dragonInst = null;
+    {
+        const pondCells = [];
+        for (let r = 6; r < hole.rows - 6 && pondCells.length < 10; r += 3) {
+            for (let c = 6; c < hole.cols - 6 && pondCells.length < 10; c += 3) {
+                if (hole.grid[r][c] === T.WATER) pondCells.push({ c, r });
+            }
+        }
+        if (pondCells.length) {
+            const nD = Math.min(8, pondCells.length * 2);
+            const geo = new THREE.PlaneGeometry(3.4, 0.7);
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0x55e0ff, side: THREE.DoubleSide,
+                transparent: true, opacity: 0.9
+            });
+            mat.toneMapped = false;
+            dragonInst = new THREE.InstancedMesh(geo, mat, nD);
+            for (let i = 0; i < nD; i++) {
+                const sp = pondCells[i % pondCells.length];
+                const x = (sp.c + 0.5) * CELL, z = (sp.r + 0.5) * CELL;
+                dragonStates.push({ x, z, hx: x, hz: z, ox: x, oz: z, phase: i * 1.7 });
+            }
+            terrainGroup.add(dragonInst);
+        }
     }
     // Gulls circle fountains AND the shoreline — sample beach sand that
     // borders open water for coastal flocks
@@ -3655,6 +3683,28 @@ function updateCritters3D(hole) {
             gullInst.setMatrixAt(i, dummy.matrix);
         }
         gullInst.instanceMatrix.needsUpdate = true;
+    }
+    if (dragonInst && dragonStates.length) {
+        for (let i = 0; i < dragonStates.length; i++) {
+            const s = dragonStates[i];
+            const dx = s.hx - s.x, dz = s.hz - s.z;
+            const d = Math.sqrt(dx * dx + dz * dz);
+            if (d < 1.5) {
+                // Pick a new darting point near the home pond cell
+                const h = Math.floor(t * 13 + i * 97);
+                s.hx = s.ox + ((h % 21) - 10) * 1.6;
+                s.hz = s.oz + (((h >> 3) % 21) - 10) * 1.6;
+            } else {
+                s.x += (dx / d) * 26 * 0.016;
+                s.z += (dz / d) * 26 * 0.016;
+            }
+            dummy.position.set(s.x, 4.5 + Math.sin(t * 6 + s.phase) * 1.2, s.z);
+            dummy.rotation.set(0, Math.atan2(dx, dz), 0);
+            dummy.scale.set(1, 1, 1);
+            dummy.updateMatrix();
+            dragonInst.setMatrixAt(i, dummy.matrix);
+        }
+        dragonInst.instanceMatrix.needsUpdate = true;
     }
 }
 
