@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt148';
+const BUILD_TAG = 'gt149';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -503,6 +503,9 @@ function parcelPrice() {
 let owBalanceRect = null;   // balance chip rect (tap -> finances)
 let owFinancesRect = null;  // open finances panel rect
 let owFinancesOpen = false;
+let owWeatherRect = null;  // weather chip rect (tap for forecast)
+let owWeatherPanelRect = null;
+let owWeatherOpen = false;
 let owMarkerTap = null;    // { id, t } for double-tap flyover detection
 let owNameRect = null;     // resort name rect in the top bar (tap to rename)
 let owDecorDrag = null;    // { i, moved } while repositioning a decor item
@@ -3744,18 +3747,62 @@ function drawOverworld() {
         ctx.fillStyle = '#fff';
         ctx.textAlign = 'center';
         ctx.fillText(wTxt, wx + ww / 2, L.topBarH + 27);
+        owWeatherRect = { x: wx, y: L.topBarH + 8, w: ww, h: 30 };
+        // Tap-open forecast: the next few rain windows with durations
+        if (owWeatherOpen) {
+            const windows = [];
+            let inRain = wAt(t0) > 1.15, start = null;
+            for (let d = 15; d <= 14400 && windows.length < 3; d += 15) {
+                const r = wAt(t0 + d) > 1.15;
+                if (r && !inRain) start = d;
+                if (!r && inRain && start == null && windows.length === 0) {
+                    windows.push({ from: 0, len: d }); // current rain ending
+                }
+                if (!r && inRain && start != null) {
+                    windows.push({ from: start, len: d - start });
+                    start = null;
+                }
+                inRain = r;
+            }
+            const fw2 = 190, fh2 = 26 + Math.max(windows.length, 1) * 18 + 8;
+            const fx2 = Math.min(wx, W() - fw2 - 8), fy2 = L.topBarH + 44;
+            ctx.fillStyle = 'rgba(12,24,32,0.94)';
+            roundRect(fx2, fy2, fw2, fh2, 10); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.font = 'bold 9px -apple-system,sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('RAIN FORECAST', fx2 + 12, fy2 + 17);
+            const fmt2 = (m) => m >= 90 ? Math.round(m / 60) + 'h' : Math.round(m) + 'm';
+            if (!windows.length) {
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.font = '10px -apple-system,sans-serif';
+                ctx.fillText('Clear for the next day \u2600\uFE0F', fx2 + 12, fy2 + 34);
+            }
+            windows.forEach((wnd, i) => {
+                ctx.fillStyle = '#9fd6ff';
+                ctx.font = '10px -apple-system,sans-serif';
+                ctx.fillText(wnd.from === 0
+                    ? '\u{1F327} now \u2014 ends in ' + fmt2(wnd.len)
+                    : '\u{1F327} in ' + fmt2(wnd.from) + ' \u2022 lasts ' + fmt2(wnd.len),
+                    fx2 + 12, fy2 + 34 + i * 18);
+            });
+            owWeatherPanelRect = { x: fx2, y: fy2, w: fw2, h: fh2 };
+        } else {
+            owWeatherPanelRect = null;
+        }
         // Tournament countdown chip when tee-off is under 3 game-hours out
         if (!window.__tourney && worldCourse.holes.length) {
             const mod = Math.floor((resort.worldClock || 0) % 1440);
             const until = (720 - mod + 1440) % 1440;
             if (until > 0 && until <= 180) {
+                ctx.font = 'bold 11px -apple-system,sans-serif';
                 const tTxt = '\u{1F3C6} tee-off in '
                     + (until >= 90 ? Math.round(until / 60) + 'h' : until + 'm');
                 const tw2 = ctx.measureText(tTxt).width + 24;
-                const tx2 = wx - tw2 - 8;
-                glossyRect(tx2, L.topBarH + 8, tw2, 30, 15, '#8a6d1d');
+                const tx2 = W() - L.pad - (30 * 3 + 6 * 2) - 10 - tw2;
+                glossyRect(tx2, L.topBarH + 42, tw2, 30, 15, '#8a6d1d');
                 ctx.fillStyle = '#fff';
-                ctx.fillText(tTxt, tx2 + tw2 / 2, L.topBarH + 27);
+                ctx.fillText(tTxt, tx2 + tw2 / 2, L.topBarH + 61);
             }
         }
     }
@@ -4742,6 +4789,10 @@ function overworldHUDHit(sx, sy) {
         owBalanceRect.w, owBalanceRect.h)) return 'finances';
     if (owNameRect && hitBtn(sx, sy, owNameRect.x, owNameRect.y,
         owNameRect.w, owNameRect.h)) return 'rename';
+    if (owWeatherRect && hitBtn(sx, sy, owWeatherRect.x, owWeatherRect.y,
+        owWeatherRect.w, owWeatherRect.h)) return 'weather';
+    if (owWeatherOpen && owWeatherPanelRect && hitBtn(sx, sy, owWeatherPanelRect.x,
+        owWeatherPanelRect.y, owWeatherPanelRect.w, owWeatherPanelRect.h)) return 'weather:panel';
     if (owFinancesOpen && owFinancesRect && hitBtn(sx, sy, owFinancesRect.x,
         owFinancesRect.y, owFinancesRect.w, owFinancesRect.h)) return 'finances:panel';
     if (owSpeedRects) {
@@ -4844,6 +4895,9 @@ function overworldTouchStart(sx, sy) {
         }
         return;
     }
+    if (hit === 'weather') { owWeatherOpen = !owWeatherOpen; return; }
+    if (hit === 'weather:panel') return;
+    if (owWeatherOpen) { owWeatherOpen = false; return; }
     if (hit === 'finances') { owFinancesOpen = !owFinancesOpen; return; }
     if (hit === 'finances:panel') return;
     if (owFinancesOpen) { owFinancesOpen = false; return; }
