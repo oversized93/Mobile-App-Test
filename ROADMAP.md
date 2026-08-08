@@ -31,48 +31,63 @@ trailer + dev demo). Update this file when milestones ship or scope decisions ch
 - Structural debt: 4,377-line game.js, ~127 globals, ad-hoc state machine,
   no save versioning, economy gated to the Manage screen, two hole schemas.
 
-## GolfTopia parity run — status (gt1–gt77, autonomous polish loop)
+## GolfTopia parity run — status (gt1–gt163, autonomous polish loop)
 
-Shipped by the looped polish sessions. The visual/ambience layer is far
-ahead of the original milestone plan; economy depth (M2.5) is now the
-biggest remaining gap.
+Shipped by the looped polish sessions, guided mid-run by five user-provided
+GolfTopia reference screenshots (island creator, in-game HUD, golfer
+inspector, night scene, terrain tools). Every major element visible in
+those references is now in the game.
 
-- **Terrain**: painted albedo ground with mow stripes (diagonal), first-cut
-  bands, teal fringe/tee trim, rake-lined recessed bunker bowls, crowned
-  greens, terraced relief, rocky cliff skirt, sandy coastline coves
-- **Atmosphere**: day/night cycle on the resort clock (golden hours, cool
-  nights, sweeping sun shadows), gradient sky (fog bug fixed), night water
-  dimming, path lamps, fireflies, lighthouse beacon
-- **Life**: walking golfer pairs playing every hole (pause-to-swing,
-  celebration hops), wandering visitors who rest at benches/gazebos and
-  stop at kiosks, driving golf cart, hover groundskeeper bots, gulls,
-  butterflies, drifting leaves, pond fountains with splash rings, bobbing
-  buoys, circling sailboat
-- **Signature look**: teal shot arcs with flying balls, pulsing pin rings,
-  floating hole badges, glossy UI, navy hole inspector with stat bars,
-  hole flyover camera, live 3D backdrops behind menu and manage screens
-- **Player agency**: full decor system — 10 placeable props (Meshy-generated
-  clubhouse, arch, kiosk, gazebo, windmill, lighthouse, fountain + Kenney
-  bench/flowers/stall/cart), tap-to-rotate, erase, tap-target rings,
-  build-mode grid overlay; brush sizes 1–11 cover tile-precise editing
-- **Weather + night**: passing rain showers (streaks, dimmed light, wet
-  turf, umbrellas, patter audio, sheltering birds), starfield, lighthouse
-  beacon, moonlit water, night crickets
-- **Audio**: synthesized wind bed, daytime birdsong, night crickets, rain
-  patter, club-strike tocks synced to tee launches (no audio assets)
-- **Economy loop**: decor build costs + half-refund erase, green fees
-  scaled by computed hole difficulty (corridor hazard analysis), floating
-  fee popups, membership growth from holes/decor, crowd size follows
-  membership, lifetime fees on the manage screen
-- **Design feedback (M2 start)**: per-hole difficulty stars in the
-  inspector and a live yards/par/stars/fee readout inside the hole wizard
-- **Sharing**: GTC1 course codes — Share/Load via clipboard on the manage
-  screen, validated on import
-- **Reliability**: veteran-save migration verified, classic Career mode
-  crash fixed (albedo edge chamfers off-grid) and career rounds now tick
-  the full ambient world; ?fps=1 diagnostic readout
-- **Pipeline**: commit-pinned jsDelivr releases, screenshot harness with
-  3-hole demo resort, Meshy text-to-3d pipeline scripts
+- **World look**: painted albedo terrain (mow stripes, first cut, bunker
+  bowls, crowned greens, terraces, cliff skirt), GolfTopia palette (dirt
+  mottling via value noise, mossy greens, ~35% autumn forests), electric
+  teal glowing shorelines, day/night cycle with golden-hour sun glow,
+  crescent moon, starfield, rain system with wet ground
+- **Night dressing**: neon hole-number tee signs, luminous green washes,
+  warm lamp light pools, lighthouse beacon, fireflies
+- **Life**: named golfers (12-name roster) playing real rounds with
+  per-shot strokes, foursomes at 30+ members, spectator galleries during
+  tournaments, real low-poly golfer character (Meshy, instanced), smooth
+  turning, greeting hop on inspect, swing glints, celebration/freakout
+  animations; visitors, cart (with courtesy honk), gulls over beaches,
+  dragonflies over ponds, butterflies, leaves, buoys, sailboat
+- **Golfer sim**: per-golfer skills (name-hash; Putter/Recovery/Driver
+  genuinely shape scoring), needs (hunger/thirst) driving kiosk/stall
+  purchases with emoji sale popups, moods with timestamped thought logs,
+  freakouts (cost a member), membership tiers (Basic/Silver/Gold fee
+  multipliers), record rivalries, rare par-3 holes-in-one
+- **Competition**: daily noon–3PM tournament (par-relative leaderboard,
+  rotating top-3 banner, rating-scaled purse, champions history + hall of
+  fame in roster), per-hole play records (avg, % under par, course record
+  + holder badges), score callouts (ACE/Eagle/Birdie/Par/Bogey)
+- **Economy**: green fees by computed difficulty, stall sales, daily
+  ledger with midnight upkeep (per-hole + decor %), Finances panel
+  (today/yesterday/lifetime), balanced income curves (sim-verified),
+  membership milestones, resort anniversaries, star rating (0–5 with
+  next-star hint) feeding tournament purses
+- **Player agency**: Create Your Island procedural generator (sliders,
+  seed, fact sheet, starting-property picker) as the new-game flow, Buy
+  Property parcels (dashed lines, escalating prices, shortfall hints),
+  drag-to-move decor with placed-count badges, drag-to-aim tee/pin with
+  live yardage, hole + resort renaming, double-tap flyovers, weather
+  forecast panel, tournament countdown, speed controls (pause/1x/4x)
+- **Audio** (all synthesized): wind, birdsong, crickets, frogs at pond
+  nights, gull cries, rain patter, strike tocks, purchase chime,
+  tournament fanfare, cart honk
+- **Reliability**: quota-hardened saves, GPU leak-free terrain rebuilds
+  (traverse dispose + per-build texture registry), veteran-save migration
+  (all parcels granted), regression matrix harness (all screens × two
+  viewports) kept green at checkpoints, design-only share codes
+- **Pipeline**: commit-pinned jsDelivr releases, screenshot harness fleet,
+  Meshy text-to-3d scripts (9 props + golfer + grandstand shipped)
+
+### Open thread: Mixamo skinned animations
+`assets/meshy/golfer_for_mixamo.obj` is committed for Mixamo auto-rigging.
+When FBX clips (Idle, Walking, Golf Drive, Golf Putt + celebration;
+FBX Binary, With Skin, 30fps) land in `assets/mixamo/`, convert via the
+scratchpad fbx2gltf toolchain and replace the instanced static golfer with
+per-character skinned meshes + AnimationMixer states (fallback to static
+instancing on low-end devices).
 
 ## Milestones
 
