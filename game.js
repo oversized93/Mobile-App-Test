@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt164';
+const BUILD_TAG = 'gt165';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -953,6 +953,15 @@ function tickWorld(dt) {
                     || (window.__tourney.board[ho.name] = { n: 0, rel: 0 });
                 tb.n++;
                 tb.rel += ho.score - ho.par;
+            }
+            // Lifetime careers: rounds played and best score, per name,
+            // persisted with the course
+            if (ho.name) {
+                worldCourse.golferCareers = worldCourse.golferCareers || {};
+                const car = worldCourse.golferCareers[ho.name]
+                    || (worldCourse.golferCareers[ho.name] = { rounds: 0, best: null });
+                car.rounds++;
+                if (car.best == null || ho.score < car.best) car.best = ho.score;
             }
         }
         window.__holeOuts = [];
@@ -4376,8 +4385,13 @@ function drawGolferPanel(s) {
         : s.pause > 0 && s.ptIdx >= s.route.length - 1 ? 'Celebrating'
         : s.pause > 0 ? 'Hitting' : 'Walking to ball';
     row('Hole ' + s.holeId + '  •  Stroke ' + ((s.strokes || 0) + 1), task);
-    row('Rounds today: ' + (s.rounds || 0),
-        s.lastRound ? 'Last round: ' + s.lastRound : 'First round');
+    {
+        const car = (worldCourse.golferCareers || {})[s.name];
+        row('Rounds today: ' + (s.rounds || 0)
+            + (s.lastRound ? '  (last ' + s.lastRound + ')' : ''),
+            car ? 'Career: ' + car.rounds + ' rds \u2022 best ' + car.best
+                : 'First round');
+    }
     const tierName = s.tier === 'gold' ? 'Gold ★★' : s.tier === 'silver' ? 'Silver ★' : 'Basic';
     row('Membership: ' + tierName, 'Freakouts: ' + (s.freakouts || 0));
     {
