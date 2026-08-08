@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt94';
+const BUILD_TAG = 'gt95';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3347,7 +3347,7 @@ function undoLastStroke() {
 // Hole inspector card geometry (shared by draw + hit-test)
 // ---- Golfer inspector (reference-style right panel) ----
 function golferPanelLayout() {
-    const w = 232, h = 296;
+    const w = 232, h = 312;
     return { x: W() - w - 10, y: 58, w, h };
 }
 
@@ -3392,6 +3392,8 @@ function drawGolferPanel(s) {
     row('Hole ' + s.holeId + '  •  Stroke ' + ((s.strokes || 0) + 1), task);
     row('Rounds today: ' + (s.rounds || 0),
         s.lastRound ? 'Last round: ' + s.lastRound : 'First round');
+    const tierName = s.tier === 'gold' ? 'Gold ★★' : s.tier === 'silver' ? 'Silver ★' : 'Basic';
+    row('Membership: ' + tierName, 'Freakouts: ' + (s.freakouts || 0));
     y += 4;
     // Skill bars, levels 0-5
     for (const [label, lvl] of golferSkills(s.name)) {

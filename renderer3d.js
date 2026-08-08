@@ -2282,7 +2282,8 @@ function setupAmbientNPCs(hole) {
             name: GOLFER_NAMES[gnIdx++ % GOLFER_NAMES.length],
             holeId: rg.holeId, strokes: 0, lastRound: null, par: rg.par,
             diff: rg.diff,
-            hunger: 8 + (gnIdx * 11) % 25, thirst: 6 + (gnIdx * 17) % 25
+            hunger: 8 + (gnIdx * 11) % 25, thirst: 6 + (gnIdx * 17) % 25,
+            tier: ['basic', 'silver', 'gold'][(rg.holeId * 7 + rg.off * 3 + gnIdx) % 3]
         });
     }
     for (let i = 0; i < total; i++) {
@@ -2344,6 +2345,19 @@ function golferThink(s, text, v) {
     let m = 50;
     for (const th of s.thoughts) m += th.v * 0.8;
     s.mood = Math.max(5, Math.min(95, Math.round(m)));
+    // Too many bad breaks in a row: a full tantrum on the spot. Venting
+    // clears the head — mood recovers afterwards, but it's on the record.
+    if (s.mood <= 25 && !(s.freakout > 0) && s.name) {
+        s.freakout = 3;
+        s.freakouts = (s.freakouts || 0) + 1;
+        s.thoughts.unshift({ t: 'FREAKOUT! Lost my cool out there', v: 0 });
+        if (s.thoughts.length > 6) s.thoughts.pop();
+        s.mood = 45;
+        (window.__scorePopups = window.__scorePopups || []).push({
+            x: s.x, z: s.z, t0: performance.now(),
+            txt: '\u{1F4A2} FREAKOUT!', col: '#ff5040', name: s.name, stack: 0
+        });
+    }
 }
 
 // Called from the game loop each frame while the overworld is visible
@@ -2429,10 +2443,13 @@ function updateAmbientNPCs3D(dt, hole) {
                     // Trickier greens lip out more first putts
                     if (Math.random() < 0.13 + 0.05 * (s.diff || 2)) s.lastRound++;
                     s.strokes = 0;
-                    window.__golfFees = (window.__golfFees || 0) + (s.fee || 5);
+                    const tierMult = s.tier === 'gold' ? 2
+                        : s.tier === 'silver' ? 1.5 : 1;
+                    const paid = Math.round((s.fee || 5) * tierMult);
+                    window.__golfFees = (window.__golfFees || 0) + paid;
                     const pinPt = s.route[s.route.length - 1];
                     (window.__feePopups = window.__feePopups || []).push({
-                        x: pinPt.x, z: pinPt.z, t0: performance.now(), amt: s.fee || 5
+                        x: pinPt.x, z: pinPt.z, t0: performance.now(), amt: paid
                     });
                     // Score callout vs par — the little dopamine hit that
                     // makes the ambient sim feel like real rounds
@@ -2580,6 +2597,11 @@ function updateAmbientNPCs3D(dt, hole) {
         // Holed out: celebratory hops at the pin before the walk back
         if (s.route && s.pause > 0 && s.ptIdx === s.route.length - 1) {
             bob = Math.abs(Math.sin(t * 8 + s.phase)) * 4;
+        }
+        // Mid-tantrum: furious stomping hops, twice the celebration rate
+        if (s.freakout > 0) {
+            s.freakout -= dt;
+            bob = Math.abs(Math.sin(t * 14 + s.phase)) * 6;
         }
         const yaw = s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
                            : Math.atan2(s.tx - s.x, s.tz - s.z);
