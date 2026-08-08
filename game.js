@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt125';
+const BUILD_TAG = 'gt126';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -899,8 +899,23 @@ function tickWorld(dt) {
             st.sum += ho.score;
             if (ho.score < ho.par) st.sub++; // rounds under par
             if (ho.name && (st.best == null || ho.score < st.best)) {
+                const hadRecord = st.best != null && st.n >= 5;
                 st.best = ho.score;   // course record for this hole
                 st.bestBy = ho.name;
+                // A standing record falling is an event worth celebrating
+                if (hadRecord) {
+                    const rec = worldCourse.holes.find(h => h.id === ho.holeId);
+                    notify('\u{1F3C5} COURSE RECORD! ' + ho.name + ' shoots '
+                        + ho.score + ' on ' + ((rec && rec.name) || ('Hole ' + ho.holeId)));
+                    if (typeof playFanfare === 'function') playFanfare();
+                    if (rec) {
+                        (window.__scorePopups = window.__scorePopups || []).push({
+                            x: (rec.pin.x + 0.5) * CELL, z: (rec.pin.y + 0.5) * CELL,
+                            t0: performance.now(), txt: '\u{1F3C5} RECORD!',
+                            col: '#ffd24a', name: ho.name, stack: 1
+                        });
+                    }
+                }
             }
             if (window.__tourney && ho.name) {
                 const tb = window.__tourney.board[ho.name]
