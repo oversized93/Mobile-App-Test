@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt132';
+const BUILD_TAG = 'gt133';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3386,8 +3386,8 @@ function drawOverworld() {
     // ---- Property lines: dashed parcel grid while any build tool is
     // armed; unowned sections carry a lock and price at their center ----
     const buildingNow = (owTool && owTool !== 'hand') || holeWizard;
-    if (buildingNow) {
-        ensureParcels();
+    if (buildingNow
+        && ensureParcels().owned.length < PARCEL_COLS * PARCEL_ROWS) {
         ctx.strokeStyle = 'rgba(255,255,255,0.45)';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([7, 7]);
@@ -3607,7 +3607,7 @@ function drawOverworld() {
         ensureLedger();
         const led = resort.ledger;
         const up = dailyUpkeep();
-        const fw = 250, fh = 128;
+        const fw = 250, fh = 146;
         const fx = (W() - fw) / 2, fy = L.topBarH + 8;
         ctx.fillStyle = 'rgba(12,24,32,0.94)';
         roundRect(fx, fy, fw, fh, 12); ctx.fill();
@@ -3634,6 +3634,8 @@ function drawOverworld() {
         line("Yesterday's expenses", '-$' + Math.round(led.prevExpenses), '#e77d6a', fy + 92);
         line('Upkeep/day', '$' + up.total + '  (' + worldCourse.holes.length
             + ' holes + decor)', 'rgba(255,255,255,0.8)', fy + 112);
+        line('Lifetime', 'fees $' + (resort.feesEarned || 0) + ' \u2022 stalls $'
+            + (resort.stallSales || 0), 'rgba(255,255,255,0.8)', fy + 130);
         owFinancesRect = { x: fx, y: fy, w: fw, h: fh };
     }
 
