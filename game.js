@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt153';
+const BUILD_TAG = 'gt154';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6835,8 +6835,18 @@ function roundDoneTouchStart(sx, sy) {
 
 // ---- Quit button in gameplay ----
 function checkPlayingUI(sx, sy) {
-    // Quit button
+    // Quit button — mid-hole quits ask once (double-tap to confirm) so a
+    // stray tap can't throw away a round in progress
     if (hitBtn(sx, sy, W() - 58, 62, 50, 30)) {
+        if (strokes > 0 && !holeComplete) {
+            const now = performance.now();
+            if (!window.__quitArm || now - window.__quitArm > 2500) {
+                window.__quitArm = now;
+                notify('Quit mid-hole? Tap again to confirm');
+                return true;
+            }
+        }
+        window.__quitArm = null;
         if (worldPlaytest) { endWorldPlaytest(); }
         else if (customCoursePlay) { setState('builder'); }
         else { setState('menu'); }
