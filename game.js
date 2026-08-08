@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt163';
+const BUILD_TAG = 'gt164';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -986,6 +986,26 @@ function tickWorld(dt) {
             notify('\u{1F3C6} ' + name + ' wins the tournament (' + relTxt
                 + ' avg)! Gallery spends $' + purse);
             if (typeof playFanfare === 'function') playFanfare();
+            // The champion celebrates on the spot — hop, glow, and a
+            // proud thought for the record
+            if (typeof npcStates !== 'undefined') {
+                const champ = npcStates.find(n => n.name === name);
+                if (champ) {
+                    champ.greet = 3;
+                    if (typeof golferThink === 'function') {
+                        golferThink(champ, "I'm the champion!", 18);
+                    }
+                    if (typeof spawnSwingFlash3D === 'function') {
+                        const gy = 14;
+                        spawnSwingFlash3D(champ.x, gy, champ.z);
+                    }
+                    (window.__scorePopups = window.__scorePopups || []).push({
+                        x: champ.x, z: champ.z, t0: performance.now(),
+                        txt: '\u{1F3C6} CHAMPION!', col: '#ffd24a',
+                        name: name, stack: 0
+                    });
+                }
+            }
         }
     }
     // Membership drifts toward what the resort deserves: holes draw
