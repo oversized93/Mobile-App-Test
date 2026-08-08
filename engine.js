@@ -90,7 +90,27 @@ function migrateSave(key, fromV, data) {
 }
 
 function saveData(key, val) {
-    localStorage.setItem('gt_' + key, JSON.stringify({ __v: SAVE_VERSION, data: val }));
+    // Quota-hardened: iOS Safari throws on full storage, which would kill
+    // the game loop's save cadence. Warn once instead of crashing.
+    try {
+        const payload = JSON.stringify({ __v: SAVE_VERSION, data: val });
+        if (payload.length > 400000 && !saveData.__warnedBig) {
+            saveData.__warnedBig = true;
+            if (typeof notify === 'function') {
+                notify('\u26A0\uFE0F Save is getting large ('
+                    + Math.round(payload.length / 1024) + ' KB)');
+            }
+        }
+        localStorage.setItem('gt_' + key, payload);
+        saveData.__failed = false;
+    } catch (e) {
+        if (!saveData.__failed) {
+            saveData.__failed = true;
+            if (typeof notify === 'function') {
+                notify('\u26A0\uFE0F Could not save \u2014 device storage full?');
+            }
+        }
+    }
 }
 
 function loadData(key, def) {
