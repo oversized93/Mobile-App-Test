@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt134';
+const BUILD_TAG = 'gt135';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -503,6 +503,7 @@ function parcelPrice() {
 let owBalanceRect = null;   // balance chip rect (tap -> finances)
 let owFinancesRect = null;  // open finances panel rect
 let owFinancesOpen = false;
+let owMarkerTap = null;    // { id, t } for double-tap flyover detection
 let owNameRect = null;     // resort name rect in the top bar (tap to rename)
 let owDecorDrag = null;    // { i, moved } while repositioning a decor item
 let owBuyRect = null;  // screen rect of the buy chip
@@ -4904,7 +4905,20 @@ function overworldTouchStart(sx, sy) {
             const ps = cellCenterScreen(hole.pin.x, hole.pin.y);
             const near = (pt) => pt && !pt.behind
                 && (sx - pt.x) * (sx - pt.x) + (sy - pt.y) * (sy - pt.y) < 22 * 22;
-            if (near(ts) || near(ps)) { owSelectedHole = hole.id; return; }
+            if (near(ts) || near(ps)) {
+                // Double-tap a marker to launch its flyover directly
+                const now = performance.now();
+                if (owMarkerTap && owMarkerTap.id === hole.id
+                    && now - owMarkerTap.t < 450) {
+                    owMarkerTap = null;
+                    owSelectedHole = null;
+                    startHoleFlyover(hole);
+                    return;
+                }
+                owMarkerTap = { id: hole.id, t: now };
+                owSelectedHole = hole.id;
+                return;
+            }
         }
     }
 
