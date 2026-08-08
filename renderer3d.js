@@ -451,7 +451,7 @@ const ASSET_SPECIES = {
     flag:  ['flag-red'],
     prop:  ['bench', 'trash', 'flowers', 'park-entrance', 'stall-food',
             'stall-drinks', 'station-fence', 'bridge_wood', 'bridge_woodRound'],
-    hero:  ['clubhouse', 'golfcart', 'windmill', 'archsign', 'fountainstatue', 'lighthouse', 'kiosk', 'gazebo', 'statue', 'grandstand']
+    hero:  ['clubhouse', 'golfcart', 'windmill', 'archsign', 'fountainstatue', 'lighthouse', 'kiosk', 'gazebo', 'statue', 'grandstand', 'golfer']
 };
 // Non-Kenney asset locations
 const ASSET_PATH_NAME = {
@@ -464,7 +464,8 @@ const ASSET_PATH_NAME = {
     'kiosk': 'assets/meshy/kiosk.glb',
     'gazebo': 'assets/meshy/gazebo.glb',
     'statue': 'assets/meshy/statue.glb',
-    'grandstand': 'assets/meshy/grandstand.glb'
+    'grandstand': 'assets/meshy/grandstand.glb',
+    'golfer': 'assets/meshy/golfer.glb'
 };
 // Per-model height overrides (props vary too much for one species target)
 // Sized to the world's stylized chunky proportions (realistic scale reads
@@ -475,7 +476,8 @@ const ASSET_TARGET_H_NAME = {
     'clubhouse': 148, 'golfcart': 34, 'windmill': 170,
     'bridge_wood': 26, 'bridge_woodRound': 30, 'archsign': 110,
     'fountainstatue': 52, 'lighthouse': 210, 'kiosk': 68, 'gazebo': 84, 'statue': 58,
-    'grandstand': 72
+    'grandstand': 72,
+    'golfer': 34
 };
 // Target world heights per species (CELL = 32; a good tree spans ~2 cells)
 const ASSET_TARGET_H = {
@@ -2167,6 +2169,8 @@ let npcStates = [];
 let npcPathCells = [];
 let npcSocialSpots = [];
 let npcVendorSpots = [];  // kiosks/stalls that sell food & drink
+let npcModelInsts = null;   // instanced GLB golfer parts (capsules hidden)
+let golferModelScale = 1;
 let npcWalkerCount = 0;
 const NPC_COUNT = 10;
 const NPC_COLORS = [0xe5533d, 0x3d7de5, 0xe5b13d, 0x8e44ad,
@@ -2239,6 +2243,25 @@ function setupAmbientNPCs(hole) {
     const headMat = new THREE.MeshStandardMaterial({ color: linC(0xf0c8a0), roughness: 0.85 });
     npcHeadInst = new THREE.InstancedMesh(headGeo, headMat, total);
     npcBodyInst.castShadow = true;
+    // Real golfer model when the Meshy asset is loaded: one InstancedMesh
+    // per material part, all driven by the same per-visitor matrix. The
+    // capsule body/head stay as the physics/anchor but render hidden.
+    npcModelInsts = null;
+    if (worldAssets && worldAssets.golfer) {
+        golferModelScale = worldAssets.golfer.scale;
+        // NOTE: no setColorAt here — r128's VAO cache chokes when a
+        // geometry is shared between colored InstancedMeshes and anything
+        // else; the shared texture already reads well
+        npcModelInsts = worldAssets.golfer.parts.map((part) => {
+            const im = new THREE.InstancedMesh(part.geometry, part.material, total);
+            im.castShadow = true;
+            im.frustumCulled = false;
+            terrainGroup.add(im);
+            return im;
+        });
+        npcBodyInst.visible = false;
+        npcHeadInst.visible = false;
+    }
     // Social rest spots: placed benches and gazebos attract walkers
     npcSocialSpots = [];
     npcVendorSpots = [];
@@ -2615,6 +2638,14 @@ function updateAmbientNPCs3D(dt, hole) {
         dummy.position.y = gy + 18.5 + bob;
         dummy.updateMatrix();
         npcHeadInst.setMatrixAt(i, dummy.matrix);
+        if (npcModelInsts) {
+            dummy.position.set(s.x, gy + bob, s.z);
+            dummy.rotation.set(0, yaw, 0);
+            dummy.scale.set(golferModelScale, golferModelScale, golferModelScale);
+            dummy.updateMatrix();
+            for (const im of npcModelInsts) im.setMatrixAt(i, dummy.matrix);
+            dummy.scale.set(1, 1, 1);
+        }
         if (npcHatInst && i < npcWalkerCount) {
             // Every other walker wears a hat; the rest hide theirs
             if (i % 2 === 0) {
@@ -2667,6 +2698,11 @@ function updateAmbientNPCs3D(dt, hole) {
     }
     npcBodyInst.instanceMatrix.needsUpdate = true;
     npcHeadInst.instanceMatrix.needsUpdate = true;
+    if (npcModelInsts) {
+        for (const im of npcModelInsts) im.instanceMatrix.needsUpdate = true;
+        if (npcHatInst) npcHatInst.visible = false;   // model wears its own cap
+        if (npcClubInst) npcClubInst.visible = false; // model holds its own club
+    }
     if (npcClubInst) npcClubInst.instanceMatrix.needsUpdate = true;
     if (npcUmbrellaInst) npcUmbrellaInst.instanceMatrix.needsUpdate = true;
     if (npcHatInst) npcHatInst.instanceMatrix.needsUpdate = true;
