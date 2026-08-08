@@ -2646,7 +2646,9 @@ function updateAmbientNPCs3D(dt, hole) {
                         window.__golfFees = (window.__golfFees || 0) + price;
                         window.__stallSales = (window.__stallSales || 0) + price;
                         (window.__feePopups = window.__feePopups || []).push({
-                            x: gx, z: gz, t0: performance.now(), amt: price
+                            x: gx, z: gz, t0: performance.now(), amt: price,
+                            tag: wantFood && wantDrink ? '\u{1F32D}\u{1F964}'
+                                : wantFood ? '\u{1F32D}' : '\u{1F964}'
                         });
                         golferThink(s, wantFood && wantDrink
                             ? 'Snack and a drink — recharged!'
