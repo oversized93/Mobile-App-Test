@@ -2288,6 +2288,17 @@ function setupAmbientNPCs(hole) {
     }
 }
 
+// Golfer inner life: push a thought (capped log) and recompute mood.
+// The inspector panel in game.js renders these verbatim.
+function golferThink(s, text, v) {
+    s.thoughts = s.thoughts || [];
+    s.thoughts.unshift({ t: text, v: v });
+    if (s.thoughts.length > 6) s.thoughts.pop();
+    let m = 50;
+    for (const th of s.thoughts) m += th.v * 0.8;
+    s.mood = Math.max(5, Math.min(95, Math.round(m)));
+}
+
 // Called from the game loop each frame while the overworld is visible
 function updateAmbientNPCs3D(dt, hole) {
     updateHoverBots3D(dt, hole);
@@ -2313,6 +2324,11 @@ function updateAmbientNPCs3D(dt, hole) {
         } else if (s.route) {
             // Round-in-progress golfer: walk the hole route, pause to hit,
             // restart at the tee after holing out
+            s.age = (s.age || 0) + dt;
+            if (rainEnvNow > 0.4 && !s.rainMood) {
+                s.rainMood = true;
+                golferThink(s, 'Playing through the rain', -4);
+            } else if (rainEnvNow < 0.1) s.rainMood = false;
             if (s.pause > 0) {
                 s.pause -= dt;
             } else {
@@ -2354,6 +2370,12 @@ function updateAmbientNPCs3D(dt, hole) {
                             holeId: s.holeId, score: s.lastRound, par: s.par,
                             name: s.name || ''
                         });
+                        s.rounds = (s.rounds || 0) + 1;
+                        golferThink(s,
+                            diff <= -1 ? 'What a hole — loved it!'
+                            : diff === 0 ? 'Solid par out there'
+                            : 'That hole beat me up',
+                            diff <= -1 ? 14 : diff === 0 ? 6 : -5);
                     }
                     s.ptIdx = 0;
                     s.x = s.route[0].x;
@@ -2372,7 +2394,13 @@ function updateAmbientNPCs3D(dt, hole) {
                         // scores varied — and harder holes duff more often,
                         // so a hole's play record tracks its star rating
                         const duffP = 0.12 + 0.07 * (s.diff || 2);
-                        if (Math.random() < duffP) { s.strokes++; s.pause += 2; }
+                        if (Math.random() < duffP) {
+                            s.strokes++;
+                            s.pause += 2;
+                            golferThink(s, 'My ball found trouble', -6);
+                        } else if (Math.random() < 0.1) {
+                            golferThink(s, 'I love coming to play golf', 8);
+                        }
                     } else {
                         // Walk toward the next point, but sidestep water:
                         // slide perpendicular along the shore instead of

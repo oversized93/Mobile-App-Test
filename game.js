@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt89';
+const BUILD_TAG = 'gt90';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -181,6 +181,7 @@ function enterOverworld() { setState('overworld'); }
 function stateEnterOverworld() {
     owRosterOpen = false;
     owRosterChip = null;
+    owSelectedGolfer = null;
     if (!worldCourse.heights) refreshWorldHeights();
     if (scene3dReady) {
         buildTerrain3D(worldCourse, { distantScenery: false });
@@ -295,6 +296,7 @@ const OW_TOOL_PARENT = {
 };
 let owRailOpen = false;   // build rail expanded?
 let owRosterOpen = false; // golfer roster panel visible?
+let owSelectedGolfer = null; // name of golfer whose inspector is open
 let owRosterChip = null;  // screen rect of the roster chip (set each draw)
 let owFlyout = null;      // parent id whose sub-options are showing
 let owCategory = 'surface'; // retained for save-compat; no longer drives UI
@@ -3188,6 +3190,31 @@ function drawOverworld() {
         }
     }
 
+    // ---- Golfer inspector panel (right side, like the hole card) ----
+    if (owSelectedGolfer && !holeWizard) {
+        const gs = (scene3dReady && typeof npcStates !== 'undefined')
+            ? npcStates.find(n => n.name === owSelectedGolfer) : null;
+        if (!gs) {
+            owSelectedGolfer = null; // golfer despawned on a rebuild
+        } else {
+            drawGolferPanel(gs);
+            // Selection beam: teal shaft of light over the selected golfer
+            const bp = worldToScreen3D(gs.x, gs.z);
+            if (bp && !bp.behind) {
+                const grad = ctx.createLinearGradient(0, bp.y - 110, 0, bp.y - 6);
+                grad.addColorStop(0, 'rgba(58,219,232,0)');
+                grad.addColorStop(1, 'rgba(58,219,232,0.55)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(bp.x - 5, bp.y - 110, 10, 104);
+                ctx.strokeStyle = 'rgba(58,219,232,0.8)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(bp.x, bp.y, 14, 6, 0, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+    }
+
     // ---- First-run coach overlay — one screen, three lines, one tap ----
     if (owCoachVisible) {
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -3282,6 +3309,122 @@ function undoLastStroke() {
 }
 
 // Hole inspector card geometry (shared by draw + hit-test)
+// ---- Golfer inspector (reference-style right panel) ----
+function golferPanelLayout() {
+    const w = 232, h = 296;
+    return { x: W() - w - 10, y: 58, w, h };
+}
+
+// Skills are innate per golfer — a stable hash of the name keeps them
+// consistent across sessions with zero saved state
+function golferSkills(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return [['Driver', h % 6], ['Irons', (h >>> 3) % 6],
+            ['Putter', (h >>> 6) % 6], ['Recovery', (h >>> 9) % 6]];
+}
+
+function drawGolferPanel(s) {
+    const gp = golferPanelLayout();
+    ctx.fillStyle = 'rgba(16,28,40,0.95)';
+    roundRect(gp.x, gp.y, gp.w, gp.h, 14); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 1.5;
+    roundRect(gp.x, gp.y, gp.w, gp.h, 14); ctx.stroke();
+    glossyRect(gp.x + 3, gp.y + 3, gp.w - 6, 26, 11, '#2e7d32');
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(s.name, gp.x + gp.w / 2, gp.y + 21);
+    const lx = gp.x + 13, rx = gp.x + gp.w - 13;
+    let y = gp.y + 45;
+    const row = (label, val) => {
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = '11px -apple-system,sans-serif';
+        ctx.fillText(label, lx, y);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        ctx.fillText(val, rx, y);
+        y += 16;
+    };
+    const task = s.pause > 0 && s.ptIdx >= s.route.length - 1 ? 'Celebrating'
+        : s.pause > 0 ? 'Hitting' : 'Walking to ball';
+    row('Hole ' + s.holeId + '  •  Stroke ' + ((s.strokes || 0) + 1), task);
+    row('Rounds today: ' + (s.rounds || 0),
+        s.lastRound ? 'Last round: ' + s.lastRound : 'First round');
+    y += 4;
+    // Skill bars, levels 0-5
+    for (const [label, lvl] of golferSkills(s.name)) {
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = '10px -apple-system,sans-serif';
+        ctx.fillText(label + ' skill', lx, y);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px -apple-system,sans-serif';
+        ctx.fillText('Lv ' + lvl, rx, y);
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        roundRect(lx, y + 4, gp.w - 26, 4, 2); ctx.fill();
+        ctx.fillStyle = '#42a5f5';
+        if (lvl) { roundRect(lx, y + 4, (gp.w - 26) * lvl / 5, 4, 2); ctx.fill(); }
+        y += 15;
+    }
+    y += 4;
+    // Needs drift up with time on the course (2x2 mini grid)
+    const age = s.age || 0;
+    const needs = [
+        ['Hunger', Math.min(90, Math.round(5 + age * 0.5))],
+        ['Thirst', Math.min(90, Math.round(4 + age * 0.7))],
+        ['Fatigue', Math.min(90, Math.round(3 + age * 0.4))],
+        ['Boredom', Math.min(60, Math.round(age * 0.15))]
+    ];
+    for (let n = 0; n < needs.length; n += 2) {
+        for (let c = 0; c < 2; c++) {
+            const [label, pct] = needs[n + c];
+            const nx = lx + c * ((gp.w - 26) / 2 + 4);
+            ctx.textAlign = 'left';
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.font = '10px -apple-system,sans-serif';
+            ctx.fillText(label + ' ' + pct + '%', nx, y);
+            ctx.fillStyle = 'rgba(255,255,255,0.12)';
+            roundRect(nx, y + 4, (gp.w - 26) / 2 - 8, 4, 2); ctx.fill();
+            ctx.fillStyle = pct > 60 ? '#ef5350' : pct > 35 ? '#f0a860' : '#66bb6a';
+            roundRect(nx, y + 4, ((gp.w - 26) / 2 - 8) * pct / 100, 4, 2); ctx.fill();
+        }
+        y += 17;
+    }
+    // Mood bar
+    const mood = s.mood != null ? s.mood : 50;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = 'bold 10px -apple-system,sans-serif';
+    ctx.fillText('Mood: ' + mood, lx, y);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    roundRect(lx + 62, y - 6, gp.w - 26 - 62, 7, 3.5); ctx.fill();
+    ctx.fillStyle = mood < 35 ? '#ef5350' : mood < 60 ? '#d4c236' : '#66bb6a';
+    roundRect(lx + 62, y - 6, (gp.w - 26 - 62) * mood / 100, 7, 3.5); ctx.fill();
+    y += 12;
+    // Thought log — the reference sim's signature storytelling
+    const thoughts = (s.thoughts || []).slice(0, 4);
+    if (!thoughts.length) {
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.font = '10px -apple-system,sans-serif';
+        ctx.fillText('No thoughts yet — just teed off', lx, y + 10);
+    }
+    for (const th of thoughts) {
+        ctx.fillStyle = th.v >= 0 ? 'rgba(60,140,70,0.45)' : 'rgba(150,50,45,0.45)';
+        roundRect(lx, y, gp.w - 26, 15, 5); ctx.fill();
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#fff';
+        ctx.font = '9px -apple-system,sans-serif';
+        ctx.fillText((th.v >= 0 ? '😊 ' : '😠 ') + th.t + ': '
+            + (th.v >= 0 ? '+' : '') + th.v, lx + 6, y + 11);
+        y += 18;
+    }
+}
+
 function holeCardLayout() {
     const w = 216, h = 278;
     const x = W() - w - 10, y = 58;
@@ -3778,6 +3921,14 @@ function overworldTouchStart(sx, sy) {
         return;
     }
 
+    // ---- Golfer inspector (open) — taps inside are absorbed; outside
+    // closes it but still falls through (so tapping another golfer works) ----
+    if (owSelectedGolfer && !holeWizard) {
+        const gp = golferPanelLayout();
+        if (hitBtn(sx, sy, gp.x, gp.y, gp.w, gp.h)) return;
+        owSelectedGolfer = null;
+    }
+
     // ---- Hole inspector card (open) — taps inside it are handled/absorbed,
     // taps outside close it and fall through to normal handling ----
     if (owSelectedHole != null && !holeWizard) {
@@ -3803,17 +3954,10 @@ function overworldTouchStart(sx, sy) {
         owSelectedHole = null;
     }
 
-    // ---- Tap a hole marker (navigation mode) to inspect it ----
+    // ---- Tap a golfer (navigation mode) — checked before hole markers so
+    // a golfer standing on the tee is still selectable. Only route golfers
+    // carry a name; ambient walkers are anonymous.
     if (!holeWizard && owTool === 'hand') {
-        for (const hole of worldCourse.holes) {
-            const ts = cellCenterScreen(hole.tee.x, hole.tee.y);
-            const ps = cellCenterScreen(hole.pin.x, hole.pin.y);
-            const near = (pt) => pt && !pt.behind
-                && (sx - pt.x) * (sx - pt.x) + (sy - pt.y) * (sy - pt.y) < 22 * 22;
-            if (near(ts) || near(ps)) { owSelectedHole = hole.id; return; }
-        }
-        // ---- Tap a golfer to see who they are and how their round is going.
-        // Only route golfers carry a name; ambient walkers are anonymous.
         if (scene3dReady && typeof npcStates !== 'undefined'
             && typeof worldToScreen3D === 'function') {
             let best = null, bd = 26 * 26;
@@ -3825,14 +3969,18 @@ function overworldTouchStart(sx, sy) {
                 if (dd < bd) { bd = dd; best = s; }
             }
             if (best) {
-                let msg = '⛳ ' + best.name + ' — hole ' + best.holeId
-                    + ', ' + (best.strokes ? best.strokes + ' stroke'
-                        + (best.strokes > 1 ? 's' : '') + ' so far'
-                        : 'teeing off');
-                if (best.lastRound) msg += ' · last round: ' + best.lastRound;
-                notify(msg);
+                owSelectedGolfer = best.name;
+                owSelectedHole = null;
                 return;
             }
+        }
+        // ---- Tap a hole marker to inspect it ----
+        for (const hole of worldCourse.holes) {
+            const ts = cellCenterScreen(hole.tee.x, hole.tee.y);
+            const ps = cellCenterScreen(hole.pin.x, hole.pin.y);
+            const near = (pt) => pt && !pt.behind
+                && (sx - pt.x) * (sx - pt.x) + (sy - pt.y) * (sy - pt.y) < 22 * 22;
+            if (near(ts) || near(ps)) { owSelectedHole = hole.id; return; }
         }
     }
 
