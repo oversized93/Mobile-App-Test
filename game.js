@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt123';
+const BUILD_TAG = 'gt124';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4674,6 +4674,7 @@ function overworldTouchStart(sx, sy) {
                     owSelectedGolfer = rr.name;
                     owRosterOpen = false;
                     owSelectedHole = null;
+                    window.__greetGolfer = rr.name;
                     return;
                 }
             }
@@ -4813,6 +4814,7 @@ function overworldTouchStart(sx, sy) {
             if (best) {
                 owSelectedGolfer = best.name;
                 owSelectedHole = null;
+                window.__greetGolfer = best.name;
                 return;
             }
         }

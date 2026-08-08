@@ -2531,6 +2531,12 @@ function updateSplashes3D() {
 // Called from the game loop each frame while the overworld is visible
 function updateAmbientNPCs3D(dt, hole) {
     updateSplashes3D();
+    // A freshly inspected golfer greets the camera (set by the game UI)
+    if (window.__greetGolfer && npcStates.length) {
+        const g = npcStates.find(n => n.name === window.__greetGolfer);
+        if (g) g.greet = 1.3;
+        window.__greetGolfer = null;
+    }
     updateHoverBots3D(dt, hole);
     updateFountains3D();
     updatePinRings3D();
@@ -2771,6 +2777,15 @@ function updateAmbientNPCs3D(dt, hole) {
         if (s.freakout > 0) {
             s.freakout -= dt;
             bob = Math.abs(Math.sin(t * 14 + s.phase)) * 6;
+        }
+        // Greeting: quick double-hop facing the camera when inspected
+        if (s.greet > 0) {
+            s.greet -= dt;
+            bob = Math.abs(Math.sin(t * 10 + s.phase)) * 3.5;
+            if (typeof camera3d !== 'undefined' && camera3d) {
+                s.dispYaw = Math.atan2(camera3d.position.x - s.x,
+                                       camera3d.position.z - s.z);
+            }
         }
         // Smoothed heading: lerp toward the walk direction (with wrap)
         // so waypoint turns read as turns, not teleport snaps
