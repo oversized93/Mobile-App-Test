@@ -2555,6 +2555,43 @@ function updateTrailPuffs3D() {
     }
 }
 
+// ---- Swing flash: a quick white glint when an ambient golfer strikes ----
+let swingFlashes = [];
+function spawnSwingFlash3D(wx, wy, wz) {
+    if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
+    const mat = new THREE.SpriteMaterial({
+        map: trailPuffTex, color: 0xffffff, transparent: true, opacity: 1,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    mat.toneMapped = false;
+    const spr = new THREE.Sprite(mat);
+    spr.position.set(wx, wy, wz);
+    spr.scale.set(4, 4, 1);
+    scene3d.add(spr);
+    swingFlashes.push({ spr, mat, t0: performance.now() });
+    if (swingFlashes.length > 24) {
+        const old2 = swingFlashes.shift();
+        scene3d.remove(old2.spr);
+        old2.mat.dispose();
+    }
+}
+function updateSwingFlashes3D() {
+    const now = performance.now();
+    for (let i = swingFlashes.length - 1; i >= 0; i--) {
+        const f = swingFlashes[i];
+        const k = (now - f.t0) / 350;
+        if (k >= 1) {
+            scene3d.remove(f.spr);
+            f.mat.dispose();
+            swingFlashes.splice(i, 1);
+            continue;
+        }
+        f.mat.opacity = 1 - k;
+        const sc = 4 + k * 9;
+        f.spr.scale.set(sc, sc, 1);
+    }
+}
+
 // ---- Ball water splash: expanding foam ring at the entry point ----
 let ballSplashes = [];
 function spawnSplash3D(wx, wz) {
@@ -2594,6 +2631,7 @@ function updateSplashes3D() {
 function updateAmbientNPCs3D(dt, hole) {
     updateSplashes3D();
     updateTrailPuffs3D();
+    updateSwingFlashes3D();
     // A freshly inspected golfer greets the camera (set by the game UI)
     if (window.__greetGolfer && npcStates.length) {
         const g = npcStates.find(n => n.name === window.__greetGolfer);
@@ -2675,6 +2713,14 @@ function updateAmbientNPCs3D(dt, hole) {
             } else if (rainEnvNow < 0.1) s.rainMood = false;
             if (s.pause > 0) {
                 s.pause -= dt;
+                if (s.pause <= 0 && s.name && s.ptIdx < s.route.length - 1) {
+                    // Strike! A quick club glint at hand height
+                    const gr = Math.floor(s.z / CELL), gc = Math.floor(s.x / CELL);
+                    const gy2 = (hole.heights && hole.heights[gr])
+                        ? (hole.heights[gr][gc] || 0) : 0;
+                    if (!trailPuffTex) spawnTrailPuff3D(-9999, -9999, -9999); // build tex
+                    spawnSwingFlash3D(s.x + 3, gy2 + 14, s.z);
+                }
             } else {
                 const nxt = s.route[s.ptIdx + 1];
                 if (!nxt) {
