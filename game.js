@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt143';
+const BUILD_TAG = 'gt144';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4252,12 +4252,16 @@ function drawGolferPanel(s) {
         }
     }
     y += 4;
-    // Skill bars, levels 0-5
-    for (const [label, lvl] of golferSkills(s.name)) {
+    // Skill bars, levels 0-5; the signature (highest) skill gets a star
+    const skills = golferSkills(s.name);
+    const bestLvl = Math.max(...skills.map(p => p[1]));
+    for (const [label, lvl] of skills) {
+        const signature = lvl === bestLvl && bestLvl > 0;
         ctx.textAlign = 'left';
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.font = '10px -apple-system,sans-serif';
-        ctx.fillText(label + ' skill', lx, y);
+        ctx.fillStyle = signature ? 'rgba(255,220,120,0.9)' : 'rgba(255,255,255,0.55)';
+        ctx.font = signature ? 'bold 10px -apple-system,sans-serif'
+                             : '10px -apple-system,sans-serif';
+        ctx.fillText(label + ' skill' + (signature ? ' \u2B50' : ''), lx, y);
         ctx.textAlign = 'right';
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 10px -apple-system,sans-serif';
