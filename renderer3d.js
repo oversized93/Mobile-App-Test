@@ -2493,6 +2493,60 @@ function golferThink(s, text, v) {
     }
 }
 
+// ---- Glowing shot trail: golden puffs shed by the ball in flight ----
+let trailPuffs = [];
+let trailPuffTex = null;
+let trailLastX = 0, trailLastY = 0, trailLastZ = 0;
+function spawnTrailPuff3D(wx, wy, wz) {
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    const dx = wx - trailLastX, dy = wy - trailLastY, dz = wz - trailLastZ;
+    if (dx * dx + dy * dy + dz * dz < 64) return; // throttle by distance
+    trailLastX = wx; trailLastY = wy; trailLastZ = wz;
+    if (!trailPuffTex) {
+        const c = document.createElement('canvas');
+        c.width = c.height = 32;
+        const g = c.getContext('2d');
+        const grad = g.createRadialGradient(16, 16, 2, 16, 16, 15);
+        grad.addColorStop(0, 'rgba(255,235,150,0.9)');
+        grad.addColorStop(0.5, 'rgba(255,205,90,0.4)');
+        grad.addColorStop(1, 'rgba(255,190,60,0)');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 32, 32);
+        trailPuffTex = new THREE.CanvasTexture(c);
+    }
+    const mat = new THREE.SpriteMaterial({
+        map: trailPuffTex, transparent: true, opacity: 0.85,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    mat.toneMapped = false;
+    const spr = new THREE.Sprite(mat);
+    spr.position.set(wx, wy, wz);
+    spr.scale.set(7, 7, 1);
+    scene3d.add(spr);
+    trailPuffs.push({ spr, mat, t0: performance.now() });
+    if (trailPuffs.length > 48) {
+        const old2 = trailPuffs.shift();
+        scene3d.remove(old2.spr);
+        old2.mat.dispose();
+    }
+}
+function updateTrailPuffs3D() {
+    const now = performance.now();
+    for (let i = trailPuffs.length - 1; i >= 0; i--) {
+        const p = trailPuffs[i];
+        const k = (now - p.t0) / 800;
+        if (k >= 1) {
+            scene3d.remove(p.spr);
+            p.mat.dispose();
+            trailPuffs.splice(i, 1);
+            continue;
+        }
+        p.mat.opacity = 0.85 * (1 - k);
+        const sc = 7 * (1 - k * 0.5);
+        p.spr.scale.set(sc, sc, 1);
+    }
+}
+
 // ---- Ball water splash: expanding foam ring at the entry point ----
 let ballSplashes = [];
 function spawnSplash3D(wx, wz) {
@@ -2531,6 +2585,7 @@ function updateSplashes3D() {
 // Called from the game loop each frame while the overworld is visible
 function updateAmbientNPCs3D(dt, hole) {
     updateSplashes3D();
+    updateTrailPuffs3D();
     // A freshly inspected golfer greets the camera (set by the game UI)
     if (window.__greetGolfer && npcStates.length) {
         const g = npcStates.find(n => n.name === window.__greetGolfer);

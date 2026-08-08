@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt136';
+const BUILD_TAG = 'gt137';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6819,6 +6819,10 @@ function gameLoop(time) {
         }
         // Update 3D ball position
         updateBall3D(ball.x, ball.y, ball.z, player.ballColor, terrainHeightAt(ball.x, ball.y));
+        // Golden trail while the ball is airborne
+        if (ball.moving && ball.z > 3 && typeof spawnTrailPuff3D === 'function') {
+            spawnTrailPuff3D(ball.x, terrainHeightAt(ball.x, ball.y) + ball.z + 3, ball.y);
+        }
         // Update 3D target
         const onGreenNow = terrainAt(ball.x, ball.y) === T.GREEN;
         updateTarget3D(targetX, targetY, !onGreenNow && !ball.moving && !holeComplete);
