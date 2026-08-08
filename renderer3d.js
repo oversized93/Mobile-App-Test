@@ -3283,6 +3283,7 @@ function updateFireflies3D(hole) {
 let lampHeadMatRef = null;
 let lampPoolMatRef = null;  // warm light pools under lamps (night only)
 let moonSprite = null;      // crescent riding opposite the sun
+let sunGlowSprite = null;   // warm horizon glow at dawn and dusk
 
 function setupPathLamps(hole) {
     lampHeadMatRef = null;
@@ -3477,6 +3478,30 @@ function updateDayNightTint(minutes) {
     if (oceanMatRef) oceanMatRef.color.copy(OCEAN_BASE_COLOR).multiplyScalar(0.35 + 0.65 * dayW);
     // Stars pierce through once the sky is properly dark
     if (starMatRef) starMatRef.opacity = Math.max(0, 1 - dayW * 3) * (1 - rainEnvNow);
+    // Golden-hour horizon glow where the sun sits at dawn/dusk
+    if (!sunGlowSprite && typeof scene3d !== 'undefined' && scene3d) {
+        const sc = document.createElement('canvas');
+        sc.width = sc.height = 128;
+        const sg = sc.getContext('2d');
+        const sgrad = sg.createRadialGradient(64, 64, 4, 64, 64, 62);
+        sgrad.addColorStop(0, 'rgba(255,214,140,0.95)');
+        sgrad.addColorStop(0.4, 'rgba(255,170,80,0.45)');
+        sgrad.addColorStop(1, 'rgba(255,140,60,0)');
+        sg.fillStyle = sgrad;
+        sg.fillRect(0, 0, 128, 128);
+        const stex = new THREE.CanvasTexture(sc);
+        const smat = new THREE.SpriteMaterial({
+            map: stex, transparent: true, opacity: 0, depthWrite: false
+        });
+        smat.toneMapped = false;
+        sunGlowSprite = new THREE.Sprite(smat);
+        sunGlowSprite.scale.set(900, 900, 1);
+        scene3d.add(sunGlowSprite);
+    }
+    if (sunGlowSprite) {
+        sunGlowSprite.material.opacity = Math.min(1, gold) * 0.75 * (1 - rainEnvNow * 0.6);
+        sunGlowSprite.position.set(1920 + Math.sin(az) * 2700, 260, 1280 + Math.cos(az) * 2700);
+    }
     // Moon: a soft crescent riding opposite the sun, fading in at dusk
     if (!moonSprite && typeof scene3d !== 'undefined' && scene3d) {
         const mc = document.createElement('canvas');
