@@ -2403,12 +2403,19 @@ function setupAmbientNPCs(hole) {
         'Iron Ivy', 'Jorge Links', 'Kara Putt', 'Loft Lucas'];
     let gnIdx = 0;
     for (const rg of routeGolfers) {
+        const gname = GOLFER_NAMES[gnIdx % GOLFER_NAMES.length];
+        // Innate skills shape play: strong Recovery duffs less, a silky
+        // Putter lips out fewer first putts (same hash as the inspector)
+        const sk = (typeof golferSkills === 'function') ? golferSkills(gname) : null;
+        gnIdx++;
         npcStates.push({
             x: rg.pts[0].x + rg.off * 6, z: rg.pts[0].z + 4,
             tx: rg.pts[1].x, tz: rg.pts[1].z,
             speed: 14 + rg.off * 3, phase: rg.off * 2.1, idle: false,
             route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5, fee: rg.fee,
-            name: GOLFER_NAMES[gnIdx++ % GOLFER_NAMES.length],
+            name: gname,
+            putterSkill: sk ? sk[2][1] : 2,
+            recoverySkill: sk ? sk[3][1] : 2,
             holeId: rg.holeId, strokes: 0, lastRound: null, par: rg.par,
             diff: rg.diff,
             hunger: 8 + (gnIdx * 11) % 25, thirst: 6 + (gnIdx * 17) % 25,
@@ -2671,7 +2678,8 @@ function updateAmbientNPCs3D(dt, hole) {
                     // Holed out: bank the green fee, then restart at the tee
                     s.lastRound = (s.strokes || 0) + 1; // the holing putt
                     // Trickier greens lip out more first putts
-                    if (Math.random() < 0.13 + 0.05 * (s.diff || 2)) s.lastRound++;
+                    if (Math.random() < Math.max(0.04,
+                        0.13 + 0.05 * (s.diff || 2) - (s.putterSkill || 2) * 0.022)) s.lastRound++;
                     s.strokes = 0;
                     const tierMult = s.tier === 'gold' ? 2
                         : s.tier === 'silver' ? 1.5 : 1;
@@ -2749,7 +2757,8 @@ function updateAmbientNPCs3D(dt, hole) {
                         // Occasional duff: an extra recovery stroke keeps
                         // scores varied — and harder holes duff more often,
                         // so a hole's play record tracks its star rating
-                        const duffP = 0.12 + 0.07 * (s.diff || 2);
+                        const duffP = Math.max(0.05,
+                            0.12 + 0.07 * (s.diff || 2) - (s.recoverySkill || 2) * 0.02);
                         if (Math.random() < duffP) {
                             s.strokes++;
                             s.pause += 2;
