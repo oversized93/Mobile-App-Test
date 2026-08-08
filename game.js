@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt117';
+const BUILD_TAG = 'gt118';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -503,6 +503,7 @@ function parcelPrice() {
 let owBalanceRect = null;   // balance chip rect (tap -> finances)
 let owFinancesRect = null;  // open finances panel rect
 let owFinancesOpen = false;
+let owDecorDrag = null;    // { i, moved } while repositioning a decor item
 let owBuyRect = null;  // screen rect of the buy chip
 let owBuyOffer = null; // { parcel, t0 } — buy chip shown after a blocked tap
 function offerParcel(c, r) {
@@ -4798,9 +4799,10 @@ function overworldTouchStart(sx, sy) {
                 if (dd < nd) { nd = dd; near = i; }
             }
             if (near >= 0) {
-                const d = worldCourse.decor[near];
-                d.rot = ((d.rot || 0) + Math.PI / 4) % (Math.PI * 2);
-                notify('Rotated ↻ tap again for more');
+                // Grab it: drag repositions, a motionless tap rotates (on
+                // release, so dragging never spins the piece)
+                owDecorDrag = { i: near, moved: false };
+                return;
             } else {
                 if (!parcelOwned(cell.c, cell.r)) {
                     offerParcel(cell.c, cell.r);
@@ -4867,6 +4869,18 @@ function overworldTouchStart(sx, sy) {
 }
 
 function overworldTouchMove(sx, sy) {
+    if (owDecorDrag) {
+        const cell = screenToCell(sx, sy);
+        if (cell && parcelOwned(cell.c, cell.r)) {
+            const d = worldCourse.decor[owDecorDrag.i];
+            if (d && (d.x !== cell.c + 0.5 || d.y !== cell.r + 0.5)) {
+                d.x = cell.c + 0.5;
+                d.y = cell.r + 0.5;
+                owDecorDrag.moved = true;
+            }
+        }
+        return;
+    }
     // Wizard waypoint drag
     if (holeWizard && holeWizard.draggingIdx >= 0) {
         const cell = screenToCell(sx, sy);
@@ -4908,6 +4922,21 @@ function overworldTouchMove(sx, sy) {
 }
 
 function overworldTouchEnd() {
+    if (owDecorDrag) {
+        const d = worldCourse.decor[owDecorDrag.i];
+        if (d && owDecorDrag.moved) {
+            if (scene3dReady) buildTerrain3D(worldCourse, { distantScenery: false });
+            saveWorldCourse();
+            notify('Moved ' + d.t);
+        } else if (d) {
+            d.rot = ((d.rot || 0) + Math.PI / 4) % (Math.PI * 2);
+            if (scene3dReady) buildTerrain3D(worldCourse, { distantScenery: false });
+            saveWorldCourse();
+            notify('Rotated \u21BB tap again for more');
+        }
+        owDecorDrag = null;
+        return;
+    }
     // Release any held camera-control button so continuous rotate/tilt stops
     owHeldCamBtn = null;
     cancelOwLongPress();
