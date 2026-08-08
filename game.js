@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt135';
+const BUILD_TAG = 'gt136';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3150,9 +3150,12 @@ function drawIslandCreator() {
         ctx.textAlign = 'left';
         ctx.fillText(label, inX + 9, y + trackH / 2 + 4);
         ctx.textAlign = 'right';
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
-        ctx.font = '11px -apple-system,sans-serif';
-        ctx.fillText(islandLevelWord(v), inX + inW - 9, y + trackH / 2 + 4);
+        ctx.fillStyle = islandDragSlider === key ? '#5ff0ff' : 'rgba(255,255,255,0.85)';
+        ctx.font = islandDragSlider === key
+            ? 'bold 11px -apple-system,sans-serif' : '11px -apple-system,sans-serif';
+        ctx.fillText(islandDragSlider === key
+            ? Math.round(v * 100) + '%' : islandLevelWord(v),
+            inX + inW - 9, y + trackH / 2 + 4);
         islandUIRects.sliders[key] = { x: inX, y: y - 3, w: inW, h: trackH + 6 };
         y += rowH;
     }
