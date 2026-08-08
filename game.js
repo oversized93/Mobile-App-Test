@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt133';
+const BUILD_TAG = 'gt134';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3759,7 +3759,9 @@ function drawOverworld() {
             ctx.fillStyle = 'rgba(255,255,255,0.55)';
             ctx.font = 'bold 11px -apple-system,sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText('ON THE COURSE', px + 14, py + 21);
+            const walkers = (typeof npcWalkerCount !== 'undefined') ? npcWalkerCount : 0;
+            ctx.fillText('ON THE COURSE \u2014 ' + onCourse.length + ' playing'
+                + (walkers ? ' \u2022 ' + walkers + ' visiting' : ''), px + 14, py + 21);
             if (!rows.length) {
                 ctx.fillStyle = 'rgba(255,255,255,0.5)';
                 ctx.font = '12px -apple-system,sans-serif';
