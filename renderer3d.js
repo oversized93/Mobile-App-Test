@@ -3199,9 +3199,11 @@ function updateFireflies3D(hole) {
 // ---- Path lamps: warm globes on posts along the walkways ----
 // The head material brightens at night via updateDayNightTint.
 let lampHeadMatRef = null;
+let lampPoolMatRef = null;  // warm light pools under lamps (night only)
 
 function setupPathLamps(hole) {
     lampHeadMatRef = null;
+    lampPoolMatRef = null;
     const spots = [];
     for (let r = 1; r < hole.rows - 1; r++) {
         for (let c = 1; c < hole.cols - 1; c++) {
@@ -3241,6 +3243,39 @@ function setupPathLamps(hole) {
     }
     terrainGroup.add(poleInst);
     terrainGroup.add(headInst);
+    // Warm light pools on the walkway, faded in after dark
+    const pc = document.createElement('canvas');
+    pc.width = pc.height = 64;
+    const pg = pc.getContext('2d');
+    const pgrad = pg.createRadialGradient(32, 32, 4, 32, 32, 31);
+    pgrad.addColorStop(0, 'rgba(255,214,140,0.65)');
+    pgrad.addColorStop(0.6, 'rgba(255,190,110,0.25)');
+    pgrad.addColorStop(1, 'rgba(255,180,90,0)');
+    pg.fillStyle = pgrad;
+    pg.fillRect(0, 0, 64, 64);
+    const ptex = new THREE.CanvasTexture(pc);
+    perBuildTextures.push(ptex);
+    const pmat = new THREE.MeshBasicMaterial({
+        map: ptex, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    pmat.toneMapped = false;
+    lampPoolMatRef = pmat;
+    const poolGeo = new THREE.PlaneGeometry(CELL * 2.4, CELL * 2.4);
+    poolGeo.rotateX(-Math.PI / 2);
+    const poolInst = new THREE.InstancedMesh(poolGeo, pmat, spots.length);
+    for (let i = 0; i < spots.length; i++) {
+        const sp = spots[i];
+        const ox = ((sp.c * 31 + sp.r) % 2) ? 0.82 : 0.18;
+        const gy = (hole.heights && hole.heights[sp.r]) ? (hole.heights[sp.r][sp.c] || 0) : 0;
+        dummy.position.set((sp.c + ox) * CELL, gy + 0.9, (sp.r + 0.15) * CELL);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        poolInst.setMatrixAt(i, dummy.matrix);
+    }
+    poolInst.renderOrder = 2;
+    terrainGroup.add(poolInst);
 }
 
 // ---- Passing rain showers ----
@@ -3363,6 +3398,7 @@ function updateDayNightTint(minutes) {
     const darkK = Math.max(0, 1 - dayW * 1.6);
     for (const sm of teeSignMats) sm.opacity = 0.55 + 0.45 * darkK;
     for (const gm of greenGlowMats) gm.opacity = darkK * darkK * 0.5;
+    if (lampPoolMatRef) lampPoolMatRef.opacity = darkK * darkK * 0.85;
     // Lamp globes: dull stone by day, warm glow after dark
     if (lampHeadMatRef) {
         const nw = 1 - dayW;
