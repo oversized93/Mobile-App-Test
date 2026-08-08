@@ -1682,6 +1682,8 @@ function buildTerrain3D(hole, opts) {
         // ---- Teal shot-arc trails over each hole (signature reference look) ----
     arcCurves = [];
     pinRings = [];
+    teeSignMats = [];
+    greenGlowMats = [];
     if (hole.holes && hole.holes.length) {
         const arcMat = new THREE.MeshBasicMaterial({
             color: new THREE.Color('#3adbe8'),
@@ -1727,6 +1729,89 @@ function buildTerrain3D(hole, opts) {
             ring.renderOrder = 3;
             terrainGroup.add(ring);
             pinRings.push(ring);
+        }
+        // Neon hole-number signs at every tee (reference night look):
+        // dark rounded panel on a post, teal number, unlit so it pops
+        // after dark when everything else dims
+        for (const rec of hole.holes) {
+            const cnv = document.createElement('canvas');
+            cnv.width = 64; cnv.height = 64;
+            const g = cnv.getContext('2d');
+            g.fillStyle = 'rgba(8,20,26,0.92)';
+            g.beginPath();
+            if (g.roundRect) g.roundRect(4, 4, 56, 56, 14); else g.rect(4, 4, 56, 56);
+            g.fill();
+            g.strokeStyle = '#3adbe8';
+            g.lineWidth = 3;
+            g.beginPath();
+            if (g.roundRect) g.roundRect(4, 4, 56, 56, 14); else g.rect(4, 4, 56, 56);
+            g.stroke();
+            g.fillStyle = '#5ff0ff';
+            g.font = 'bold 40px sans-serif';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText(String(rec.id), 32, 35);
+            const tex = new THREE.CanvasTexture(cnv);
+            const mat = new THREE.MeshBasicMaterial({
+                map: tex, transparent: true, opacity: 0.85,
+                side: THREE.DoubleSide, depthWrite: false
+            });
+            mat.toneMapped = false;
+            const next = (rec.waypoints && rec.waypoints[0]) || rec.pin;
+            const yawS = Math.atan2(next.x - rec.tee.x, next.y - rec.tee.y);
+            const sx2 = (rec.tee.x + 1.8) * CELL, sz2 = (rec.tee.y + 1.4) * CELL;
+            const sy2 = hAt2(rec.tee);
+            const post = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.9, 1.1, 16, 6),
+                new THREE.MeshStandardMaterial({ color: linC(0x4a4038), roughness: 0.9 }));
+            post.position.set(sx2, sy2 + 8, sz2);
+            terrainGroup.add(post);
+            const panel = new THREE.Mesh(new THREE.PlaneGeometry(13, 13), mat);
+            panel.position.set(sx2, sy2 + 20, sz2);
+            panel.rotation.y = yawS + Math.PI;
+            panel.renderOrder = 3;
+            terrainGroup.add(panel);
+            teeSignMats.push(mat);
+        }
+        // Soft luminous wash over each green after dark — additive radial
+        // sprite sized to the green's cell cluster, invisible by day
+        for (const rec of hole.holes) {
+            const cells = [];
+            for (let dr = -10; dr <= 10; dr++) {
+                for (let dc = -10; dc <= 10; dc++) {
+                    const c = rec.pin.x + dc, r = rec.pin.y + dr;
+                    if (hole.grid[r] && hole.grid[r][c] === T.GREEN) cells.push({ c, r });
+                }
+            }
+            if (!cells.length) continue;
+            let mnC = 1e9, mxC = -1e9, mnR = 1e9, mxR = -1e9;
+            for (const cl of cells) {
+                mnC = Math.min(mnC, cl.c); mxC = Math.max(mxC, cl.c);
+                mnR = Math.min(mnR, cl.r); mxR = Math.max(mxR, cl.r);
+            }
+            const gcx = (mnC + mxC) / 2 + 0.5, gcr = (mnR + mxR) / 2 + 0.5;
+            const rad = (Math.max(mxC - mnC, mxR - mnR) / 2 + 2) * CELL;
+            const gcnv = document.createElement('canvas');
+            gcnv.width = 128; gcnv.height = 128;
+            const gg = gcnv.getContext('2d');
+            const grad = gg.createRadialGradient(64, 64, 8, 64, 64, 62);
+            grad.addColorStop(0, 'rgba(120,255,170,0.55)');
+            grad.addColorStop(0.7, 'rgba(80,230,150,0.22)');
+            grad.addColorStop(1, 'rgba(60,210,140,0)');
+            gg.fillStyle = grad;
+            gg.fillRect(0, 0, 128, 128);
+            const gtex = new THREE.CanvasTexture(gcnv);
+            const gmat = new THREE.MeshBasicMaterial({
+                map: gtex, transparent: true, opacity: 0,
+                blending: THREE.AdditiveBlending, depthWrite: false
+            });
+            gmat.toneMapped = false;
+            const glow = new THREE.Mesh(new THREE.PlaneGeometry(rad * 2.2, rad * 2.2), gmat);
+            glow.rotation.x = -Math.PI / 2;
+            glow.position.set(gcx * CELL, hAt2(rec.pin) + 1.4, gcr * CELL);
+            glow.renderOrder = 2;
+            terrainGroup.add(glow);
+            greenGlowMats.push(gmat);
         }
         // Tee marker balls flanking each tee, set perpendicular to the
         // opening leg so they frame the drive line
@@ -3207,6 +3292,10 @@ function updateDayNightTint(minutes) {
     if (oceanMatRef) oceanMatRef.color.copy(OCEAN_BASE_COLOR).multiplyScalar(0.35 + 0.65 * dayW);
     // Stars pierce through once the sky is properly dark
     if (starMatRef) starMatRef.opacity = Math.max(0, 1 - dayW * 3) * (1 - rainEnvNow);
+    // Night course dressing: tee signs brighten, greens glow after dark
+    const darkK = Math.max(0, 1 - dayW * 1.6);
+    for (const sm of teeSignMats) sm.opacity = 0.55 + 0.45 * darkK;
+    for (const gm of greenGlowMats) gm.opacity = darkK * darkK * 0.5;
     // Lamp globes: dull stone by day, warm glow after dark
     if (lampHeadMatRef) {
         const nw = 1 - dayW;
@@ -3538,6 +3627,8 @@ let arcCurves = [];
 let arcBallInst = null;
 let arcEndSand = [];
 let pinRings = [];
+let teeSignMats = [];    // neon hole-number panels (bright at night)
+let greenGlowMats = [];  // additive green-surface glow (night only)
 
 function updatePinRings3D() {
     if (!pinRings.length) return;
