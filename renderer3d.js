@@ -1826,7 +1826,9 @@ function buildTerrain3D(hole, opts) {
         const rockCells = [];
         for (let r = 0; r < hole.rows; r++) {
             for (let c = 0; c < hole.cols; c++) {
-                if (hole.grid[r][c] === T.ROUGH && (c * 53 + r * 97) % 149 === 0) {
+                const rockMod = Math.max(45, Math.round(149
+                    / (0.35 + (hole.rockDensity != null ? hole.rockDensity : 0.5) * 1.6)));
+                if (hole.grid[r][c] === T.ROUGH && (c * 53 + r * 97) % rockMod === 0) {
                     rockCells.push({ c, r });
                 }
             }

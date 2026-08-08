@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt96';
+const BUILD_TAG = 'gt97';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1574,6 +1574,7 @@ function onTouchStart(sx, sy) {
     if (state === 'menu') { menuTouchStart(sx, sy); return; }
     if (state === 'manage') { manageTouchStart(sx, sy); return; }
     if (state === 'overworld') { overworldTouchStart(sx, sy); return; }
+    if (state === 'islandgen') { islandTouchStart(sx, sy); return; }
     if (state === 'character') { charTouchStart(sx, sy); return; }
     if (state === 'career') { careerTouchStart(sx, sy); return; }
     if (state === 'builder') {
@@ -1747,6 +1748,7 @@ function onTouchStart(sx, sy) {
 function onTouchMove(sx, sy) {
     if (state === 'builder' && builderState.painting) { builderPaint(sx, sy); return; }
     if (state === 'overworld') { overworldTouchMove(sx, sy); return; }
+    if (state === 'islandgen') { islandTouchMove(sx, sy); return; }
     if (state === 'playing' && spinAdjusting) {
         const spX = W() - 50, spY = (H() - 100) + 100 / 2 - 4, spR = 26;
         spin.side = Math.max(-1, Math.min(1, (sx - spX) / (spR * 0.8)));
@@ -1828,6 +1830,7 @@ function onTouchMove(sx, sy) {
 function onTouchEnd(sx, sy) {
     if (state === 'builder') { builderState.painting = false; return; }
     if (state === 'overworld') { overworldTouchEnd(); return; }
+    if (state === 'islandgen') { islandTouchEnd(); return; }
     if (state === 'playing' && spinAdjusting) { spinAdjusting = false; return; }
     if (state === 'playing' && scouting) {
         scouting = false;
@@ -2586,7 +2589,12 @@ function drawManage() {
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = 'bold 11px -apple-system,sans-serif';
     ctx.textAlign = 'left';
-    // Share / Load buttons beside the close X
+    // Share / Load buttons beside the close X, New Island to their left
+    glossyRect(L.closeX - 312, L.closeY, 104, L.closeSize, 10, '#2c5c74');
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u{1F3DD} New Island', L.closeX - 260, L.closeY + L.closeSize / 2 + 4);
     glossyRect(L.closeX - 200, L.closeY, 92, L.closeSize, 10, '#00695c');
     glossyRect(L.closeX - 100, L.closeY, 92, L.closeSize, 10, '#37474f');
     ctx.fillStyle = '#fff';
@@ -2755,7 +2763,11 @@ function manageTouchStart(sx, sy) {
         return;
     }
 
-    // Share / Load course codes (buttons left of the close X)
+    // New Island / Share / Load (buttons left of the close X)
+    if (hitBtn(sx, sy, L.closeX - 312, L.closeY, 104, L.closeSize)) {
+        startIslandCreator();
+        return;
+    }
     if (hitBtn(sx, sy, L.closeX - 200, L.closeY, 92, L.closeSize)) {
         exportCourseCode();
         return;
@@ -2810,6 +2822,202 @@ function manageTouchStart(sx, sy) {
 }
 
 // ---- Overworld Screen (Phase 3 — builder with brush tools + hole wizard) ----
+// ---- Create Your Island screen (reference-style island generator) ----
+let islandDraft = null;        // { params, course, confirm } while open
+let islandUIRects = null;      // slider/button rects rebuilt each draw
+let islandDragSlider = null;   // key of the slider being dragged
+
+const ISLAND_DEFAULTS = { water: 0.35, hills: 0.5, trees: 0.6,
+                          rocks: 0.4, roundness: 0.6, grass: 0.7 };
+const ISLAND_SLIDERS = [
+    ['water', 'Water'], ['hills', 'Hills'], ['trees', 'Trees'],
+    ['rocks', 'Rocks'], ['roundness', 'Roundness'], ['grass', 'Grass']
+];
+
+function startIslandCreator() {
+    islandDraft = {
+        params: Object.assign({ seed: 1000 + Math.floor(Math.random() * 9000) },
+                              ISLAND_DEFAULTS),
+        confirm: false
+    };
+    regenIslandDraft();
+    setState('islandgen');
+}
+
+function regenIslandDraft() {
+    islandDraft.confirm = false;
+    islandDraft.course = makeIsland(islandDraft.params);
+    islandDraft.course.heights = generateHeights(islandDraft.course);
+    if (scene3dReady) {
+        buildTerrain3D(islandDraft.course, { distantScenery: false });
+        cam3dOrbitMode = true;
+        if (typeof resetCameraFov === 'function') resetCameraFov();
+        setCameraOrbit(islandDraft.course.cols * CELL / 2,
+                       islandDraft.course.rows * CELL / 2,
+                       2700, Math.PI / 180 * 46, 0.5);
+        if (typeof camera3d !== 'undefined' && camera3d) {
+            camera3d.position.set(cam3dTarget.x, cam3dTarget.y, cam3dTarget.z);
+        }
+    }
+}
+
+function islandLevelWord(v) {
+    return v < 0.2 ? 'Low' : v < 0.45 ? 'Medium' : v < 0.7 ? 'High' : 'Very High';
+}
+
+function drawIslandCreator() {
+    const d = window.devicePixelRatio || 1;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.clearRect(0, 0, W(), H());
+    if (!islandDraft) return;
+    const pw = Math.min(300, Math.floor(W() * 0.44));
+    const px = 12, py = 12, ph = H() - 24;
+    ctx.fillStyle = 'rgba(12,24,32,0.88)';
+    roundRect(px, py, pw, ph, 14); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    roundRect(px, py, pw, ph, 14); ctx.stroke();
+    glossyRect(px + 4, py + 4, pw - 8, 28, 12, '#2c5c74');
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Create Your Island', px + pw / 2, py + 23);
+
+    islandUIRects = { sliders: {}, buttons: {} };
+    const inX = px + 12, inW = pw - 24;
+    let y = py + 42;
+    const rowH = Math.max(26, Math.min(32, Math.floor((ph - 46 - 118) / 7)));
+    for (const [key, label] of ISLAND_SLIDERS) {
+        const v = islandDraft.params[key];
+        const trackH = rowH - 8;
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        roundRect(inX, y, inW, trackH, trackH / 2); ctx.fill();
+        ctx.fillStyle = 'rgba(70,140,190,0.55)';
+        roundRect(inX, y, Math.max(trackH, inW * v), trackH, trackH / 2); ctx.fill();
+        const kx = inX + trackH / 2 + (inW - trackH) * v;
+        ctx.fillStyle = '#dfeefb';
+        ctx.beginPath();
+        ctx.arc(kx, y + trackH / 2, trackH / 2 - 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(label, inX + 9, y + trackH / 2 + 4);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = '11px -apple-system,sans-serif';
+        ctx.fillText(islandLevelWord(v), inX + inW - 9, y + trackH / 2 + 4);
+        islandUIRects.sliders[key] = { x: inX, y: y - 3, w: inW, h: trackH + 6 };
+        y += rowH;
+    }
+    // Seed row — tap to type a custom seed
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    roundRect(inX, y, inW, 22, 11); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = 'bold 10px -apple-system,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('SEED (tap to set)', inX + 9, y + 15);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px -apple-system,sans-serif';
+    ctx.fillText(String(islandDraft.params.seed), inX + inW - 9, y + 15);
+    islandUIRects.buttons.seed = { x: inX, y: y, w: inW, h: 22 };
+    y += 30;
+    // Button grid: 2 x 2
+    const bw = (inW - 8) / 2, bh = 34;
+    const btns = [
+        ['regen', '\u{1F3B2} Regenerate', '#2c5c74'],
+        ['reset', 'Restore Default', '#37474f'],
+        ['back', '\u2190 Back', '#5d4037'],
+        ['create', islandDraft.confirm ? 'Replace resort?!' : '\u2714 Create Island',
+         islandDraft.confirm ? '#c0392b' : '#2e7d32']
+    ];
+    for (let i = 0; i < btns.length; i++) {
+        const bx = inX + (i % 2) * (bw + 8);
+        const by = y + Math.floor(i / 2) * (bh + 8);
+        glossyRect(bx, by, bw, bh, 10, btns[i][2]);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(btns[i][1], bx + bw / 2, by + bh / 2 + 4);
+        islandUIRects.buttons[btns[i][0]] = { x: bx, y: by, w: bw, h: bh };
+    }
+    // Hint under the preview
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Drag sliders, then release to preview \u2022 same seed = same island',
+        px + pw + (W() - px - pw) / 2, H() - 16);
+}
+
+function islandTouchStart(sx, sy) {
+    if (!islandDraft || !islandUIRects) return;
+    for (const key in islandUIRects.sliders) {
+        const r = islandUIRects.sliders[key];
+        if (hitBtn(sx, sy, r.x, r.y, r.w, r.h)) {
+            islandDragSlider = key;
+            islandDraft.params[key] = Math.max(0, Math.min(1, (sx - r.x) / r.w));
+            return;
+        }
+    }
+    const b = islandUIRects.buttons;
+    if (hitBtn(sx, sy, b.seed.x, b.seed.y, b.seed.w, b.seed.h)) {
+        const inp = prompt('Island seed (a number):', String(islandDraft.params.seed));
+        const n = parseInt(inp, 10);
+        if (!isNaN(n)) { islandDraft.params.seed = n; regenIslandDraft(); }
+        return;
+    }
+    if (hitBtn(sx, sy, b.regen.x, b.regen.y, b.regen.w, b.regen.h)) {
+        islandDraft.params.seed = 1000 + Math.floor(Math.random() * 9000);
+        regenIslandDraft();
+        return;
+    }
+    if (hitBtn(sx, sy, b.reset.x, b.reset.y, b.reset.w, b.reset.h)) {
+        Object.assign(islandDraft.params, ISLAND_DEFAULTS);
+        regenIslandDraft();
+        return;
+    }
+    if (hitBtn(sx, sy, b.back.x, b.back.y, b.back.w, b.back.h)) {
+        islandDraft = null;
+        menuOrbitReady = false;
+        setState('manage');
+        return;
+    }
+    if (hitBtn(sx, sy, b.create.x, b.create.y, b.create.w, b.create.h)) {
+        if (!islandDraft.confirm) {
+            islandDraft.confirm = true; // second tap commits
+            return;
+        }
+        // Commit: the draft becomes the resort's world. Holes, decor and
+        // per-hole stats start fresh; money and members carry over.
+        worldCourse = islandDraft.course;
+        islandDraft = null;
+        owUndoStack = [];
+        owSelectedHole = null;
+        owSelectedGolfer = null;
+        saveWorldCourse();
+        menuOrbitReady = false;
+        enterOverworld();
+        notify('\u{1F3DD} Welcome to your new island!');
+        return;
+    }
+    if (islandDraft) islandDraft.confirm = false; // tap elsewhere cancels
+}
+
+function islandTouchMove(sx, sy) {
+    if (!islandDraft || !islandDragSlider || !islandUIRects) return;
+    const r = islandUIRects.sliders[islandDragSlider];
+    islandDraft.params[islandDragSlider] =
+        Math.max(0, Math.min(1, (sx - r.x) / r.w));
+}
+
+function islandTouchEnd() {
+    if (islandDragSlider) {
+        islandDragSlider = null;
+        regenIslandDraft(); // rebuild the preview on release
+    }
+}
+
 function overworldLayout() {
     const pad = 10;
     const topBarH = 44;
@@ -5924,10 +6132,22 @@ function gameLoop(time) {
 
     // 3D rendering for gameplay states, overworld, AND the menu backdrop
     const use3D = scene3dReady && (state === 'playing' || state === 'holeDone'
-        || state === 'overworld' || state === 'menu' || state === 'manage' || state === 'character');
+        || state === 'overworld' || state === 'menu' || state === 'manage'
+        || state === 'character' || state === 'islandgen');
     if (use3D) {
         show3D();
 
+        // Island creator: the draft island slowly orbits under the panel
+        if (state === 'islandgen') {
+            if (ballMesh) ballMesh.visible = false;
+            if (typeof cloudsGroup !== 'undefined' && cloudsGroup) cloudsGroup.visible = false;
+            if (typeof setDistantSceneryVisible === 'function') setDistantSceneryVisible(true);
+            if (typeof setBuildGridVisible === 'function') setBuildGridVisible(false);
+            if (typeof rotateCameraOrbit === 'function') rotateCameraOrbit(0.05 * dt);
+            updateCamera3D(dt);
+            render3D();
+            canvas.style.background = 'transparent';
+        } else
         // Menu/manage backdrop: the live resort slowly orbiting under the UI
         if (state === 'menu' || state === 'manage' || state === 'character') {
             if (!menuOrbitReady) {
@@ -6033,6 +6253,7 @@ function gameLoop(time) {
         case 'menu': drawMenu(); break;
         case 'manage': drawManage(); break;
         case 'overworld': drawOverworld(); break;
+        case 'islandgen': drawIslandCreator(); break;
         case 'character': drawCharacter(); break;
         case 'career': drawCareer(); break;
         case 'builder': builderDraw(); break;
