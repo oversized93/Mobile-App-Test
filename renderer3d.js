@@ -2319,8 +2319,15 @@ function setupAmbientNPCs(hole) {
                 const diff = (typeof holeDifficulty === 'function')
                     ? holeDifficulty(rec) : 2;
                 const fee = 3 + 2 * diff;
-                routeGolfers.push({ pts: pts, off: 0, fee: fee, holeId: rec.id, par: rec.par || 4, diff: diff });
-                routeGolfers.push({ pts: pts, off: 1, fee: fee, holeId: rec.id, par: rec.par || 4, diff: diff });
+                const grp = { pts: pts, fee: fee, holeId: rec.id,
+                              par: rec.par || 4, diff: diff };
+                routeGolfers.push(Object.assign({ off: 0 }, grp));
+                routeGolfers.push(Object.assign({ off: 1 }, grp));
+                // Popular resorts send out foursomes, not just pairs
+                if (typeof resort !== 'undefined' && resort && resort.members >= 30) {
+                    routeGolfers.push(Object.assign({ off: 2 }, grp));
+                    routeGolfers.push(Object.assign({ off: 3 }, grp));
+                }
             }
         }
     }

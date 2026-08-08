@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt110';
+const BUILD_TAG = 'gt111';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -906,6 +906,9 @@ function tickWorld(dt) {
                 winner: name, rel: relTxt, rounds: tb.n, purse: purse,
                 day: Math.floor((resort.worldClock || 0) / 1440) + 1
             };
+            resort.tourneyHistory = resort.tourneyHistory || [];
+            resort.tourneyHistory.unshift(resort.lastTourney);
+            if (resort.tourneyHistory.length > 5) resort.tourneyHistory.pop();
             notify('\u{1F3C6} ' + name + ' wins the tournament (' + relTxt
                 + ' avg)! Gallery spends $' + purse);
             if (typeof playFanfare === 'function') playFanfare();
