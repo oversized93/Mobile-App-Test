@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt103';
+const BUILD_TAG = 'gt104';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3570,7 +3570,8 @@ function drawOverworld() {
             const pw = 258, rowH = 30, headH = 34;
             const footH = resort.lastTourney ? 24 : 0;
             const ph = headH + Math.max(rows.length, 1) * rowH + footH + 10;
-            const px = Math.min(rx0, W() - pw - 8);
+            // Clear of the right-edge camera rail (which draws after us)
+            const px = Math.min(rx0, W() - pw - 54);
             const py = L.undoY + 40;
             ctx.fillStyle = 'rgba(12,22,28,0.92)';
             roundRect(px, py, pw, ph, 12); ctx.fill();
@@ -6379,7 +6380,11 @@ function drawNotification(dt) {
     ctx.textAlign = 'center';
     const tw = ctx.measureText(notification.text).width;
     const pillH = 26;
-    const pillY = 52;
+    // Drop to the bottom edge when a top panel (finances, inspector,
+    // roster) would be covered by the banner
+    const topBusy = state === 'overworld'
+        && (owFinancesOpen || owSelectedGolfer || owRosterOpen);
+    const pillY = topBusy ? H() - 44 : 52;
     glossyRect(W() / 2 - tw / 2 - 14, pillY, tw + 28, pillH, pillH / 2, '#2f7d43');
     ctx.fillStyle = '#fff';
     ctx.fillText(notification.text, W() / 2, pillY + 17);
