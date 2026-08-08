@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt114';
+const BUILD_TAG = 'gt115';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -925,6 +925,21 @@ function tickWorld(dt) {
         resort.__memTick = resort.worldClock;
         if (resort.members < memberTarget) resort.members++;
         else if (resort.members > memberTarget) resort.members--;
+        // Milestone celebrations: fanfare + a golden burst at the gate
+        const MILESTONES = [25, 50, 100, 200, 400];
+        if (MILESTONES.includes(resort.members)
+            && (resort.memMilestone || 0) < resort.members) {
+            resort.memMilestone = resort.members;
+            notify('\u{1F389} ' + resort.members + ' members! The resort is thriving');
+            if (typeof playFanfare === 'function') playFanfare();
+            const ex = (Math.floor(worldCourse.cols / 2) + 0.5) * CELL;
+            const ez = (worldCourse.rows - (worldCourse.border || 4) + 0.5) * CELL;
+            (window.__scorePopups = window.__scorePopups || []).push({
+                x: ex, z: ez, t0: performance.now(),
+                txt: '\u{1F389} ' + resort.members + ' MEMBERS!',
+                col: '#ffd24a', name: 'Welcome to the club', stack: 0
+            });
+        }
     }
     resort.coinsFrac = (resort.coinsFrac || 0) + resort.members * 0.03 * dt;
     if (resort.coinsFrac >= 1) {
