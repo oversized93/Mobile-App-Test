@@ -1238,16 +1238,25 @@ function repaintTerrainCells(hole, cells) {
 // the overworld, where the course IS the world and the backdrop shapes read
 // as floating blobs from a free camera.
 function buildTerrain3D(hole, opts) {
-    // Clear existing terrain
+    // Clear existing terrain. Traverse the whole subtree: props are nested
+    // Groups whose meshes the old shallow loop never disposed, which leaked
+    // ~16 geometries per rebuild. Shared GLB geometries re-upload lazily on
+    // next use, so disposing them here is safe.
     while (terrainGroup.children.length > 0) {
         const child = terrainGroup.children[0];
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-            else child.material.dispose();
-        }
+        child.traverse((node) => {
+            if (node.geometry) node.geometry.dispose();
+            if (node.material) {
+                const mats = Array.isArray(node.material) ? node.material : [node.material];
+                for (const m of mats) m.dispose();
+            }
+        });
         terrainGroup.remove(child);
     }
+    // Canvas textures minted for this build (hole signs, green glows):
+    // material.dispose() never frees textures, so track and free explicitly
+    for (const tex of perBuildTextures) tex.dispose();
+    perBuildTextures = [];
     while (flagGroup.children.length > 0) {
         const child = flagGroup.children[0];
         if (child.geometry) child.geometry.dispose();
@@ -1752,6 +1761,7 @@ function buildTerrain3D(hole, opts) {
             g.textBaseline = 'middle';
             g.fillText(String(rec.id), 32, 35);
             const tex = new THREE.CanvasTexture(cnv);
+            perBuildTextures.push(tex);
             const mat = new THREE.MeshBasicMaterial({
                 map: tex, transparent: true, opacity: 0.85,
                 side: THREE.DoubleSide, depthWrite: false
@@ -1801,6 +1811,7 @@ function buildTerrain3D(hole, opts) {
             gg.fillStyle = grad;
             gg.fillRect(0, 0, 128, 128);
             const gtex = new THREE.CanvasTexture(gcnv);
+            perBuildTextures.push(gtex);
             const gmat = new THREE.MeshBasicMaterial({
                 map: gtex, transparent: true, opacity: 0,
                 blending: THREE.AdditiveBlending, depthWrite: false
@@ -1892,6 +1903,7 @@ function buildTerrain3D(hole, opts) {
             g.textBaseline = 'middle';
             g.fillText(String(rec.id), 64, 68);
             const tex = new THREE.CanvasTexture(cnv);
+            perBuildTextures.push(tex);
             const sprMat = new THREE.SpriteMaterial({
                 map: tex, transparent: true, depthTest: true
             });
@@ -3639,6 +3651,7 @@ let arcCurves = [];
 let arcBallInst = null;
 let arcEndSand = [];
 let pinRings = [];
+let perBuildTextures = []; // canvas textures minted this build (disposed on rebuild)
 let teeSignMats = [];    // neon hole-number panels (bright at night)
 let greenGlowMats = [];  // additive green-surface glow (night only)
 
