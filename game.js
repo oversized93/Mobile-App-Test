@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt118';
+const BUILD_TAG = 'gt119';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -637,6 +637,25 @@ function polylineLengthYards(w) {
 // Design difficulty 1-5, derived from what the route actually crosses:
 // hazard density in a corridor along the polyline, green size, and raw
 // length. Pure grid analysis — no physics fork.
+// Resort star rating: holes + variety + decor + vendors + golfer mood.
+// 0-5 in half-star steps; shown on the Manage screen.
+function computeCourseRating() {
+    let r = Math.min(2.5, worldCourse.holes.length * 0.4);
+    const diffs = new Set(worldCourse.holes.map(h => holeDifficulty(h)));
+    r += Math.min(1, diffs.size * 0.35);
+    const decorVal = (worldCourse.decor || []).reduce(
+        (s, d) => s + (DECOR_COSTS[d.t] || 0), 0);
+    r += Math.min(1, decorVal / 1000);
+    if ((worldCourse.decor || []).some(d => d.t === 'kiosk' || d.t === 'stall')) r += 0.5;
+    if (typeof npcStates !== 'undefined' && npcStates.length) {
+        const moods = npcStates.filter(s => s.mood != null).map(s => s.mood);
+        if (moods.length) {
+            r += Math.min(1, (moods.reduce((a, b) => a + b, 0) / moods.length) / 100);
+        }
+    }
+    return Math.max(0, Math.min(5, Math.round(r * 2) / 2));
+}
+
 function holeDifficulty(rec) {
     if (!rec || !rec.tee || !rec.pin) return 1;
     const pts = [rec.tee, ...(rec.waypoints || []), rec.pin];
@@ -2764,8 +2783,14 @@ function drawManage() {
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.font = '11px -apple-system,sans-serif';
-    ctx.fillText(worldCourse.holes.length + ' holes  •  green fees $' + (resort.feesEarned || 0),
-                 L.contentX + L.contentW - 4, L.amenityLabelY + 14);
+    {
+        const rating = computeCourseRating();
+        const full = Math.floor(rating);
+        const stars = '\u2605'.repeat(full) + (rating % 1 ? '\u00BD' : '')
+            + '\u2606'.repeat(5 - Math.ceil(rating));
+        ctx.fillText(stars + '  •  ' + worldCourse.holes.length + ' holes  •  fees $'
+            + (resort.feesEarned || 0), L.contentX + L.contentW - 4, L.amenityLabelY + 14);
+    }
     ctx.textAlign = 'left';
 
     // Amenity cards (full-width of content area, stacked)
