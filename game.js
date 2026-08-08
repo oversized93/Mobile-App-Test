@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt167';
+const BUILD_TAG = 'gt168';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6694,6 +6694,10 @@ function holeDoneTouchStart(sx, sy) {
                     holeId: currentHole.worldHoleId, score: strokes,
                     par: currentHole.par || 4, name: 'You'
                 });
+                if (window.__tourney) {
+                    notify('\u{1F3C6} Your ' + strokes
+                        + ' is on the tournament board!');
+                }
             }
             endWorldPlaytest();
             return;
