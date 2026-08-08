@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt151';
+const BUILD_TAG = 'gt152';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4061,6 +4061,19 @@ function drawOverworld() {
                             const priceTag = tool.decor && DECOR_COSTS[tool.decor]
                                 ? '  $' + DECOR_COSTS[tool.decor] : '';
                             ctx.fillText(tool.label + priceTag, fx + 36, fy + L.flyH / 2 + 4);
+                            // Placed-count badge for decor you already own
+                            if (tool.decor && worldCourse.decor) {
+                                const n = worldCourse.decor.reduce(
+                                    (a, d) => a + (d.t === tool.decor ? 1 : 0), 0);
+                                if (n > 0) {
+                                    ctx.textAlign = 'right';
+                                    ctx.fillStyle = 'rgba(140,220,160,0.9)';
+                                    ctx.font = 'bold 10px -apple-system,sans-serif';
+                                    ctx.fillText('\u00D7' + n, fx + L.flyW - 8,
+                                        fy + L.flyH / 2 + 4);
+                                    ctx.textAlign = 'left';
+                                }
+                            }
                         }
                     }
                 }
