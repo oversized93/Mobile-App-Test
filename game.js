@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt127';
+const BUILD_TAG = 'gt128';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2928,8 +2928,12 @@ function exportCourseCode() {
         const { heights, ...persistable } = worldCourse;
         const code = 'GTC1.' + btoa(unescape(encodeURIComponent(JSON.stringify(persistable))));
         if (navigator.clipboard && navigator.clipboard.writeText) {
+            const kb = Math.round(code.length / 102.4) / 10;
+            const toast = '\u{1F4E4} Copied! ' + worldCourse.holes.length
+                + ' holes \u2022 ' + computeCourseRating() + '\u2605 \u2022 '
+                + kb + ' KB \u2014 send it to a friend';
             navigator.clipboard.writeText(code).then(
-                () => notify('Course code copied — send it to a friend!'),
+                () => notify(toast),
                 () => notify('Could not reach the clipboard'));
         } else {
             notify('Clipboard not available in this browser');
