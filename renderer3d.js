@@ -776,10 +776,15 @@ function buildWaterSurface(hole) {
                 '    col += smoothstep(0.965, 1.0, sp) * 0.35;',
                 '    float shore = texture2D(uShore, vPos / uWorld).r;',
                 '    float band = smoothstep(0.18, 0.62, shore);',
-                '    float pulse = 0.6 + 0.4 * sin(uTime * 1.8 + shore * 14.0);',
-                '    col = mix(col, vec3(0.55, 0.93, 0.98), band * 0.55 * pulse);',
-                '    col += band * 0.12;',
-                '    gl_FragColor = vec4(col * uNight, 0.86);',
+                '    float pulse = 0.75 + 0.25 * sin(uTime * 1.8 + shore * 14.0);',
+                '    col = mix(col, vec3(0.55, 0.93, 0.98), band * 0.28 * pulse);',
+                // Electric teal shoreline rim — the reference's signature
+                // glowing pond outline (bright by day, luminous at night)
+                '    float rim = smoothstep(0.30, 0.52, shore)',
+                '              * (1.0 - smoothstep(0.52, 0.78, shore));',
+                '    col += vec3(0.22, 0.95, 1.05) * rim * (0.85 + 0.55 * pulse);',
+                '    col += band * 0.10;',
+                '    gl_FragColor = vec4(col * mix(uNight, 1.0, rim * 0.8), 0.86);',
                 '}'
             ].join('\n')
         });
