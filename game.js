@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt140';
+const BUILD_TAG = 'gt141';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -964,7 +964,10 @@ function tickWorld(dt) {
         if (pool.length) {
             pool.sort((a, b) => (a[1].rel / a[1].n) - (b[1].rel / b[1].n));
             const name = pool[0][0], tb = pool[0][1];
-            const purse = 40 + 2 * (resort.members || 0);
+            // Purse scales with the resort's reputation: a 5-star venue
+            // draws a gallery that spends 1.6x what a 1-star one does
+            const purse = Math.round((40 + 2 * (resort.members || 0))
+                * (0.6 + computeCourseRating() * 0.2));
             resort.coins += purse;
             ledgerIncome(purse);
             const relAvg = tb.rel / tb.n;
