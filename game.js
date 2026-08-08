@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt145';
+const BUILD_TAG = 'gt146';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4330,6 +4330,13 @@ function drawGolferPanel(s) {
         ctx.font = '9px -apple-system,sans-serif';
         ctx.fillText((th.v >= 0 ? '😊 ' : '😠 ') + th.t + ': '
             + (th.v >= 0 ? '+' : '') + th.v, lx + 6, y + 11);
+        if (th.at != null) {
+            const ago = Math.max(0, Math.round((resort.worldClock || 0) - th.at));
+            ctx.textAlign = 'right';
+            ctx.fillStyle = 'rgba(255,255,255,0.45)';
+            ctx.fillText(ago < 60 ? ago + 'm' : Math.round(ago / 60) + 'h',
+                lx + gp.w - 32, y + 11);
+        }
         y += 18;
     }
 }

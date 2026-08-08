@@ -2476,7 +2476,8 @@ function setupAmbientNPCs(hole) {
 // The inspector panel in game.js renders these verbatim.
 function golferThink(s, text, v) {
     s.thoughts = s.thoughts || [];
-    s.thoughts.unshift({ t: text, v: v });
+    s.thoughts.unshift({ t: text, v: v,
+        at: (typeof resort !== 'undefined' && resort) ? (resort.worldClock || 0) : 0 });
     if (s.thoughts.length > 6) s.thoughts.pop();
     let m = 50;
     for (const th of s.thoughts) m += th.v * 0.8;
