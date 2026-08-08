@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt106';
+const BUILD_TAG = 'gt107';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3600,9 +3600,11 @@ function drawOverworld() {
                 ctx.font = '12px -apple-system,sans-serif';
                 ctx.fillText('No golfers out — build more holes!', px + 14, py + headH + 18);
             }
+            owRosterChip.rows = [];
             for (let i = 0; i < rows.length; i++) {
                 const s = rows[i];
                 const ry = py + headH + i * rowH;
+                owRosterChip.rows.push({ name: s.name, x: px, y: ry, w: pw, h: rowH });
                 ctx.fillStyle = '#fff';
                 ctx.font = 'bold 12px -apple-system,sans-serif';
                 ctx.textAlign = 'left';
@@ -4536,7 +4538,20 @@ function overworldTouchStart(sx, sy) {
         return;
     }
     if (hit === 'roster') { owRosterOpen = !owRosterOpen; return; }
-    if (hit === 'roster:panel') return; // absorb taps on the open panel
+    if (hit === 'roster:panel') {
+        // Tapping a golfer's row jumps straight to their inspector
+        if (owRosterChip && owRosterChip.rows) {
+            for (const rr of owRosterChip.rows) {
+                if (hitBtn(sx, sy, rr.x, rr.y, rr.w, rr.h)) {
+                    owSelectedGolfer = rr.name;
+                    owRosterOpen = false;
+                    owSelectedHole = null;
+                    return;
+                }
+            }
+        }
+        return; // absorb other taps on the open panel
+    }
     // Tapping anywhere else dismisses the roster (and absorbs the tap so a
     // stray dismiss can't paint terrain underneath)
     if (owRosterOpen) { owRosterOpen = false; return; }
