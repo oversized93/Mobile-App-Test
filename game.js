@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt113';
+const BUILD_TAG = 'gt114';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3521,6 +3521,32 @@ function drawOverworld() {
         line('Upkeep/day', '$' + up.total + '  (' + worldCourse.holes.length
             + ' holes + decor)', 'rgba(255,255,255,0.8)', fy + 112);
         owFinancesRect = { x: fx, y: fy, w: fw, h: fh };
+    }
+
+    // Weather chip — the rain oscillator is deterministic, so this is a
+    // true forecast: scan ahead for the next crossing and show when the
+    // weather turns (1s of wind clock = 1 game minute)
+    if (scene3dReady && typeof windClock !== 'undefined') {
+        const wAt = (tt) => Math.sin(tt * 0.011) + Math.sin(tt * 0.0073);
+        const t0 = windClock.value;
+        const rainingNow = (typeof rainEnvNow !== 'undefined' && rainEnvNow > 0.25)
+            || wAt(t0) > 1.15;
+        let cross = null;
+        for (let d = 15; d <= 7200; d += 15) {
+            if ((wAt(t0 + d) > 1.15) !== rainingNow) { cross = d; break; }
+        }
+        const fmt = (m) => m >= 90 ? Math.round(m / 60) + 'h' : Math.round(m) + 'm';
+        const wTxt = rainingNow
+            ? '\u{1F327} clears in ' + (cross ? fmt(cross) : '?')
+            : (cross && cross <= 300 ? '\u26C5 rain in ' + fmt(cross)
+                                     : '\u2600\uFE0F clear skies');
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        const ww = ctx.measureText(wTxt).width + 24;
+        const wx = W() - L.pad - (30 * 3 + 6 * 2) - 10 - ww;
+        glossyRect(wx, L.topBarH + 8, ww, 30, 15, rainingNow ? '#3a5876' : '#2c3a42');
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText(wTxt, wx + ww / 2, L.topBarH + 27);
     }
 
     // Paused banner, center-top like the reference
