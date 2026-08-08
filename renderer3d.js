@@ -3280,6 +3280,7 @@ function updateFireflies3D(hole) {
 // The head material brightens at night via updateDayNightTint.
 let lampHeadMatRef = null;
 let lampPoolMatRef = null;  // warm light pools under lamps (night only)
+let moonSprite = null;      // crescent riding opposite the sun
 
 function setupPathLamps(hole) {
     lampHeadMatRef = null;
@@ -3474,6 +3475,34 @@ function updateDayNightTint(minutes) {
     if (oceanMatRef) oceanMatRef.color.copy(OCEAN_BASE_COLOR).multiplyScalar(0.35 + 0.65 * dayW);
     // Stars pierce through once the sky is properly dark
     if (starMatRef) starMatRef.opacity = Math.max(0, 1 - dayW * 3) * (1 - rainEnvNow);
+    // Moon: a soft crescent riding opposite the sun, fading in at dusk
+    if (!moonSprite && typeof scene3d !== 'undefined' && scene3d) {
+        const mc = document.createElement('canvas');
+        mc.width = mc.height = 128;
+        const mg = mc.getContext('2d');
+        const grad = mg.createRadialGradient(64, 64, 20, 64, 64, 62);
+        grad.addColorStop(0, 'rgba(235,240,255,1)');
+        grad.addColorStop(0.75, 'rgba(215,225,250,0.9)');
+        grad.addColorStop(1, 'rgba(200,215,245,0)');
+        mg.fillStyle = grad;
+        mg.beginPath(); mg.arc(64, 64, 62, 0, Math.PI * 2); mg.fill();
+        mg.globalCompositeOperation = 'destination-out';
+        mg.beginPath(); mg.arc(92, 44, 48, 0, Math.PI * 2); mg.fill();
+        const mtex = new THREE.CanvasTexture(mc);
+        const mmat = new THREE.SpriteMaterial({
+            map: mtex, transparent: true, opacity: 0, depthWrite: false
+        });
+        mmat.toneMapped = false;
+        moonSprite = new THREE.Sprite(mmat);
+        moonSprite.scale.set(300, 300, 1);
+        scene3d.add(moonSprite);
+    }
+    if (moonSprite) {
+        moonSprite.material.opacity = Math.max(0, 1 - dayW * 2.2) * (1 - rainEnvNow * 0.7);
+        moonSprite.position.set(1920 - Math.sin(az2Moon()) * 2600,
+            700 + 1100 * (1 - dayW), 1280 - Math.cos(az2Moon()) * 2600);
+    }
+    function az2Moon() { return (h - 13) / 24 * Math.PI * 2; }
     // Night course dressing: tee signs brighten, greens glow after dark
     const darkK = Math.max(0, 1 - dayW * 1.6);
     for (const sm of teeSignMats) sm.opacity = 0.55 + 0.45 * darkK;
