@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt102';
+const BUILD_TAG = 'gt103';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -761,7 +761,8 @@ function buyAmenity(id) {
     notify('Built ' + a.name + '! +' + a.memberBoost + ' members');
 }
 
-// Passive income: members * 0.2 coins/sec while Manage screen is open.
+// Passive income: members * 0.03 coins/sec — membership dues are a
+// gentle drip; the real money is fees, stalls, and tournaments.
 // On re-entry, we catch up offline time capped at 1 hour so you can't farm too
 // hard by leaving it open.
 function enterManage() { setState('manage'); }
@@ -775,7 +776,7 @@ function applyOfflineCatchup() {
         const now = Date.now();
         if (resort.lastTickMs) {
             const elapsed = Math.min((now - resort.lastTickMs) / 1000, 3600);
-            const income = Math.floor(resort.members * elapsed * 0.2);
+            const income = Math.floor(resort.members * elapsed * 0.03);
             if (income > 0) { resort.coins += income; notify('+' + income + ' coins while away'); }
         }
         resort.lastTickMs = now;
@@ -804,9 +805,9 @@ function ledgerIncome(amt) {
     if (amt > 0) ensureLedger().income += amt;
 }
 function dailyUpkeep() {
-    const holeCost = worldCourse.holes.length * 8;
+    const holeCost = worldCourse.holes.length * 25;
     const decorCost = Math.floor((worldCourse.decor || []).reduce(
-        (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) * 0.02);
+        (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) * 0.04);
     return { holes: holeCost, decor: decorCost, total: holeCost + decorCost };
 }
 
@@ -908,7 +909,7 @@ function tickWorld(dt) {
         if (resort.members < memberTarget) resort.members++;
         else if (resort.members > memberTarget) resort.members--;
     }
-    resort.coinsFrac = (resort.coinsFrac || 0) + resort.members * 0.2 * dt;
+    resort.coinsFrac = (resort.coinsFrac || 0) + resort.members * 0.03 * dt;
     if (resort.coinsFrac >= 1) {
         const whole = Math.floor(resort.coinsFrac);
         resort.coins += whole;
@@ -2681,7 +2682,7 @@ function drawManage() {
     ctx.fillStyle = '#a5d6a7';
     ctx.font = 'bold 22px -apple-system,sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText((resort.members * 0.2).toFixed(1), L.sidebarX + L.sidebarW - 14, L.statsY + halfH + 40);
+    ctx.fillText((resort.members * 0.03).toFixed(1), L.sidebarX + L.sidebarW - 14, L.statsY + halfH + 40);
 
     // Player card (Mayor-style)
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
