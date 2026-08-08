@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt172';
+const BUILD_TAG = 'gt173';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6633,6 +6633,11 @@ function drawHoleDone() {
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '14px -apple-system,sans-serif';
     ctx.fillText(currentHole.name || 'Hole ' + (currentHoleIdx + 1), W() / 2, cy + 35);
+    if (strokes === 1) {
+        ctx.fillStyle = '#ffd24a';
+        ctx.font = 'bold 15px -apple-system,sans-serif';
+        ctx.fillText('\u26A1 HOLE IN ONE!', W() / 2, cy + 15);
+    }
     if (worldPlaytest && currentHole.worldHoleId != null) {
         const st = (worldCourse.holeStats || {})[currentHole.worldHoleId];
         if (st && st.best != null) {
@@ -7037,10 +7042,14 @@ function gameLoop(time) {
             updateBall(dt);
             camLerp(dt);
             if (holeComplete && !ball.moving) {
-                // The gallery applauds an under-par hole from the owner
+                // The gallery applauds an under-par hole from the owner —
+                // and erupts (applause + fanfare) for a hole-in-one
                 if (worldPlaytest && strokes < (currentHole.par || 4)
                     && typeof playApplause === 'function') {
                     playApplause();
+                    if (strokes === 1 && typeof playFanfare === 'function') {
+                        playFanfare();
+                    }
                 }
                 setState('holeDone');
             }
