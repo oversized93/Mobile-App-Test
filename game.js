@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt168';
+const BUILD_TAG = 'gt169';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2854,7 +2854,17 @@ function drawManage() {
     ctx.fillText(player.name, L.sidebarX + 72, L.playerY + 32);
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '11px -apple-system,sans-serif';
-    ctx.fillText('Club Owner', L.sidebarX + 72, L.playerY + 52);
+    {
+        const myCar = (worldCourse.golferCareers || {})['You'];
+        const tourneyWins = (resort.tourneyHistory || [])
+            .filter(t => t.winner === 'You').length;
+        let sub = 'Club Owner';
+        if (myCar) {
+            sub += ' \u2022 ' + myCar.rounds + ' rds \u2022 best ' + myCar.best;
+        }
+        if (tourneyWins) sub += ' \u2022 \u{1F3C6}\u00D7' + tourneyWins;
+        ctx.fillText(sub, L.sidebarX + 72, L.playerY + 52);
+    }
 
     // ---- RIGHT CONTENT ----
     // Section label
