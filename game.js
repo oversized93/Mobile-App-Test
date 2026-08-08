@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt93';
+const BUILD_TAG = 'gt94';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -612,6 +612,10 @@ function tickWorld(dt) {
         resort.coins += window.__golfFees;
         resort.feesEarned = (resort.feesEarned || 0) + window.__golfFees;
         window.__golfFees = 0;
+    }
+    if (window.__stallSales) {
+        resort.stallSales = (resort.stallSales || 0) + window.__stallSales;
+        window.__stallSales = 0;
     }
     // Daily tournament: noon to 3 PM, every finished round counts toward
     // the leaderboard (score relative to par so mixed holes compare fairly)
@@ -3381,7 +3385,9 @@ function drawGolferPanel(s) {
         ctx.fillText(val, rx, y);
         y += 16;
     };
-    const task = s.pause > 0 && s.ptIdx >= s.route.length - 1 ? 'Celebrating'
+    const task = s.detour ? 'Buying a ' + (s.detour.need === 'thirst' ? 'drink' : 'snack')
+        : s.returning ? 'Heading back'
+        : s.pause > 0 && s.ptIdx >= s.route.length - 1 ? 'Celebrating'
         : s.pause > 0 ? 'Hitting' : 'Walking to ball';
     row('Hole ' + s.holeId + '  •  Stroke ' + ((s.strokes || 0) + 1), task);
     row('Rounds today: ' + (s.rounds || 0),
@@ -3407,8 +3413,8 @@ function drawGolferPanel(s) {
     // Needs drift up with time on the course (2x2 mini grid)
     const age = s.age || 0;
     const needs = [
-        ['Hunger', Math.min(90, Math.round(5 + age * 0.5))],
-        ['Thirst', Math.min(90, Math.round(4 + age * 0.7))],
+        ['Hunger', Math.round(s.hunger || 0)],
+        ['Thirst', Math.round(s.thirst || 0)],
         ['Fatigue', Math.min(90, Math.round(3 + age * 0.4))],
         ['Boredom', Math.min(60, Math.round(age * 0.15))]
     ];

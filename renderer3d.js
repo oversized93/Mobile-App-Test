@@ -2164,6 +2164,7 @@ let npcHatInst = null;
 let npcStates = [];
 let npcPathCells = [];
 let npcSocialSpots = [];
+let npcVendorSpots = [];  // kiosks/stalls that sell food & drink
 let npcWalkerCount = 0;
 const NPC_COUNT = 10;
 const NPC_COLORS = [0xe5533d, 0x3d7de5, 0xe5b13d, 0x8e44ad,
@@ -2238,11 +2239,15 @@ function setupAmbientNPCs(hole) {
     npcBodyInst.castShadow = true;
     // Social rest spots: placed benches and gazebos attract walkers
     npcSocialSpots = [];
+    npcVendorSpots = [];
     if (hole.decor) {
         for (const d of hole.decor) {
             if (d.t === 'bench' || d.t === 'gazebo'
                 || d.t === 'kiosk' || d.t === 'stall') {
                 npcSocialSpots.push({ x: d.x * CELL, z: d.y * CELL });
+            }
+            if (d.t === 'kiosk' || d.t === 'stall') {
+                npcVendorSpots.push({ x: d.x * CELL, z: d.y * CELL });
             }
         }
     }
@@ -2276,7 +2281,8 @@ function setupAmbientNPCs(hole) {
             route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5, fee: rg.fee,
             name: GOLFER_NAMES[gnIdx++ % GOLFER_NAMES.length],
             holeId: rg.holeId, strokes: 0, lastRound: null, par: rg.par,
-            diff: rg.diff
+            diff: rg.diff,
+            hunger: 8 + (gnIdx * 11) % 25, thirst: 6 + (gnIdx * 17) % 25
         });
     }
     for (let i = 0; i < total; i++) {
@@ -2366,6 +2372,49 @@ function updateAmbientNPCs3D(dt, hole) {
             // Round-in-progress golfer: walk the hole route, pause to hit,
             // restart at the tee after holing out
             s.age = (s.age || 0) + dt;
+            s.hunger = Math.min(100, (s.hunger || 0) + dt * 0.3);
+            s.thirst = Math.min(100, (s.thirst || 0) + dt * 0.45);
+            // Detour to a kiosk/stall: walk over, buy, walk back to the tee
+            if (s.detour || s.returning) {
+                const gx = s.detour ? s.detour.x : s.route[0].x;
+                const gz = s.detour ? s.detour.z : s.route[0].z;
+                const ddx = gx - s.x, ddz = gz - s.z;
+                const dd = Math.sqrt(ddx * ddx + ddz * ddz);
+                s.tx = gx; s.tz = gz;
+                if (dd < 6) {
+                    if (s.detour) {
+                        // Buy for the triggering need — and top up the other
+                        // one too if it's also run high (one stop, two sales)
+                        let price = 0;
+                        const wantDrink = (s.thirst || 0) > 55;
+                        const wantFood = (s.hunger || 0) > 55;
+                        if (wantDrink) { price += 5; s.thirst = 5; }
+                        if (wantFood) { price += 8; s.hunger = 5; }
+                        if (!price) { price = 5; s.thirst = 5; }
+                        window.__golfFees = (window.__golfFees || 0) + price;
+                        window.__stallSales = (window.__stallSales || 0) + price;
+                        (window.__feePopups = window.__feePopups || []).push({
+                            x: gx, z: gz, t0: performance.now(), amt: price
+                        });
+                        golferThink(s, wantFood && wantDrink
+                            ? 'Snack and a drink — recharged!'
+                            : wantFood ? 'Grabbed a bite — much better'
+                            : 'Cold drink — just what I needed', 9);
+                        s.detour = null;
+                        s.returning = true;
+                        s.pause = 2.5;
+                    } else {
+                        s.returning = false;
+                        s.ptIdx = 0;
+                        s.pause = 2;
+                    }
+                } else if (s.pause > 0) {
+                    s.pause -= dt;
+                } else {
+                    s.x += (ddx / dd) * s.speed * dt;
+                    s.z += (ddz / dd) * s.speed * dt;
+                }
+            } else {
             if (rainEnvNow > 0.4 && !s.rainMood) {
                 s.rainMood = true;
                 golferThink(s, 'Playing through the rain', -4);
@@ -2422,6 +2471,25 @@ function updateAmbientNPCs3D(dt, hole) {
                     s.x = s.route[0].x;
                     s.z = s.route[0].z;
                     s.pause = 5;
+                    // Hungry or thirsty? Walk to the nearest kiosk/stall
+                    // between rounds (that's the stall owner's income)
+                    // Serve the *larger* need so neither starves behind the
+                    // faster-growing one
+                    const need = Math.max(s.hunger || 0, s.thirst || 0) <= 60 ? null
+                        : (s.hunger || 0) >= (s.thirst || 0) ? 'hunger' : 'thirst';
+                    if (need && npcVendorSpots.length) {
+                        let vb = null, vd = Infinity;
+                        for (const v of npcVendorSpots) {
+                            const dv = (v.x - s.x) * (v.x - s.x)
+                                     + (v.z - s.z) * (v.z - s.z);
+                            if (dv < vd) { vd = dv; vb = v; }
+                        }
+                        s.detour = { x: vb.x, z: vb.z, need: need };
+                        s.pause = 1;
+                    } else if (need && !s.grumbled) {
+                        s.grumbled = true;
+                        golferThink(s, 'Nowhere to grab a bite out here', -7);
+                    }
                 } else {
                     s.tx = nxt.x;
                     s.tz = nxt.z;
@@ -2466,6 +2534,7 @@ function updateAmbientNPCs3D(dt, hole) {
                         s.z += mz;
                     }
                 }
+            }
             }
         } else if (s.pause > 0) {
             s.pause -= dt; // resting at a bench/gazebo
