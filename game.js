@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt131';
+const BUILD_TAG = 'gt132';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -872,6 +872,19 @@ function tickWorld(dt) {
             if (up.total > 0) {
                 notify('\u{1F9FE} Daily upkeep: -$' + charged
                     + '  (holes $' + up.holes + ' \u2022 decor $' + up.decor + ')');
+            }
+            // Anniversaries: the resort's journey has birthdays with gifts
+            const dayNum = today + 1;
+            const ANNIV = { 7: ['One week', 150], 30: ['One month', 500],
+                            100: ['100 days', 1500], 365: ['One YEAR', 5000] };
+            if (ANNIV[dayNum] && (resort.dayMilestone || 0) < dayNum) {
+                resort.dayMilestone = dayNum;
+                const [label, gift] = ANNIV[dayNum];
+                resort.coins += gift;
+                ledgerIncome(gift);
+                notify('\u{1F382} ' + label + ' of ' + worldCourse.name
+                    + '! Members chip in $' + gift);
+                if (typeof playFanfare === 'function') playFanfare();
             }
         }
     }
