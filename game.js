@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt150';
+const BUILD_TAG = 'gt151';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5105,8 +5105,8 @@ function overworldTouchStart(sx, sy) {
     if (holeWizard) {
         if (!cell) return;
         if (holeWizard.step === 'tee') {
-            holeWizard.tee = { x: cell.c, y: cell.r };
-            holeWizard.step = 'pin';
+            // Drag to aim, same feel as the pin: ghost follows, lift drops
+            holeWizard.teeDrag = true;
             owLastGhostCell = { c: cell.c, r: cell.r };
             return;
         }
@@ -5223,7 +5223,12 @@ function overworldTouchMove(sx, sy) {
         }
         return;
     }
-    // Wizard pin drag-to-aim
+    // Wizard tee/pin drag-to-aim
+    if (holeWizard && holeWizard.teeDrag) {
+        const cell = screenToCell(sx, sy);
+        if (cell) owLastGhostCell = { c: cell.c, r: cell.r };
+        return;
+    }
     if (holeWizard && holeWizard.pinDrag) {
         const cell = screenToCell(sx, sy);
         if (cell) owLastGhostCell = { c: cell.c, r: cell.r };
@@ -5270,6 +5275,14 @@ function overworldTouchMove(sx, sy) {
 }
 
 function overworldTouchEnd() {
+    if (holeWizard && holeWizard.teeDrag) {
+        holeWizard.teeDrag = false;
+        if (owLastGhostCell) {
+            holeWizard.tee = { x: owLastGhostCell.c, y: owLastGhostCell.r };
+            holeWizard.step = 'pin';
+        }
+        return;
+    }
     if (holeWizard && holeWizard.pinDrag) {
         holeWizard.pinDrag = false;
         const g = owLastGhostCell;
