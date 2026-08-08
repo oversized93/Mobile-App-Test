@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt170';
+const BUILD_TAG = 'gt171';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3654,15 +3654,17 @@ function drawOverworld() {
         && typeof cam3dDistance !== 'undefined' && cam3dDistance < 1700) {
         ctx.font = 'bold 10px -apple-system,sans-serif';
         ctx.textAlign = 'center';
+        const champName = resort.lastTourney && resort.lastTourney.winner;
         for (const s of npcStates) {
             if (!s.name) continue;
             const p = worldToScreen3D(s.x, s.z);
             if (!p || p.behind) continue;
+            const label = (s.name === champName ? '\u{1F451} ' : '') + s.name;
             ctx.strokeStyle = 'rgba(0,0,0,0.7)';
             ctx.lineWidth = 3;
-            ctx.strokeText(s.name, p.x, p.y - 26);
-            ctx.fillStyle = 'rgba(255,255,255,0.92)';
-            ctx.fillText(s.name, p.x, p.y - 26);
+            ctx.strokeText(label, p.x, p.y - 26);
+            ctx.fillStyle = s.name === champName ? '#ffd24a' : 'rgba(255,255,255,0.92)';
+            ctx.fillText(label, p.x, p.y - 26);
         }
     }
 
@@ -4378,7 +4380,8 @@ function drawGolferPanel(s) {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 14px -apple-system,sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(s.name, gp.x + gp.w / 2, gp.y + 21);
+    const isChamp = resort.lastTourney && resort.lastTourney.winner === s.name;
+    ctx.fillText((isChamp ? '\u{1F451} ' : '') + s.name, gp.x + gp.w / 2, gp.y + 21);
     const lx = gp.x + 13, rx = gp.x + gp.w - 13;
     let y = gp.y + 45;
     const row = (label, val) => {
