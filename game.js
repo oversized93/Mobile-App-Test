@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt165';
+const BUILD_TAG = 'gt166';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3950,9 +3950,11 @@ function drawOverworld() {
                     ? 'rgba(240,140,120,0.85)' : 'rgba(255,255,255,0.55)';
                 ctx.font = '11px -apple-system,sans-serif';
                 ctx.textAlign = 'right';
+                const car2 = (worldCourse.golferCareers || {})[s.name];
                 const prog = 'H' + s.holeId + ' • '
                     + (s.strokes ? s.strokes + ' str' : 'tee')
-                    + (s.lastRound ? ' • last ' + s.lastRound : '');
+                    + (car2 && car2.best != null ? ' • best ' + car2.best
+                        : s.lastRound ? ' • last ' + s.lastRound : '');
                 ctx.fillText(prog, px + pw - 14, ry + 19);
             }
             if (champs.length) {
