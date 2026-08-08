@@ -3532,16 +3532,28 @@ function setupCritters(hole) {
         if (bflyInst.instanceColor) bflyInst.instanceColor.needsUpdate = true;
         terrainGroup.add(bflyInst);
     }
-    // Gulls circle above the fountain ponds (fountainSpots set just before)
-    if (fountainSpots.length) {
-        const nG = fountainSpots.length * 2 + 1;
+    // Gulls circle fountains AND the shoreline — sample beach sand that
+    // borders open water for coastal flocks
+    const beachSpots = [];
+    for (let r = 2; r < hole.rows - 2 && beachSpots.length < 6; r += 5) {
+        for (let c = 2; c < hole.cols - 2 && beachSpots.length < 6; c += 5) {
+            if (hole.grid[r][c] !== T.SAND) continue;
+            if (hole.grid[r][c + 1] === T.WATER || hole.grid[r][c - 1] === T.WATER
+                || hole.grid[r + 1][c] === T.WATER || hole.grid[r - 1][c] === T.WATER) {
+                beachSpots.push({ x: (c + 0.5) * CELL, z: (r + 0.5) * CELL });
+            }
+        }
+    }
+    const gullAnchors = fountainSpots.concat(beachSpots);
+    if (gullAnchors.length) {
+        const nG = Math.min(13, gullAnchors.length * 2 + 1);
         const geo = new THREE.PlaneGeometry(6.5, 1.8);
         geo.rotateX(-Math.PI / 2);
         const mat = new THREE.MeshBasicMaterial({ color: 0xf5f7f9, side: THREE.DoubleSide });
         mat.toneMapped = false;
         gullInst = new THREE.InstancedMesh(geo, mat, nG);
         for (let i = 0; i < nG; i++) {
-            const spot = fountainSpots[i % fountainSpots.length];
+            const spot = gullAnchors[i % gullAnchors.length];
             gullStates.push({
                 x: spot.x, z: spot.z, phase: i * 2.4,
                 rad: 45 + (i * 23) % 50, h: 105 + (i * 17) % 40,
