@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt152';
+const BUILD_TAG = 'gt153';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -313,7 +313,8 @@ function enterOverworld() {
 }
 
 function stateEnterOverworld() {
-    owRosterOpen = false;
+    // owRosterOpen intentionally persists — peeking at Manage and coming
+    // back shouldn't close the panel you were reading
     owRosterChip = null;
     owSelectedGolfer = null;
     if (!worldCourse.heights) refreshWorldHeights();
