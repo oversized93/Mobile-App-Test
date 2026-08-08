@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt121';
+const BUILD_TAG = 'gt122';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -978,6 +978,23 @@ function tickWorld(dt) {
         if (_worldStatsDirty) {
             _worldStatsDirty = false;
             saveWorldCourse();
+        }
+        // Star-rating milestones: crossing 3 then 5 stars celebrates once
+        const rating = computeCourseRating();
+        const tier = rating >= 5 ? 5 : rating >= 3 ? 3 : 0;
+        if (tier > (resort.ratingTier || 0)) {
+            resort.ratingTier = tier;
+            notify(tier === 5
+                ? '\u{1F31F} FIVE STARS \u2014 a world-class resort!'
+                : '\u2B50 Three stars \u2014 ' + worldCourse.name + ' is on the map!');
+            if (typeof playFanfare === 'function') playFanfare();
+            const ex = (Math.floor(worldCourse.cols / 2) + 0.5) * CELL;
+            const ez = (worldCourse.rows - (worldCourse.border || 4) + 0.5) * CELL;
+            (window.__scorePopups = window.__scorePopups || []).push({
+                x: ex, z: ez, t0: performance.now(),
+                txt: tier === 5 ? '\u{1F31F} 5-STAR RESORT!' : '\u2B50 3-STAR RESORT!',
+                col: '#ffd24a', name: worldCourse.name, stack: 0
+            });
         }
     }
 }
