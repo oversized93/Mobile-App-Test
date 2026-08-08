@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt98';
+const BUILD_TAG = 'gt99';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -213,6 +213,11 @@ function makeIsland(params) {
         border: rows - entR,      // keeps the ENTRANCE marker on the pad
         grid,
         terrainSeed: seed,
+        parcels: (() => {
+            const pIdx = (c, r) => Math.min(PARCEL_ROWS - 1, Math.floor(r / (rows / PARCEL_ROWS)))
+                * PARCEL_COLS + Math.min(PARCEL_COLS - 1, Math.floor(c / (cols / PARCEL_COLS)));
+            return { owned: [...new Set([pIdx(entC, entR), pIdx(entC, entR - 22)])], bought: 0 };
+        })(),
         hillAmp: 0.4 + p.hills * 1.2,
         rockDensity: p.rocks,
         grassDensity: p.grass,
@@ -453,6 +458,56 @@ function currentTool() {
 
 // Paint a brush footprint centered on (cc, cr). Skips OOB border so the
 // player can't accidentally extend the playable rectangle.
+// ---- Property parcels (reference-style land sections) ----
+// The island is a 4x3 grid of parcels. New islands start with the two
+// entrance parcels; veteran saves own everything (no rug-pulls). Each
+// additional section costs more than the last.
+const PARCEL_COLS = 4, PARCEL_ROWS = 3;
+function ensureParcels() {
+    if (!worldCourse.parcels) {
+        worldCourse.parcels = {
+            owned: Array.from({ length: PARCEL_COLS * PARCEL_ROWS }, (_, i) => i),
+            bought: 0
+        };
+    }
+    return worldCourse.parcels;
+}
+function parcelIndexAt(c, r) {
+    const pc = Math.min(PARCEL_COLS - 1, Math.floor(c / (worldCourse.cols / PARCEL_COLS)));
+    const pr = Math.min(PARCEL_ROWS - 1, Math.floor(r / (worldCourse.rows / PARCEL_ROWS)));
+    return pr * PARCEL_COLS + pc;
+}
+function parcelOwned(c, r) {
+    return ensureParcels().owned.includes(parcelIndexAt(c, r));
+}
+function parcelPrice() {
+    return Math.round(500 * Math.pow(1.6, ensureParcels().bought || 0));
+}
+let owBuyRect = null;  // screen rect of the buy chip
+let owBuyOffer = null; // { parcel, t0 } — buy chip shown after a blocked tap
+function offerParcel(c, r) {
+    owBuyOffer = { parcel: parcelIndexAt(c, r), t0: performance.now() };
+}
+function buyOfferedParcel() {
+    const p = ensureParcels();
+    const price = parcelPrice();
+    if (resort.coins < price) {
+        notify('Need $' + price + ' for that property');
+        return;
+    }
+    resort.coins -= price;
+    p.owned.push(owBuyOffer.parcel);
+    p.bought = (p.bought || 0) + 1;
+    owBuyOffer = null;
+    saveResort();
+    saveWorldCourse();
+    notify('\u{1F4CB} Property purchased! The resort grows');
+}
+
+// Human names for the tile tooltip while painting
+const T_NAMES = {};
+for (const k in T) T_NAMES[T[k]] = k.charAt(0) + k.slice(1).toLowerCase();
+
 function paintBrushAt(cc, cr, size, terrain) {
     const half = Math.floor(size / 2);
     const changed = [];
@@ -462,6 +517,7 @@ function paintBrushAt(cc, cr, size, terrain) {
             const r = cr + dr, c = cc + dc;
             if (r < border || r >= worldCourse.rows - border) continue;
             if (c < border || c >= worldCourse.cols - border) continue;
+            if (!parcelOwned(c, r)) { offerParcel(c, r); continue; }
             if (worldCourse.grid[r][c] !== terrain) {
                 // First touch of this cell in the stroke → remember its old
                 // value for undo
@@ -610,6 +666,17 @@ function parFromYards(yds) {
 }
 
 function finalizeHole() {
+    {
+        const w = holeWizard;
+        const pts = [w.tee, ...(w.waypoints || []), w.pin].filter(Boolean);
+        for (const pt of pts) {
+            if (!parcelOwned(pt.x, pt.y)) {
+                notify('\u{1F512} That land is not yours yet \u2014 buy the property first');
+                offerParcel(pt.x, pt.y);
+                return;
+            }
+        }
+    }
     if (!holeWizard || !holeWizard.tee || !holeWizard.pin) return;
     const yds = polylineLengthYards(holeWizard);
     const par = parFromYards(yds);
@@ -3081,6 +3148,86 @@ function drawOverworld() {
         }
     }
 
+    // ---- Property lines: dashed parcel grid while any build tool is
+    // armed; unowned sections carry a lock and price at their center ----
+    const buildingNow = (owTool && owTool !== 'hand') || holeWizard;
+    if (buildingNow) {
+        ensureParcels();
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([7, 7]);
+        const drawGridLine = (fixed, isCol) => {
+            ctx.beginPath();
+            let started = false;
+            const maxIt = isCol ? worldCourse.rows : worldCourse.cols;
+            for (let i = 0; i <= maxIt; i += 3) {
+                const c = isCol ? fixed : i, r = isCol ? i : fixed;
+                const p = cellCenterScreen(c - 0.5, r - 0.5);
+                if (!p || p.behind) { started = false; continue; }
+                if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+                else ctx.lineTo(p.x, p.y);
+            }
+            ctx.stroke();
+        };
+        for (let pc = 1; pc < PARCEL_COLS; pc++) {
+            drawGridLine(Math.round(worldCourse.cols * pc / PARCEL_COLS), true);
+        }
+        for (let pr = 1; pr < PARCEL_ROWS; pr++) {
+            drawGridLine(Math.round(worldCourse.rows * pr / PARCEL_ROWS), false);
+        }
+        ctx.setLineDash([]);
+        for (let pi = 0; pi < PARCEL_COLS * PARCEL_ROWS; pi++) {
+            if (worldCourse.parcels.owned.includes(pi)) continue;
+            const cc = (pi % PARCEL_COLS + 0.5) * worldCourse.cols / PARCEL_COLS;
+            const cr = (Math.floor(pi / PARCEL_COLS) + 0.5) * worldCourse.rows / PARCEL_ROWS;
+            const p = cellCenterScreen(cc, cr);
+            if (!p || p.behind) continue;
+            ctx.font = 'bold 12px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            const txt = '\u{1F512} $' + parcelPrice();
+            const tw2 = ctx.measureText(txt).width + 20;
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            roundRect(p.x - tw2 / 2, p.y - 12, tw2, 24, 12);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.fillText(txt, p.x, p.y + 4);
+        }
+    }
+    // Buy-property chip after a blocked tap (auto-hides)
+    owBuyRect = null;
+    if (owBuyOffer) {
+        if (performance.now() - owBuyOffer.t0 > 6000
+            || worldCourse.parcels.owned.includes(owBuyOffer.parcel)) {
+            owBuyOffer = null;
+        } else {
+            ctx.font = 'bold 12px -apple-system,sans-serif';
+            const bTxt = '\u{1F512} Unowned land \u2014 buy for $' + parcelPrice();
+            const bw2 = ctx.measureText(bTxt).width + 30;
+            const bx2 = (W() - bw2) / 2, by2 = L.topBarH + 44;
+            glossyRect(bx2, by2, bw2, 30, 15, '#8a6d1d');
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.fillText(bTxt, W() / 2, by2 + 19);
+            owBuyRect = { x: bx2, y: by2, w: bw2, h: 30 };
+        }
+    }
+    // Tile tooltip: what's under the brush, bottom-right like the reference
+    if (buildingNow && !holeWizard && owDragLastCell) {
+        const tCell = worldCourse.grid[owDragLastCell.r]
+            && worldCourse.grid[owDragLastCell.r][owDragLastCell.c];
+        if (tCell !== undefined) {
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            const ttTxt = (T_NAMES[tCell] || '?') + '  \u2022  brush ' + owBrushSize;
+            const tw3 = ctx.measureText(ttTxt).width + 22;
+            roundRect(W() - tw3 - 10, H() - 34, tw3, 24, 12);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.fillText(ttTxt, W() - 21, H() - 18);
+        }
+    }
+
     // ---- Floating green-fee popups over pins as golfers hole out ----
     if (window.__feePopups && window.__feePopups.length) {
         const now = performance.now();
@@ -4123,6 +4270,10 @@ function overworldHUDHit(sx, sy) {
     const L = overworldLayout();
     if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) return 'close';
     if (hitBtn(sx, sy, L.undoX, L.undoY, L.undoSize, L.undoSize)) return 'undo';
+    if (owBuyOffer && owBuyRect
+        && hitBtn(sx, sy, owBuyRect.x, owBuyRect.y, owBuyRect.w, owBuyRect.h)) {
+        return 'buyparcel';
+    }
     if (owSpeedRects) {
         for (const sr of owSpeedRects) {
             if (hitBtn(sx, sy, sr.x, sr.y, sr.w, sr.h)) return 'speed:' + sr.spd;
@@ -4213,6 +4364,7 @@ function overworldTouchStart(sx, sy) {
     const hit = overworldHUDHit(sx, sy);
     if (hit === 'close') { exitOverworld(); return; }
     if (hit === 'undo') { undoLastStroke(); return; }
+    if (hit === 'buyparcel') { buyOfferedParcel(); return; }
     if (hit && hit.startsWith('speed:')) {
         gameSpeed = parseInt(hit.slice(6), 10);
         return;
@@ -4401,6 +4553,10 @@ function overworldTouchStart(sx, sy) {
                 d.rot = ((d.rot || 0) + Math.PI / 4) % (Math.PI * 2);
                 notify('Rotated ↻ tap again for more');
             } else {
+                if (!parcelOwned(cell.c, cell.r)) {
+                    offerParcel(cell.c, cell.r);
+                    return;
+                }
                 const cost = DECOR_COSTS[tool.decor] || 0;
                 if (resort.coins < cost) {
                     notify('Need $' + cost + ' for a ' + tool.label.toLowerCase());
