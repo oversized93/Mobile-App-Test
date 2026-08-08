@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt157';
+const BUILD_TAG = 'gt158';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2976,7 +2976,10 @@ function drawManage() {
 // safe base64 keeps it paste-able anywhere.
 function exportCourseCode() {
     try {
-        const { heights, ...persistable } = worldCourse;
+        // Share the DESIGN: strip regenerable heights, your play history
+        // (the receiver's golfers write their own records), and parcel
+        // ownership (receivers get the whole island as a gift)
+        const { heights, holeStats, parcels, freshDefault, ...persistable } = worldCourse;
         const code = 'GTC1.' + btoa(unescape(encodeURIComponent(JSON.stringify(persistable))));
         if (navigator.clipboard && navigator.clipboard.writeText) {
             const kb = Math.round(code.length / 102.4) / 10;
