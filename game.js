@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt159';
+const BUILD_TAG = 'gt160';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -7169,6 +7169,7 @@ function initAmbientAudio() {
         }, 250);
         scheduleChirp();
         scheduleGullCry();
+        scheduleFrogCroak();
         // Club strikes: poll the tee-launch cycles (same math as the
         // renderer's synced swings) and play a soft tock on each wrap
         const prevCycles = {};
@@ -7246,6 +7247,46 @@ function playFanfare() {
             o.stop(t0 + dt + 0.32);
         });
     } catch (e) {}
+}
+
+// Night frog croaks from the ponds — low pulsing ribbits after dark
+function scheduleFrogCroak() {
+    if (!audioCtx) return;
+    setTimeout(() => {
+        if (!audioCtx) return;
+        try {
+            const h = ((((resort.worldClock || 0) / 60) % 24) + 24) % 24;
+            const night = h >= 20 || h < 5.5;
+            const pondsAbout = typeof dragonStates !== 'undefined'
+                && dragonStates && dragonStates.length > 0; // dragonflies mark ponds
+            const sceneOk = state === 'overworld' || state === 'menu';
+            if (night && sceneOk && pondsAbout) {
+                const t0 = audioCtx.currentTime;
+                const croaks = 2 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < croaks; i++) {
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    const ts = t0 + i * (0.16 + Math.random() * 0.05);
+                    const f0 = 95 + Math.random() * 30;
+                    o.type = 'square';
+                    o.frequency.setValueAtTime(f0, ts);
+                    o.frequency.exponentialRampToValueAtTime(f0 * 0.75, ts + 0.11);
+                    const lp = audioCtx.createBiquadFilter();
+                    lp.type = 'lowpass';
+                    lp.frequency.value = 500;
+                    g.gain.setValueAtTime(0, ts);
+                    g.gain.linearRampToValueAtTime(0.05, ts + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.001, ts + 0.13);
+                    o.connect(lp);
+                    lp.connect(g);
+                    g.connect(audioMaster);
+                    o.start(ts);
+                    o.stop(ts + 0.15);
+                }
+            }
+        } catch (e) {}
+        scheduleFrogCroak();
+    }, 6000 + Math.random() * 9000);
 }
 
 // Occasional gull cries — descending mewing squawks, daytime + gulls only
