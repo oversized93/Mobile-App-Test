@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt166';
+const BUILD_TAG = 'gt167';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6620,6 +6620,17 @@ function drawHoleDone() {
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '14px -apple-system,sans-serif';
     ctx.fillText(currentHole.name || 'Hole ' + (currentHoleIdx + 1), W() / 2, cy + 35);
+    if (worldPlaytest && currentHole.worldHoleId != null) {
+        const st = (worldCourse.holeStats || {})[currentHole.worldHoleId];
+        if (st && st.best != null) {
+            ctx.fillStyle = strokes < st.best ? '#ffd24a' : 'rgba(255,255,255,0.55)';
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            ctx.fillText(strokes < st.best
+                ? '\u{1F3C5} NEW COURSE RECORD! (was ' + st.best + ' \u2014 ' + (st.bestBy || '?') + ')'
+                : 'Course record: ' + st.best + ' \u2014 ' + (st.bestBy || '?'),
+                W() / 2, cy + 52);
+        }
+    }
 
     // Score name — large, colored, with subtle glow
     const scoreColor = diff < 0 ? '#4caf50' : diff === 0 ? '#fff' : '#ff5252';
@@ -6675,7 +6686,18 @@ function holeDoneTouchStart(sx, sy) {
 
     // Next/Finish button
     if (hitBtn(sx, sy, cx + 20, cy + cardH - 60, cardW - 40, 44)) {
-        if (worldPlaytest) { endWorldPlaytest(); return; }
+        if (worldPlaytest) {
+            // The owner's round counts: feed it to the same stats/records
+            // pipeline the ambient golfers use
+            if (currentHole.worldHoleId != null && strokes > 0) {
+                (window.__holeOuts = window.__holeOuts || []).push({
+                    holeId: currentHole.worldHoleId, score: strokes,
+                    par: currentHole.par || 4, name: 'You'
+                });
+            }
+            endWorldPlaytest();
+            return;
+        }
         const isLast = currentHoleIdx >= currentCourse.holes.length - 1;
         if (isLast) {
             setState('roundDone');
