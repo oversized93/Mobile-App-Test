@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt129';
+const BUILD_TAG = 'gt130';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3423,10 +3423,14 @@ function drawOverworld() {
             owBuyOffer = null;
         } else {
             ctx.font = 'bold 12px -apple-system,sans-serif';
-            const bTxt = '\u{1F512} Unowned land \u2014 buy for $' + parcelPrice();
+            const price = parcelPrice();
+            const short = price - Math.floor(resort.coins);
+            const bTxt = short > 0
+                ? '\u{1F512} Buy for $' + price + '  (need $' + short + ' more)'
+                : '\u{1F512} Unowned land \u2014 buy for $' + price;
             const bw2 = ctx.measureText(bTxt).width + 30;
             const bx2 = (W() - bw2) / 2, by2 = L.topBarH + 44;
-            glossyRect(bx2, by2, bw2, 30, 15, '#8a6d1d');
+            glossyRect(bx2, by2, bw2, 30, 15, short > 0 ? '#7a4a3a' : '#8a6d1d');
             ctx.fillStyle = '#fff';
             ctx.textAlign = 'center';
             ctx.fillText(bTxt, W() / 2, by2 + 19);
