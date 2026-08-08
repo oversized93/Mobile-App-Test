@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt111';
+const BUILD_TAG = 'gt112';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3586,7 +3586,11 @@ function drawOverworld() {
         if (owRosterOpen) {
             const rows = onCourse.slice(0, 8);
             const pw = 258, rowH = 30, headH = 34;
-            const footH = resort.lastTourney ? 24 : 0;
+            // Hall of fame: up to 3 recent champions (1 when the roster is
+            // long, so the panel always fits a phone screen)
+            const champs = (resort.tourneyHistory || (resort.lastTourney ? [resort.lastTourney] : []))
+                .slice(0, rows.length >= 7 ? 1 : 3);
+            const footH = champs.length ? 14 + champs.length * 16 : 0;
             const ph = headH + Math.max(rows.length, 1) * rowH + footH + 10;
             // Clear of the right-edge camera rail (which draws after us)
             const px = Math.min(rx0, W() - pw - 54);
@@ -3622,14 +3626,20 @@ function drawOverworld() {
                     + (s.lastRound ? ' • last ' + s.lastRound : '');
                 ctx.fillText(prog, px + pw - 14, ry + 19);
             }
-            if (resort.lastTourney) {
-                const lt = resort.lastTourney;
-                const fy = py + headH + Math.max(rows.length, 1) * rowH + 16;
-                ctx.fillStyle = '#ffd24a';
-                ctx.font = 'bold 10px -apple-system,sans-serif';
+            if (champs.length) {
+                let fy = py + headH + Math.max(rows.length, 1) * rowH + 12;
+                ctx.fillStyle = 'rgba(255,255,255,0.45)';
+                ctx.font = 'bold 9px -apple-system,sans-serif';
                 ctx.textAlign = 'left';
-                ctx.fillText('\u{1F3C6} Day ' + lt.day + ' champ: ' + lt.winner
-                    + ' (' + lt.rel + ')', px + 14, fy);
+                ctx.fillText('CHAMPIONS', px + 14, fy);
+                fy += 14;
+                for (const lt of champs) {
+                    ctx.fillStyle = '#ffd24a';
+                    ctx.font = 'bold 10px -apple-system,sans-serif';
+                    ctx.fillText('\u{1F3C6} Day ' + lt.day + '  ' + lt.winner
+                        + '  (' + lt.rel + ')', px + 14, fy);
+                    fy += 16;
+                }
             }
             owRosterChip.panel = { x: px, y: py, w: pw, h: ph };
         } else if (owRosterChip) {
