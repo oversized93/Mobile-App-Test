@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt112';
+const BUILD_TAG = 'gt113';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -592,7 +592,7 @@ function startWorldHolePlaytest(holeRec) {
         tee: { x: holeRec.tee.x, y: holeRec.tee.y },
         hole: { x: holeRec.pin.x, y: holeRec.pin.y },
         par: holeRec.par,
-        name: 'Hole ' + holeRec.id,
+        name: holeRec.name || ('Hole ' + holeRec.id),
         bounds: holeBounds(holeRec),
         worldHoleId: holeRec.id
     };
@@ -3791,7 +3791,8 @@ function drawOverworld() {
             ctx.textAlign = 'left';
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 14px -apple-system,sans-serif';
-            ctx.fillText('Hole ' + selHole.id, hc.x + 14, hc.y + 21);
+            ctx.fillText((selHole.name || ('Hole ' + selHole.id)) + '  \u270E',
+                hc.x + 14, hc.y + 21);
             // Reference-style stat rows: label left, value right, bar fill
             const yds = Math.round(polylineLengthYards(selHole));
             const diff = holeDifficulty(selHole);
@@ -4654,6 +4655,16 @@ function overworldTouchStart(sx, sy) {
         const hc = holeCardLayout();
         const selHole = worldCourse.holes.find(h => h.id === owSelectedHole);
         if (selHole && hitBtn(sx, sy, hc.x, hc.y, hc.w, hc.h)) {
+            if (hitBtn(sx, sy, hc.x + 3, hc.y + 3, hc.w - 6, 26)) {
+                const cur = selHole.name || ('Hole ' + selHole.id);
+                const inp = prompt('Name this hole:', cur);
+                if (inp != null && inp.trim()) {
+                    selHole.name = inp.trim().slice(0, 18);
+                    saveWorldCourse();
+                    notify('\u26F3 ' + selHole.name);
+                }
+                return;
+            }
             if (hitBtn(sx, sy, hc.flyX, hc.flyY, hc.flyW, hc.flyH)) {
                 startHoleFlyover(selHole);
                 return;
