@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt126';
+const BUILD_TAG = 'gt127';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3737,7 +3737,9 @@ function drawOverworld() {
                 ctx.fillStyle = '#fff';
                 ctx.font = 'bold 12px -apple-system,sans-serif';
                 ctx.textAlign = 'left';
-                ctx.fillText(s.name, px + 14, ry + 19);
+                const isHolder = Object.values(worldCourse.holeStats || {})
+                    .some(st => st.bestBy === s.name);
+                ctx.fillText(s.name + (isHolder ? ' \u{1F3C5}' : ''), px + 14, ry + 19);
                 ctx.fillStyle = 'rgba(255,255,255,0.55)';
                 ctx.font = '11px -apple-system,sans-serif';
                 ctx.textAlign = 'right';
@@ -4166,6 +4168,18 @@ function drawGolferPanel(s) {
         s.lastRound ? 'Last round: ' + s.lastRound : 'First round');
     const tierName = s.tier === 'gold' ? 'Gold ★★' : s.tier === 'silver' ? 'Silver ★' : 'Basic';
     row('Membership: ' + tierName, 'Freakouts: ' + (s.freakouts || 0));
+    {
+        const held = Object.entries(worldCourse.holeStats || {})
+            .filter(([, st]) => st.bestBy === s.name)
+            .map(([id, st]) => 'H' + id + ' (' + st.best + ')');
+        if (held.length) {
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#ffd24a';
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            ctx.fillText('\u{1F3C5} Record holder: ' + held.join(', ').slice(0, 34), lx, y);
+            y += 14;
+        }
+    }
     y += 4;
     // Skill bars, levels 0-5
     for (const [label, lvl] of golferSkills(s.name)) {
