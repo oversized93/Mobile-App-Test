@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt146';
+const BUILD_TAG = 'gt147';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3114,6 +3114,53 @@ function regenIslandDraft() {
     islandDraft.confirm = false;
     islandDraft.course = makeIsland(islandDraft.params);
     islandDraft.course.heights = generateHeights(islandDraft.course);
+    // Island fact sheet: land share, forest share, and pond count (flood
+    // fill from the map edge marks the sea; leftover water = ponds)
+    {
+        const g = islandDraft.course.grid;
+        const rows = islandDraft.course.rows, cols = islandDraft.course.cols;
+        const sea = new Uint8Array(rows * cols);
+        const stack = [];
+        for (let c = 0; c < cols; c++) { stack.push(c); stack.push((rows - 1) * cols + c); }
+        for (let r = 0; r < rows; r++) { stack.push(r * cols); stack.push(r * cols + cols - 1); }
+        while (stack.length) {
+            const k = stack.pop();
+            const r = Math.floor(k / cols), c = k % cols;
+            if (r < 0 || r >= rows || c < 0 || c >= cols) continue;
+            if (sea[k] || g[r][c] !== T.WATER) continue;
+            sea[k] = 1;
+            stack.push(k - 1, k + 1, k - cols, k + cols);
+        }
+        let land = 0, forest = 0, pondCells = 0;
+        const pondSeen = new Uint8Array(rows * cols);
+        let ponds = 0;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const t = g[r][c], k = r * cols + c;
+                if (t !== T.WATER) { land++; if (t === T.TREE) forest++; }
+                else if (!sea[k]) {
+                    pondCells++;
+                    if (!pondSeen[k]) {
+                        ponds++;
+                        const st2 = [k];
+                        while (st2.length) {
+                            const k2 = st2.pop();
+                            const r2 = Math.floor(k2 / cols), c2 = k2 % cols;
+                            if (r2 < 0 || r2 >= rows || c2 < 0 || c2 >= cols) continue;
+                            if (pondSeen[k2] || sea[k2] || g[r2][c2] !== T.WATER) continue;
+                            pondSeen[k2] = 1;
+                            st2.push(k2 - 1, k2 + 1, k2 - cols, k2 + cols);
+                        }
+                    }
+                }
+            }
+        }
+        islandDraft.stats = {
+            landPct: Math.round(100 * land / (rows * cols)),
+            forestPct: land ? Math.round(100 * forest / land) : 0,
+            ponds: ponds
+        };
+    }
     if (scene3dReady) {
         buildTerrain3D(islandDraft.course, { distantScenery: false });
         cam3dOrbitMode = true;
@@ -3238,7 +3285,17 @@ function drawIslandCreator() {
                 islandUIRects.parcels.push({ pi, x: tx4, y: ty4, w: tw4, h: th4 });
             }
         }
-        y += PARCEL_ROWS * (th4 + 3) + 8;
+        y += PARCEL_ROWS * (th4 + 3) + 4;
+    }
+    if (islandDraft.stats) {
+        const st = islandDraft.stats;
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = '10px -apple-system,sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('Land ' + st.landPct + '%  \u2022  forest ' + st.forestPct
+            + '%  \u2022  ' + st.ponds + ' pond' + (st.ponds === 1 ? '' : 's'),
+            inX, y + 8);
+        y += 14;
     }
     // Button grid: 2 x 2
     const bw = (inW - 8) / 2, bh = 34;
