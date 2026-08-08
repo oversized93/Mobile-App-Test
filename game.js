@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt169';
+const BUILD_TAG = 'gt170';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -7034,6 +7034,11 @@ function gameLoop(time) {
             updateBall(dt);
             camLerp(dt);
             if (holeComplete && !ball.moving) {
+                // The gallery applauds an under-par hole from the owner
+                if (worldPlaytest && strokes < (currentHole.par || 4)
+                    && typeof playApplause === 'function') {
+                    playApplause();
+                }
                 setState('holeDone');
             }
         }
@@ -7335,6 +7340,33 @@ function playFanfare() {
             o.start(t0 + dt);
             o.stop(t0 + dt + 0.32);
         });
+    } catch (e) {}
+}
+
+// Crowd applause: a decaying burst of filtered noise claps
+function playApplause() {
+    if (!audioCtx) return;
+    try {
+        const t0 = audioCtx.currentTime;
+        for (let i = 0; i < 16; i++) {
+            const ts = t0 + Math.random() * 1.1 * (0.3 + i / 16);
+            const len = 0.03;
+            const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * len, audioCtx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let k = 0; k < d.length; k++) d[k] = (Math.random() * 2 - 1);
+            const srcN = audioCtx.createBufferSource();
+            srcN.buffer = buf;
+            const bp = audioCtx.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.value = 900 + Math.random() * 900;
+            const g = audioCtx.createGain();
+            g.gain.setValueAtTime(0.05 * (1 - i / 20), ts);
+            g.gain.exponentialRampToValueAtTime(0.001, ts + len);
+            srcN.connect(bp);
+            bp.connect(g);
+            g.connect(audioMaster);
+            srcN.start(ts);
+        }
     } catch (e) {}
 }
 
