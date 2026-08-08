@@ -2416,6 +2416,7 @@ function setupAmbientNPCs(hole) {
             name: gname,
             putterSkill: sk ? sk[2][1] : 2,
             recoverySkill: sk ? sk[3][1] : 2,
+            driverSkill: sk ? sk[0][1] : 2,
             holeId: rg.holeId, strokes: 0, lastRound: null, par: rg.par,
             diff: rg.diff,
             hunger: 8 + (gnIdx * 11) % 25, thirst: 6 + (gnIdx * 17) % 25,
@@ -2726,8 +2727,20 @@ function updateAmbientNPCs3D(dt, hole) {
                 if (!nxt) {
                     // Holed out: bank the green fee, then restart at the tee
                     s.lastRound = (s.strokes || 0) + 1; // the holing putt
+                    // Hole-in-one: a par-3 tee shot can drop — rare, and big
+                    // drivers make it slightly less rare
+                    if (s.lastRound === 2 && s.strokes === 1
+                        && Math.random() < 0.005 + 0.002 * (s.driverSkill || 2)) {
+                        s.lastRound = 1;
+                        golferThink(s, 'I ACED IT!!', 20);
+                        if (typeof notify === 'function') {
+                            notify('\u26A1 ACE! ' + (s.name || 'A golfer')
+                                + ' holes the tee shot on hole ' + s.holeId + '!');
+                        }
+                        if (typeof playFanfare === 'function') playFanfare();
+                    }
                     // Trickier greens lip out more first putts
-                    if (Math.random() < Math.max(0.04,
+                    if (s.lastRound > 1 && Math.random() < Math.max(0.04,
                         0.13 + 0.05 * (s.diff || 2) - (s.putterSkill || 2) * 0.022)) s.lastRound++;
                     s.strokes = 0;
                     const tierMult = s.tier === 'gold' ? 2
