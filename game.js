@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt138';
+const BUILD_TAG = 'gt139';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4272,14 +4272,22 @@ function drawGolferPanel(s) {
         for (let c = 0; c < 2; c++) {
             const [label, pct] = needs[n + c];
             const nx = lx + c * ((gp.w - 26) / 2 + 4);
+            const critical = pct > 75;
+            const pulse = critical
+                ? 0.6 + 0.4 * Math.sin(performance.now() / 180) : 1;
             ctx.textAlign = 'left';
-            ctx.fillStyle = 'rgba(255,255,255,0.55)';
-            ctx.font = '10px -apple-system,sans-serif';
-            ctx.fillText(label + ' ' + pct + '%', nx, y);
+            ctx.fillStyle = critical
+                ? 'rgba(240,120,100,' + (0.6 + 0.4 * pulse) + ')'
+                : 'rgba(255,255,255,0.55)';
+            ctx.font = critical ? 'bold 10px -apple-system,sans-serif'
+                                : '10px -apple-system,sans-serif';
+            ctx.fillText(label + ' ' + pct + '%' + (critical ? ' !' : ''), nx, y);
             ctx.fillStyle = 'rgba(255,255,255,0.12)';
             roundRect(nx, y + 4, (gp.w - 26) / 2 - 8, 4, 2); ctx.fill();
+            ctx.globalAlpha = pulse;
             ctx.fillStyle = pct > 60 ? '#ef5350' : pct > 35 ? '#f0a860' : '#66bb6a';
             roundRect(nx, y + 4, ((gp.w - 26) / 2 - 8) * pct / 100, 4, 2); ctx.fill();
+            ctx.globalAlpha = 1;
         }
         y += 17;
     }
