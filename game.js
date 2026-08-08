@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt119';
+const BUILD_TAG = 'gt120';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -503,6 +503,7 @@ function parcelPrice() {
 let owBalanceRect = null;   // balance chip rect (tap -> finances)
 let owFinancesRect = null;  // open finances panel rect
 let owFinancesOpen = false;
+let owNameRect = null;     // resort name rect in the top bar (tap to rename)
 let owDecorDrag = null;    // { i, moved } while repositioning a decor item
 let owBuyRect = null;  // screen rect of the buy chip
 let owBuyOffer = null; // { parcel, t0 } — buy chip shown after a blocked tap
@@ -3490,6 +3491,7 @@ function drawOverworld() {
     ctx.textAlign = 'left';
     ctx.fillText(worldCourse.name, L.pad + 6, 28);
     const nameW = ctx.measureText(worldCourse.name).width;
+    owNameRect = { x: L.pad + 2, y: 8, w: nameW + 12, h: 28 };
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '11px -apple-system,sans-serif';
     let subtitle = worldCourse.holes.length + ' holes \u2022 '
@@ -4521,6 +4523,8 @@ function overworldHUDHit(sx, sy) {
     }
     if (owBalanceRect && hitBtn(sx, sy, owBalanceRect.x, owBalanceRect.y,
         owBalanceRect.w, owBalanceRect.h)) return 'finances';
+    if (owNameRect && hitBtn(sx, sy, owNameRect.x, owNameRect.y,
+        owNameRect.w, owNameRect.h)) return 'rename';
     if (owFinancesOpen && owFinancesRect && hitBtn(sx, sy, owFinancesRect.x,
         owFinancesRect.y, owFinancesRect.w, owFinancesRect.h)) return 'finances:panel';
     if (owSpeedRects) {
@@ -4614,6 +4618,15 @@ function overworldTouchStart(sx, sy) {
     if (hit === 'close') { exitOverworld(); return; }
     if (hit === 'undo') { undoLastStroke(); return; }
     if (hit === 'buyparcel') { buyOfferedParcel(); return; }
+    if (hit === 'rename') {
+        const inp = prompt('Name your resort:', worldCourse.name);
+        if (inp != null && inp.trim()) {
+            worldCourse.name = inp.trim().slice(0, 24);
+            saveWorldCourse();
+            notify('\u26F3 Welcome to ' + worldCourse.name + '!');
+        }
+        return;
+    }
     if (hit === 'finances') { owFinancesOpen = !owFinancesOpen; return; }
     if (hit === 'finances:panel') return;
     if (owFinancesOpen) { owFinancesOpen = false; return; }
