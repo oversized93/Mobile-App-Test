@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt116';
+const BUILD_TAG = 'gt117';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6737,6 +6737,7 @@ function initAmbientAudio() {
             rainGain.gain.linearRampToValueAtTime(env * 0.5, audioCtx.currentTime + 0.25);
         }, 250);
         scheduleChirp();
+        scheduleGullCry();
         // Club strikes: poll the tee-launch cycles (same math as the
         // renderer's synced swings) and play a soft tock on each wrap
         const prevCycles = {};
@@ -6814,6 +6815,46 @@ function playFanfare() {
             o.stop(t0 + dt + 0.32);
         });
     } catch (e) {}
+}
+
+// Occasional gull cries — descending mewing squawks, daytime + gulls only
+function scheduleGullCry() {
+    if (!audioCtx) return;
+    setTimeout(() => {
+        if (!audioCtx) return;
+        try {
+            const h = ((((resort.worldClock || 0) / 60) % 24) + 24) % 24;
+            const gullsAbout = typeof gullStates !== 'undefined'
+                && gullStates && gullStates.length > 0;
+            const sceneOk = state === 'overworld' || state === 'menu' || state === 'playing';
+            if (h > 6 && h < 20 && sceneOk && gullsAbout) {
+                const t0 = audioCtx.currentTime;
+                const cries = 1 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < cries; i++) {
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    const ts = t0 + i * (0.28 + Math.random() * 0.1);
+                    const f0 = 900 + Math.random() * 250;
+                    o.type = 'sawtooth';
+                    o.frequency.setValueAtTime(f0, ts);
+                    o.frequency.exponentialRampToValueAtTime(f0 * 1.35, ts + 0.07);
+                    o.frequency.exponentialRampToValueAtTime(f0 * 0.62, ts + 0.3);
+                    const lp = audioCtx.createBiquadFilter();
+                    lp.type = 'lowpass';
+                    lp.frequency.value = 2400;
+                    g.gain.setValueAtTime(0, ts);
+                    g.gain.linearRampToValueAtTime(0.045, ts + 0.03);
+                    g.gain.exponentialRampToValueAtTime(0.001, ts + 0.32);
+                    o.connect(lp);
+                    lp.connect(g);
+                    g.connect(audioMaster);
+                    o.start(ts);
+                    o.stop(ts + 0.35);
+                }
+            }
+        } catch (e) {}
+        scheduleGullCry();
+    }, 9000 + Math.random() * 16000);
 }
 
 function scheduleChirp() {
