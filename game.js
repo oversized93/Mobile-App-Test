@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt160';
+const BUILD_TAG = 'gt161';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -7170,6 +7170,23 @@ function initAmbientAudio() {
         scheduleChirp();
         scheduleGullCry();
         scheduleFrogCroak();
+        // Courtesy honk when the cart rolls close past someone (8s cooldown)
+        let lastHonk = 0;
+        setInterval(() => {
+            if (!audioCtx || state !== 'overworld') return;
+            if (typeof cartState === 'undefined' || !cartState) return;
+            if (typeof npcStates === 'undefined' || !npcStates.length) return;
+            const now = performance.now();
+            if (now - lastHonk < 8000) return;
+            for (const s of npcStates) {
+                const dx = s.x - cartState.x, dz = s.z - cartState.z;
+                if (dx * dx + dz * dz < 42 * 42) {
+                    lastHonk = now;
+                    playHonk();
+                    break;
+                }
+            }
+        }, 600);
         // Club strikes: poll the tee-launch cycles (same math as the
         // renderer's synced swings) and play a soft tock on each wrap
         const prevCycles = {};
@@ -7245,6 +7262,27 @@ function playFanfare() {
             g.connect(audioMaster);
             o.start(t0 + dt);
             o.stop(t0 + dt + 0.32);
+        });
+    } catch (e) {}
+}
+
+// Cart honk: two friendly beeps
+function playHonk() {
+    if (!audioCtx) return;
+    try {
+        const t0 = audioCtx.currentTime;
+        [[620, 0], [495, 0.13]].forEach(([f, dt]) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(f, t0 + dt);
+            g.gain.setValueAtTime(0.0001, t0 + dt);
+            g.gain.linearRampToValueAtTime(0.07, t0 + dt + 0.015);
+            g.gain.exponentialRampToValueAtTime(0.001, t0 + dt + 0.12);
+            o.connect(g);
+            g.connect(audioMaster);
+            o.start(t0 + dt);
+            o.stop(t0 + dt + 0.14);
         });
     } catch (e) {}
 }
