@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt104';
+const BUILD_TAG = 'gt105';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -103,6 +103,7 @@ function makeStarterCourse() {
         id: 'course_1',
         name: 'My Resort',
         biome: 'meadows',
+        freshDefault: true, // first overworld visit routes to the creator
         cols, rows, border,
         grid,
         holes: [{
@@ -298,7 +299,18 @@ function saveWorldCourse() {
     saveData('course', persistable);
 }
 
-function enterOverworld() { setState('overworld'); }
+function enterOverworld() {
+    // A brand-new resort starts at Create Your Island (reference flow).
+    // Backing out keeps the default island; the flag clears either way so
+    // this only ever intercepts once.
+    if (worldCourse.freshDefault && typeof startIslandCreator === 'function') {
+        delete worldCourse.freshDefault;
+        saveWorldCourse();
+        startIslandCreator();
+        return;
+    }
+    setState('overworld');
+}
 
 function stateEnterOverworld() {
     owRosterOpen = false;
