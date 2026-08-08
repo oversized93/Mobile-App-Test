@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt130';
+const BUILD_TAG = 'gt131';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3760,8 +3760,11 @@ function drawOverworld() {
                 ctx.textAlign = 'left';
                 const isHolder = Object.values(worldCourse.holeStats || {})
                     .some(st => st.bestBy === s.name);
-                ctx.fillText(s.name + (isHolder ? ' \u{1F3C5}' : ''), px + 14, ry + 19);
-                ctx.fillStyle = 'rgba(255,255,255,0.55)';
+                const grumpy = s.mood != null && s.mood < 35;
+                ctx.fillText(s.name + (isHolder ? ' \u{1F3C5}' : '')
+                    + (grumpy ? ' \u{1F620}' : ''), px + 14, ry + 19);
+                ctx.fillStyle = (s.mood != null && s.mood < 35)
+                    ? 'rgba(240,140,120,0.85)' : 'rgba(255,255,255,0.55)';
                 ctx.font = '11px -apple-system,sans-serif';
                 ctx.textAlign = 'right';
                 const prog = 'H' + s.holeId + ' • '
