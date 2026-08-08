@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt95';
+const BUILD_TAG = 'gt96';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -113,6 +113,118 @@ function makeStarterCourse() {
         }],
         facilities: [], // future: { type, x, y, rot }
         scenery: []     // future: { type, x, y }
+    };
+}
+
+// ---- Procedural island generator (Create Your Island) ----
+// Seeded and fully deterministic: same params + seed = same island.
+// Coastline is a radial profile of 6 sine harmonics (roundness pulls it
+// toward a circle), sea fills the outside, a beach ring hugs the coast,
+// and low-frequency value noise carves interior ponds and forests.
+function makeIsland(params) {
+    const p = Object.assign({
+        seed: 2990, water: 0.35, hills: 0.5, trees: 0.6,
+        rocks: 0.4, roundness: 0.6, grass: 0.7
+    }, params || {});
+    const cols = COURSE_COLS, rows = COURSE_ROWS;
+    const frame = 2; // hard OOB frame so pan clamps stay sane
+    const seed = p.seed | 0;
+    const rand = (n) => {
+        const a = Math.sin(n * 127.1 + seed * 311.7) * 43758.5453;
+        return a - Math.floor(a);
+    };
+    const harm = [];
+    for (let k = 0; k < 6; k++) {
+        harm.push({ a: rand(k + 1), ph: rand(k + 40) * Math.PI * 2 });
+    }
+    const ccx = cols / 2, ccy = rows / 2;
+    const baseR = Math.min(cols, rows) / 2 - frame - 3;
+    const coastR = (theta) => {
+        let n = 0;
+        for (let k = 0; k < 6; k++) {
+            n += harm[k].a * Math.sin((k + 1) * theta + harm[k].ph) / (k + 1);
+        }
+        const wob = 1 + (n / 1.6) * (1 - p.roundness) * 0.9;
+        return baseR * Math.max(0.35, wob);
+    };
+    const lat = (x, y) => rand(x * 731 + y * 1237);
+    const s2 = (x, y, per) => {
+        const gx = x / per, gy = y / per;
+        const x0 = Math.floor(gx), y0 = Math.floor(gy);
+        const fx = gx - x0, fy = gy - y0;
+        const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+        return lat(x0, y0) * (1 - ux) * (1 - uy) + lat(x0 + 1, y0) * ux * (1 - uy)
+             + lat(x0, y0 + 1) * (1 - ux) * uy + lat(x0 + 1, y0 + 1) * ux * uy;
+    };
+    const pondCut = 1 - p.water * 0.45;
+    const grid = [];
+    for (let r = 0; r < rows; r++) {
+        grid[r] = [];
+        for (let c = 0; c < cols; c++) {
+            if (r < frame || r >= rows - frame || c < frame || c >= cols - frame) {
+                grid[r][c] = T.WATER; // open sea to the map edge, no frame
+                continue;
+            }
+            const dx = c - ccx, dy = r - ccy;
+            const k = Math.sqrt(dx * dx + dy * dy) / coastR(Math.atan2(dy, dx));
+            if (k >= 1) { grid[r][c] = T.WATER; continue; }      // open sea
+            if (k > 0.93) { grid[r][c] = T.SAND; continue; }     // beach ring
+            if (k < 0.8 && s2(c, r, 11) > pondCut) {             // ponds
+                grid[r][c] = T.WATER;
+                continue;
+            }
+            if (s2(c + 199, r + 71, 8) > 1 - p.trees * 0.5) {    // forests
+                grid[r][c] = T.TREE;
+                continue;
+            }
+            grid[r][c] = T.ROUGH;
+        }
+    }
+    // Entrance: southernmost land on the center column carries the gate;
+    // the pad + walkway are paved over whatever the noise put there
+    let entR = rows - frame - 1;
+    while (entR > ccy && grid[entR][Math.floor(ccx)] === T.WATER) entR--;
+    entR -= 1; // one row inland of the beach
+    const entC = Math.floor(ccx);
+    for (let r = entR - 1; r <= entR + 1; r++)
+        for (let c = entC - 2; c <= entC + 2; c++)
+            if (grid[r] && grid[r][c] !== undefined) grid[r][c] = T.PATH;
+    for (let r = entR - 12; r < entR - 1; r++)
+        for (let c = entC - 1; c <= entC + 1; c++)
+            if (grid[r] && grid[r][c] !== undefined) grid[r][c] = T.PATH;
+    // Starter hole northwest of the walkway so day one has play running
+    const paint = (c0, r0, c1, r1, t) => {
+        for (let r = r0; r <= r1; r++)
+            for (let c = c0; c <= c1; c++)
+                if (grid[r] && grid[r][c] !== undefined && grid[r][c] !== T.OOB)
+                    grid[r][c] = t;
+    };
+    paint(entC - 8, entR - 16, entC - 4, entR - 12, T.TEE);
+    paint(entC - 10, entR - 34, entC - 2, entR - 16, T.FAIRWAY);
+    paint(entC - 2, entR - 40, entC + 10, entR - 30, T.FAIRWAY);
+    paint(entC + 10, entR - 42, entC + 16, entR - 36, T.GREEN);
+    paint(entC + 2, entR - 30, entC + 7, entR - 26, T.SAND);
+    paint(entC - 6, entR - 13, entC - 1, entR - 12, T.PATH);
+    return {
+        id: 'course_1',
+        name: 'My Resort',
+        biome: 'meadows',
+        cols, rows,
+        border: rows - entR,      // keeps the ENTRANCE marker on the pad
+        grid,
+        terrainSeed: seed,
+        hillAmp: 0.4 + p.hills * 1.2,
+        rockDensity: p.rocks,
+        grassDensity: p.grass,
+        islandParams: p,          // so the create screen can re-roll
+        holes: [{
+            id: 1, par: 4,
+            tee: { x: entC - 6, y: entR - 14 },
+            pin: { x: entC + 13, y: entR - 39 },
+            waypoints: [{ x: entC - 5, y: entR - 25 }]
+        }],
+        facilities: [],
+        scenery: []
     };
 }
 
@@ -922,7 +1034,7 @@ function generateHeights(hole) {
     const h = [];
     // Generate a low-res control grid of random heights, then smoothly interpolate
     // This gives rolling hills instead of jagged pixel noise
-    const seed = hole.cols * 137 + hole.rows * 311;
+    const seed = hole.cols * 137 + hole.rows * 311 + (hole.terrainSeed || 0);
     function hash(x, y) {
         const a = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
         return (a - Math.floor(a)) * 2 - 1; // -1 to 1
@@ -935,8 +1047,10 @@ function generateHeights(hole) {
     for (let r = 0; r < ctrlRows; r++) {
         ctrl[r] = [];
         for (let c = 0; c < ctrlCols; c++) {
-            // Two octaves of hash noise — dramatic rolling hills
-            ctrl[r][c] = hash(c, r) * 85 + hash(c * 2.7, r * 2.7) * 28;
+            // Two octaves of hash noise — dramatic rolling hills, scaled
+            // by the island's Hills slider when one was chosen
+            ctrl[r][c] = (hash(c, r) * 85 + hash(c * 2.7, r * 2.7) * 28)
+                * (hole.hillAmp || 1);
         }
     }
     // Smoothstep curve for interpolation (matches Perlin-style easing)
