@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt137';
+const BUILD_TAG = 'gt138';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2854,6 +2854,23 @@ function drawManage() {
             + '\u2606'.repeat(5 - Math.ceil(rating));
         ctx.fillText(stars + '  •  ' + worldCourse.holes.length + ' holes  •  fees $'
             + (resort.feesEarned || 0), L.contentX + L.contentW - 4, L.amenityLabelY + 14);
+        // Next-star hint: name the weakest rating ingredient
+        if (rating < 5) {
+            const parts = [];
+            parts.push(['build more holes', Math.min(2.5, worldCourse.holes.length * 0.4) / 2.5]);
+            const diffs = new Set(worldCourse.holes.map(h => holeDifficulty(h)));
+            parts.push(['vary hole difficulty', Math.min(1, diffs.size * 0.35)]);
+            const decorVal = (worldCourse.decor || []).reduce(
+                (s, d) => s + (DECOR_COSTS[d.t] || 0), 0);
+            parts.push(['invest in decor', Math.min(1, decorVal / 1000)]);
+            parts.push(['add a kiosk or stall',
+                (worldCourse.decor || []).some(d => d.t === 'kiosk' || d.t === 'stall') ? 1 : 0]);
+            parts.sort((a, b) => a[1] - b[1]);
+            ctx.fillStyle = 'rgba(255,210,74,0.75)';
+            ctx.font = '10px -apple-system,sans-serif';
+            ctx.fillText('next star: ' + parts[0][0],
+                L.contentX + L.contentW - 4, L.amenityLabelY + 28);
+        }
     }
     ctx.textAlign = 'left';
 
