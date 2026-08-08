@@ -835,18 +835,45 @@ let albedoHoleRef = null;
 // before ACES tone mapping (the tree tints were picked the same way).
 const ALBEDO_COLORS = {
     base: {
-        [T.GRASS]:   '#256d35',
+        [T.GRASS]:   '#2c6a31',
         [T.FAIRWAY]: '#2f8742',   // stripe A; B derived darker
         [T.GREEN]:   '#39a04f',
-        [T.ROUGH]:   '#1f6130',
+        [T.ROUGH]:   '#295c2b',
         [T.SAND]:    '#c2a15c',
         [T.WATER]:   '#1a6fae',
-        [T.TREE]:    '#1a5228',   // forest floor under canopies
+        [T.TREE]:    '#20502a',   // forest floor under canopies
         [T.TEE]:     '#43aa58',
-        [T.OOB]:     '#12351c',
+        [T.OOB]:     '#16381b',
         [T.PATH]:    '#8f7347'
     }
 };
+
+// Low-frequency smooth value noise for organic dirt blotches in the
+// rough (reference maps are mottled brown/green, not uniform lawn)
+function dirtNoise(c, r) {
+    const lat = (x, y) => {
+        let h = ((x * 374761393) ^ (y * 668265263)) >>> 0;
+        h = (h ^ (h >>> 13)) >>> 0;
+        return (h % 1000) / 1000;
+    };
+    const sm = (x, y, p) => {
+        const gx = x / p, gy = y / p;
+        const x0 = Math.floor(gx), y0 = Math.floor(gy);
+        const fx = gx - x0, fy = gy - y0;
+        const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+        return lat(x0, y0) * (1 - ux) * (1 - uy) + lat(x0 + 1, y0) * ux * (1 - uy)
+             + lat(x0, y0 + 1) * (1 - ux) * uy + lat(x0 + 1, y0 + 1) * ux * uy;
+    };
+    return sm(c, r, 13) * 0.65 + sm(c + 57, r + 91, 6) * 0.35;
+}
+
+function mixHex(a, b, t) {
+    const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    const r = Math.round(((pa >> 16) & 255) * (1 - t) + ((pb >> 16) & 255) * t);
+    const g = Math.round(((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t);
+    const bl = Math.round((pa & 255) * (1 - t) + (pb & 255) * t);
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1);
+}
 
 function albedoCellColor(hole, c, r) {
     // Chamfers ask for corner-neighbor colors that can sit off-grid on
@@ -875,6 +902,14 @@ function albedoCellColor(hole, c, r) {
             if (edge <= 3
                 && ((Math.floor(c / 9) * 73 + Math.floor(r / 9) * 131) % 5) < 2) {
                 col = shadeHex('#7d6b45', j * 0.008);
+            }
+        }
+        if (t === T.ROUGH || t === T.GRASS || t === T.TREE) {
+            // Organic dirt blotches sweep through the rough
+            const dn = dirtNoise(c, r);
+            if (dn > 0.54) {
+                const k = Math.min(1, (dn - 0.54) / 0.16);
+                col = mixHex(col, '#7c5636', 0.62 * k);
             }
         }
         if (t === T.ROUGH || t === T.GRASS) {
@@ -1386,8 +1421,9 @@ function buildTerrain3D(hole, opts) {
             const variant = (tc.c * 31 + tc.r * 17) % 4;
             if (nearSandOrWaterA(tc.c, tc.r) && (tc.c * 5 + tc.r * 3) % 10 < 7) palmCells.push(tc);
             else if (variant === 0) bushCells.push(tc);
-            else if (variant === 1) (((tc.c * 19 + tc.r * 7) % 5) < 2 ? fall : leafy).push(tc);
-            else pines.push(tc);
+            else if (variant === 1) (((tc.c * 19 + tc.r * 7) % 5) < 3 ? fall : leafy).push(tc);
+            else if (variant === 2) (((tc.c * 11 + tc.r * 23) % 5) < 2 ? fall : pines).push(tc);
+            else (((tc.c * 29 + tc.r * 13) % 5) < 2 ? fall : pines).push(tc);
         }
         placeAssetInstances(hole, pines, 'pine');
         placeAssetInstances(hole, leafy, 'leafy');
