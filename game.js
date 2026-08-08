@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt108';
+const BUILD_TAG = 'gt109';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -516,6 +516,7 @@ function buyOfferedParcel() {
         return;
     }
     resort.coins -= price;
+    if (typeof playChime === 'function') playChime();
     p.owned.push(owBuyOffer.parcel);
     p.bought = (p.bought || 0) + 1;
     owBuyOffer = null;
@@ -907,6 +908,7 @@ function tickWorld(dt) {
             };
             notify('\u{1F3C6} ' + name + ' wins the tournament (' + relTxt
                 + ' avg)! Gallery spends $' + purse);
+            if (typeof playFanfare === 'function') playFanfare();
         }
     }
     // Membership drifts toward what the resort deserves: holes draw
@@ -4745,6 +4747,7 @@ function overworldTouchStart(sx, sy) {
                 }
                 resort.coins -= cost;
                 saveData('resort', resort);
+                if (typeof playChime === 'function') playChime();
                 worldCourse.decor.push({ t: tool.decor, x: cell.c + 0.5, y: cell.r + 0.5, rot: 0 });
                 notify(tool.label + ' placed  −$' + cost);
             }
@@ -6702,6 +6705,48 @@ function playStrikeTock() {
         g.connect(audioMaster);
         o.start(t0);
         o.stop(t0 + 0.08);
+    } catch (e) {}
+}
+
+// Bright two-note coin chime for player purchases
+function playChime() {
+    if (!audioCtx) return;
+    try {
+        const t0 = audioCtx.currentTime;
+        [[880, 0], [1318.5, 0.07]].forEach(([f, dt]) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(f, t0 + dt);
+            g.gain.setValueAtTime(0.0001, t0 + dt);
+            g.gain.exponentialRampToValueAtTime(0.14, t0 + dt + 0.015);
+            g.gain.exponentialRampToValueAtTime(0.001, t0 + dt + 0.22);
+            o.connect(g);
+            g.connect(audioMaster);
+            o.start(t0 + dt);
+            o.stop(t0 + dt + 0.25);
+        });
+    } catch (e) {}
+}
+
+// Little rising fanfare for tournament ceremonies
+function playFanfare() {
+    if (!audioCtx) return;
+    try {
+        const t0 = audioCtx.currentTime;
+        [[523.3, 0], [659.3, 0.12], [784, 0.24], [1046.5, 0.36]].forEach(([f, dt]) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'square';
+            o.frequency.setValueAtTime(f, t0 + dt);
+            g.gain.setValueAtTime(0.0001, t0 + dt);
+            g.gain.exponentialRampToValueAtTime(0.055, t0 + dt + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, t0 + dt + 0.3);
+            o.connect(g);
+            g.connect(audioMaster);
+            o.start(t0 + dt);
+            o.stop(t0 + dt + 0.32);
+        });
     } catch (e) {}
 }
 
