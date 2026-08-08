@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt100';
+const BUILD_TAG = 'gt101';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -488,6 +488,9 @@ function parcelOwned(c, r) {
 function parcelPrice() {
     return Math.round(500 * Math.pow(1.6, ensureParcels().bought || 0));
 }
+let owBalanceRect = null;   // balance chip rect (tap -> finances)
+let owFinancesRect = null;  // open finances panel rect
+let owFinancesOpen = false;
 let owBuyRect = null;  // screen rect of the buy chip
 let owBuyOffer = null; // { parcel, t0 } — buy chip shown after a blocked tap
 function offerParcel(c, r) {
@@ -788,6 +791,25 @@ function applyOfflineCatchup() {
 // the Manage screen was open, which made every economy feature screen-gated.)
 let _worldSaveAcc = 0;
 let _worldStatsDirty = false;
+
+// ---- Finances ledger: daily income/expenses like the reference ----
+function ensureLedger() {
+    if (!resort.ledger) {
+        resort.ledger = { day: Math.floor((resort.worldClock || 0) / 1440),
+                          income: 0, expenses: 0, prevIncome: 0, prevExpenses: 0 };
+    }
+    return resort.ledger;
+}
+function ledgerIncome(amt) {
+    if (amt > 0) ensureLedger().income += amt;
+}
+function dailyUpkeep() {
+    const holeCost = worldCourse.holes.length * 8;
+    const decorCost = Math.floor((worldCourse.decor || []).reduce(
+        (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) * 0.02);
+    return { holes: holeCost, decor: decorCost, total: holeCost + decorCost };
+}
+
 function tickWorld(dt) {
     resort.worldClock = (resort.worldClock || 0) + dt;
     // Green fees: ambient golfers holing out pay per-hole fees scaled by
@@ -795,7 +817,28 @@ function tickWorld(dt) {
     if (window.__golfFees) {
         resort.coins += window.__golfFees;
         resort.feesEarned = (resort.feesEarned || 0) + window.__golfFees;
+        ledgerIncome(window.__golfFees);
         window.__golfFees = 0;
+    }
+    // Day rollover: archive today's books, charge the new day's upkeep
+    {
+        const led = ensureLedger();
+        const today = Math.floor((resort.worldClock || 0) / 1440);
+        if (led.day !== today) {
+            led.prevIncome = led.income;
+            led.prevExpenses = led.expenses;
+            led.income = 0;
+            led.expenses = 0;
+            led.day = today;
+            const up = dailyUpkeep();
+            const charged = Math.min(resort.coins, up.total);
+            resort.coins -= charged;
+            led.expenses += charged;
+            if (up.total > 0) {
+                notify('\u{1F9FE} Daily upkeep: -$' + charged
+                    + '  (holes $' + up.holes + ' \u2022 decor $' + up.decor + ')');
+            }
+        }
     }
     if (window.__stallSales) {
         resort.stallSales = (resort.stallSales || 0) + window.__stallSales;
@@ -842,6 +885,7 @@ function tickWorld(dt) {
             const name = pool[0][0], tb = pool[0][1];
             const purse = 40 + 2 * (resort.members || 0);
             resort.coins += purse;
+            ledgerIncome(purse);
             const relAvg = tb.rel / tb.n;
             const relTxt = (relAvg <= 0 ? '' : '+') + relAvg.toFixed(1);
             resort.lastTourney = {
@@ -869,6 +913,7 @@ function tickWorld(dt) {
         const whole = Math.floor(resort.coinsFrac);
         resort.coins += whole;
         resort.coinsFrac -= whole;
+        ledgerIncome(whole);
     }
     resort.lastTickMs = Date.now();
     // Persist at a gentle cadence so closing the app rarely loses progress
@@ -3393,9 +3438,10 @@ function drawOverworld() {
     }
     ctx.fillText(subtitle, L.pad + 6 + nameW + 12, 28);
 
-    // Balance chip (top center) — gold glossy
+    // Balance chip (top center) — gold glossy; tap for the finances panel
     const bpW = 124, bpH = 30;
     const bpX = (W() - bpW) / 2, bpY = (L.topBarH - bpH) / 2;
+    owBalanceRect = { x: bpX, y: bpY, w: bpW, h: bpH };
     glossyRect(bpX, bpY, bpW, bpH, bpH / 2, '#d9a02a');
     ctx.fillStyle = '#231a05';
     ctx.font = 'bold 14px -apple-system,sans-serif';
@@ -3422,6 +3468,42 @@ function drawOverworld() {
             owSpeedRects.push({ spd, x: bx, y: sy0, w: bs, h: bs });
         }
     }
+    // Finances panel under the balance chip
+    owFinancesRect = null;
+    if (owFinancesOpen) {
+        ensureLedger();
+        const led = resort.ledger;
+        const up = dailyUpkeep();
+        const fw = 250, fh = 128;
+        const fx = (W() - fw) / 2, fy = L.topBarH + 8;
+        ctx.fillStyle = 'rgba(12,24,32,0.94)';
+        roundRect(fx, fy, fw, fh, 12); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.lineWidth = 1;
+        roundRect(fx, fy, fw, fh, 12); ctx.stroke();
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText('FINANCES', fx + 14, fy + 20);
+        const line = (label, val, col, yy) => {
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = '11px -apple-system,sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(label, fx + 14, yy);
+            ctx.fillStyle = col;
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(val, fx + fw - 14, yy);
+        };
+        line("Today's income", '+$' + Math.round(led.income), '#8be06a', fy + 40);
+        line("Today's expenses", '-$' + Math.round(led.expenses), '#e77d6a', fy + 56);
+        line("Yesterday's income", '+$' + Math.round(led.prevIncome), '#8be06a', fy + 76);
+        line("Yesterday's expenses", '-$' + Math.round(led.prevExpenses), '#e77d6a', fy + 92);
+        line('Upkeep/day', '$' + up.total + '  (' + worldCourse.holes.length
+            + ' holes + decor)', 'rgba(255,255,255,0.8)', fy + 112);
+        owFinancesRect = { x: fx, y: fy, w: fw, h: fh };
+    }
+
     // Paused banner, center-top like the reference
     if (gameSpeed === 0) {
         ctx.font = 'bold 13px -apple-system,sans-serif';
@@ -4336,6 +4418,10 @@ function overworldHUDHit(sx, sy) {
         && hitBtn(sx, sy, owBuyRect.x, owBuyRect.y, owBuyRect.w, owBuyRect.h)) {
         return 'buyparcel';
     }
+    if (owBalanceRect && hitBtn(sx, sy, owBalanceRect.x, owBalanceRect.y,
+        owBalanceRect.w, owBalanceRect.h)) return 'finances';
+    if (owFinancesOpen && owFinancesRect && hitBtn(sx, sy, owFinancesRect.x,
+        owFinancesRect.y, owFinancesRect.w, owFinancesRect.h)) return 'finances:panel';
     if (owSpeedRects) {
         for (const sr of owSpeedRects) {
             if (hitBtn(sx, sy, sr.x, sr.y, sr.w, sr.h)) return 'speed:' + sr.spd;
@@ -4427,6 +4513,9 @@ function overworldTouchStart(sx, sy) {
     if (hit === 'close') { exitOverworld(); return; }
     if (hit === 'undo') { undoLastStroke(); return; }
     if (hit === 'buyparcel') { buyOfferedParcel(); return; }
+    if (hit === 'finances') { owFinancesOpen = !owFinancesOpen; return; }
+    if (hit === 'finances:panel') return;
+    if (owFinancesOpen) { owFinancesOpen = false; return; }
     if (hit && hit.startsWith('speed:')) {
         gameSpeed = parseInt(hit.slice(6), 10);
         return;
