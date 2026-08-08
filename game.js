@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt115';
+const BUILD_TAG = 'gt116';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1346,6 +1346,7 @@ function updateBall(dt) {
                 const ter = terrainAt(ball.x, ball.y);
                 if (ter === T.WATER) {
                     ball.vx = 0; ball.vy = 0; ball.vz = 0; ball.moving = false;
+                    if (typeof spawnSplash3D === 'function') spawnSplash3D(ball.x, ball.y);
                     notify('Splash! +1 stroke');
                     strokes++;
                     resetBallToLastSafe();

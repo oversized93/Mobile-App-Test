@@ -2493,8 +2493,44 @@ function golferThink(s, text, v) {
     }
 }
 
+// ---- Ball water splash: expanding foam ring at the entry point ----
+let ballSplashes = [];
+function spawnSplash3D(wx, wz) {
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    const ringGeo = new THREE.RingGeometry(1.5, 3.4, 18);
+    ringGeo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({
+        color: 0xdffcff, transparent: true, opacity: 0.95,
+        depthWrite: false, side: THREE.DoubleSide
+    });
+    mat.toneMapped = false;
+    const m = new THREE.Mesh(ringGeo, mat);
+    m.position.set(wx, -1.0, wz); // a hair above the water plane
+    m.renderOrder = 3;
+    scene3d.add(m);
+    ballSplashes.push({ m, mat, t0: performance.now() });
+}
+function updateSplashes3D() {
+    const now = performance.now();
+    for (let i = ballSplashes.length - 1; i >= 0; i--) {
+        const s = ballSplashes[i];
+        const k = (now - s.t0) / 900;
+        if (k >= 1) {
+            scene3d.remove(s.m);
+            s.m.geometry.dispose();
+            s.mat.dispose();
+            ballSplashes.splice(i, 1);
+            continue;
+        }
+        const sc = 1 + k * 5.5;
+        s.m.scale.set(sc, 1, sc);
+        s.mat.opacity = 0.95 * (1 - k) * (1 - k);
+    }
+}
+
 // Called from the game loop each frame while the overworld is visible
 function updateAmbientNPCs3D(dt, hole) {
+    updateSplashes3D();
     updateHoverBots3D(dt, hole);
     updateFountains3D();
     updatePinRings3D();
