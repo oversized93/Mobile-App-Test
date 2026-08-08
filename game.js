@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt99';
+const BUILD_TAG = 'gt100';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -180,12 +180,16 @@ function makeIsland(params) {
             grid[r][c] = T.ROUGH;
         }
     }
-    // Entrance: southernmost land on the center column carries the gate;
-    // the pad + walkway are paved over whatever the noise put there
+    // Entrance: the starting property picks the gate's column — the
+    // southernmost land in that parcel column carries the entrance
+    const startParcel = (p.startParcel != null)
+        ? p.startParcel : (PARCEL_ROWS - 1) * PARCEL_COLS + 1;
+    const startColIdx = startParcel % PARCEL_COLS;
+    const entC = Math.min(cols - frame - 4, Math.max(frame + 4,
+        Math.round((startColIdx + 0.5) * cols / PARCEL_COLS)));
     let entR = rows - frame - 1;
-    while (entR > ccy && grid[entR][Math.floor(ccx)] === T.WATER) entR--;
+    while (entR > ccy && grid[entR][entC] === T.WATER) entR--;
     entR -= 1; // one row inland of the beach
-    const entC = Math.floor(ccx);
     for (let r = entR - 1; r <= entR + 1; r++)
         for (let c = entC - 2; c <= entC + 2; c++)
             if (grid[r] && grid[r][c] !== undefined) grid[r][c] = T.PATH;
@@ -216,7 +220,8 @@ function makeIsland(params) {
         parcels: (() => {
             const pIdx = (c, r) => Math.min(PARCEL_ROWS - 1, Math.floor(r / (rows / PARCEL_ROWS)))
                 * PARCEL_COLS + Math.min(PARCEL_COLS - 1, Math.floor(c / (cols / PARCEL_COLS)));
-            return { owned: [...new Set([pIdx(entC, entR), pIdx(entC, entR - 22)])], bought: 0 };
+            return { owned: [...new Set([startParcel, pIdx(entC, entR),
+                pIdx(entC, entR - 22)])], bought: 0 };
         })(),
         hillAmp: 0.4 + p.hills * 1.2,
         rockDensity: p.rocks,
@@ -2953,7 +2958,7 @@ function drawIslandCreator() {
     islandUIRects = { sliders: {}, buttons: {} };
     const inX = px + 12, inW = pw - 24;
     let y = py + 42;
-    const rowH = Math.max(26, Math.min(32, Math.floor((ph - 46 - 118) / 7)));
+    const rowH = Math.max(24, Math.min(30, Math.floor((ph - 46 - 178) / 7)));
     for (const [key, label] of ISLAND_SLIDERS) {
         const v = islandDraft.params[key];
         const trackH = rowH - 8;
@@ -2989,7 +2994,55 @@ function drawIslandCreator() {
     ctx.font = 'bold 11px -apple-system,sans-serif';
     ctx.fillText(String(islandDraft.params.seed), inX + inW - 9, y + 15);
     islandUIRects.buttons.seed = { x: inX, y: y, w: inW, h: 22 };
-    y += 30;
+    y += 28;
+    // Starting property picker: mini parcel map shaded by land coverage;
+    // tap a section to put your gate (and first deed) there
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = 'bold 9px -apple-system,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('SELECT STARTING PROPERTY', inX, y + 8);
+    y += 13;
+    islandUIRects.parcels = [];
+    {
+        const course = islandDraft.course;
+        const tw4 = (inW - (PARCEL_COLS - 1) * 3) / PARCEL_COLS;
+        const th4 = 15;
+        const chosen = islandDraft.params.startParcel != null
+            ? islandDraft.params.startParcel : (PARCEL_ROWS - 1) * PARCEL_COLS + 1;
+        for (let pr = 0; pr < PARCEL_ROWS; pr++) {
+            for (let pc = 0; pc < PARCEL_COLS; pc++) {
+                const pi = pr * PARCEL_COLS + pc;
+                // Land fraction shades the tile: sea tiles read dark
+                let land = 0, tot = 0;
+                const c0 = Math.floor(pc * course.cols / PARCEL_COLS);
+                const c1 = Math.floor((pc + 1) * course.cols / PARCEL_COLS);
+                const r0 = Math.floor(pr * course.rows / PARCEL_ROWS);
+                const r1 = Math.floor((pr + 1) * course.rows / PARCEL_ROWS);
+                for (let r = r0; r < r1; r += 3)
+                    for (let c = c0; c < c1; c += 3) {
+                        tot++;
+                        if (course.grid[r][c] !== T.WATER) land++;
+                    }
+                const frac = tot ? land / tot : 0;
+                const tx4 = inX + pc * (tw4 + 3);
+                const ty4 = y + pr * (th4 + 3);
+                ctx.fillStyle = pi === chosen ? 'rgba(58,219,232,0.85)'
+                    : 'rgba(' + Math.round(60 + 30 * frac) + ','
+                      + Math.round(90 + 90 * frac) + ','
+                      + Math.round(70 + 40 * frac) + ',' + (0.35 + frac * 0.5) + ')';
+                roundRect(tx4, ty4, tw4, th4, 4);
+                ctx.fill();
+                if (course.parcels && course.parcels.owned.includes(pi) && pi !== chosen) {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+                    ctx.lineWidth = 1;
+                    roundRect(tx4, ty4, tw4, th4, 4);
+                    ctx.stroke();
+                }
+                islandUIRects.parcels.push({ pi, x: tx4, y: ty4, w: tw4, h: th4 });
+            }
+        }
+        y += PARCEL_ROWS * (th4 + 3) + 8;
+    }
     // Button grid: 2 x 2
     const bw = (inW - 8) / 2, bh = 34;
     const btns = [
@@ -3025,6 +3078,15 @@ function islandTouchStart(sx, sy) {
             islandDragSlider = key;
             islandDraft.params[key] = Math.max(0, Math.min(1, (sx - r.x) / r.w));
             return;
+        }
+    }
+    if (islandUIRects.parcels) {
+        for (const t of islandUIRects.parcels) {
+            if (hitBtn(sx, sy, t.x, t.y, t.w, t.h)) {
+                islandDraft.params.startParcel = t.pi;
+                regenIslandDraft();
+                return;
+            }
         }
     }
     const b = islandUIRects.buttons;
