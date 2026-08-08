@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt105';
+const BUILD_TAG = 'gt106';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2628,7 +2628,8 @@ function drawManage() {
     ctx.fillText('Clubhouse', L.pad + 6, 28);
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '11px -apple-system,sans-serif';
-    ctx.fillText('Run your resort \u2022 Grow your members', L.pad + 6 + 110, 28);
+    // Subtitle clips under the header buttons on phone widths \u2014 skip it there
+    if (W() > 780) ctx.fillText('Run your resort \u2022 Grow your members', L.pad + 6 + 110, 28);
 
     // Close X
     ctx.fillStyle = 'rgba(255,70,70,0.85)';
