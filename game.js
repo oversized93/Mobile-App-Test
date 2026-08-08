@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt120';
+const BUILD_TAG = 'gt121';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3591,6 +3591,20 @@ function drawOverworld() {
         ctx.fillStyle = '#fff';
         ctx.textAlign = 'center';
         ctx.fillText(wTxt, wx + ww / 2, L.topBarH + 27);
+        // Tournament countdown chip when tee-off is under 3 game-hours out
+        if (!window.__tourney && worldCourse.holes.length) {
+            const mod = Math.floor((resort.worldClock || 0) % 1440);
+            const until = (720 - mod + 1440) % 1440;
+            if (until > 0 && until <= 180) {
+                const tTxt = '\u{1F3C6} tee-off in '
+                    + (until >= 90 ? Math.round(until / 60) + 'h' : until + 'm');
+                const tw2 = ctx.measureText(tTxt).width + 24;
+                const tx2 = wx - tw2 - 8;
+                glossyRect(tx2, L.topBarH + 8, tw2, 30, 15, '#8a6d1d');
+                ctx.fillStyle = '#fff';
+                ctx.fillText(tTxt, tx2 + tw2 / 2, L.topBarH + 27);
+            }
+        }
     }
 
     // Paused banner, center-top like the reference
