@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt149';
+const BUILD_TAG = 'gt150';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4630,6 +4630,25 @@ function drawHoleWizardOverlay() {
     ctx.textAlign = 'center';
     ctx.fillText(msg, W() / 2, bannerY + bannerH / 2 + 5);
 
+    // Pin step: ghost ring + live yardage from the tee while aiming
+    if (w.step === 'pin' && w.tee && owLastGhostCell) {
+        drawBrushGhost(owLastGhostCell.c, owLastGhostCell.r, 1, { color: '#b71c1c' });
+        const yds = Math.round(polylineLengthYards({
+            tee: w.tee, pin: { x: owLastGhostCell.c, y: owLastGhostCell.r },
+            waypoints: [] }));
+        const par = parFromYards(yds);
+        const info = yds + ' yds  \u2022  Par ' + par;
+        const infoW = 180;
+        const infoY = bannerY + bannerH + 8;
+        ctx.fillStyle = 'rgba(10,26,38,0.85)';
+        roundRect((W() - infoW) / 2, infoY, infoW, 26, 13);
+        ctx.fill();
+        ctx.fillStyle = '#8fe3ec';
+        ctx.font = 'bold 12px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(info, W() / 2, infoY + 17);
+    }
+
     // Live design readout while shaping: length, par, stars, fee
     if (w.step === 'shape' && w.tee && w.pin) {
         const yds = Math.round(polylineLengthYards(w));
@@ -5092,11 +5111,10 @@ function overworldTouchStart(sx, sy) {
             return;
         }
         if (holeWizard.step === 'pin') {
-            // Prevent placing pin exactly on tee
-            if (holeWizard.tee && holeWizard.tee.x === cell.c && holeWizard.tee.y === cell.r) return;
-            holeWizard.pin = { x: cell.c, y: cell.r };
-            holeWizard.step = 'shape';
-            owLastGhostCell = null;
+            // Drag to aim: the pin ghost follows the finger with a live
+            // yardage readout; the pin drops where you lift
+            holeWizard.pinDrag = true;
+            owLastGhostCell = { c: cell.c, r: cell.r };
             return;
         }
         // Shape step with no handle hit → pan
@@ -5205,6 +5223,12 @@ function overworldTouchMove(sx, sy) {
         }
         return;
     }
+    // Wizard pin drag-to-aim
+    if (holeWizard && holeWizard.pinDrag) {
+        const cell = screenToCell(sx, sy);
+        if (cell) owLastGhostCell = { c: cell.c, r: cell.r };
+        return;
+    }
     // Wizard waypoint drag
     if (holeWizard && holeWizard.draggingIdx >= 0) {
         const cell = screenToCell(sx, sy);
@@ -5246,6 +5270,16 @@ function overworldTouchMove(sx, sy) {
 }
 
 function overworldTouchEnd() {
+    if (holeWizard && holeWizard.pinDrag) {
+        holeWizard.pinDrag = false;
+        const g = owLastGhostCell;
+        if (g && !(holeWizard.tee && holeWizard.tee.x === g.c && holeWizard.tee.y === g.r)) {
+            holeWizard.pin = { x: g.c, y: g.r };
+            holeWizard.step = 'shape';
+            owLastGhostCell = null;
+        }
+        return;
+    }
     if (owDecorDrag) {
         const d = worldCourse.decor[owDecorDrag.i];
         if (d && owDecorDrag.moved) {
