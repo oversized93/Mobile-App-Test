@@ -3871,8 +3871,11 @@ const OCEAN_BASE_COLOR = new THREE.Color(0x1f7fb4).convertSRGBToLinear();
 function updateDayNightTint(minutes) {
     if (!dirLightRef || !hemiLightRef) return;
     const h = (((minutes / 60) % 24) + 24) % 24;
-    // 1 at 13:00, 0 at 01:00
-    const dayW = 0.5 + 0.5 * Math.cos((h - 13) / 24 * Math.PI * 2);
+    // 1 at 13:00, 0 at 01:00 — then remapped so the cosine's long dusk
+    // compresses: proper night lands by ~21:00 (reference look) instead
+    // of drifting toward 1 AM, while midday is untouched
+    const dayW0 = 0.5 + 0.5 * Math.cos((h - 13) / 24 * Math.PI * 2);
+    const dayW = Math.max(0, Math.min(1, (dayW0 - 0.2) / 0.7));
     // Golden-hour bumps near 07:00 and 19:00
     const gold = Math.exp(-Math.pow(h - 7, 2) / 2) + Math.exp(-Math.pow(h - 19, 2) / 2);
     dirLightRef.intensity = (0.55 + 0.75 * dayW) * (1 - rainEnvNow * 0.45);
