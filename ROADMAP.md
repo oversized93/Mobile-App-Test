@@ -81,6 +81,19 @@ those references is now in the game.
 - **Pipeline**: commit-pinned jsDelivr releases, screenshot harness fleet,
   Meshy text-to-3d scripts (9 props + golfer + grandstand shipped)
 
+### Parity run continued (gt194–gt221)
+Shipped after the sim-rounds arc: wizard shot-trace overlay + brutal-carry
+warning, per-hole Open/Closed, complaint pins/badge/aging + hole-card
+flags, shuttle arrivals (toast-gated), per-facility sales books + vendor
+cards, island biomes (creator chips, Manage switcher, tuned ambience:
+wind/leaves/gulls), walkway path-routing for vendor detours, rain
+umbrellas for playing golfers, birds-eye minimap (live golfer/complaint
+layer, day/night tint + lamp dots, tap-to-fly, mute chip beside it),
+course report + mood faces in the roster, record-break pin fireworks,
+biome-themed tournaments with purse streaks, tee-queue arcs, bad-day
+early departures + 6 AM fresh tee sheet, night ramp landing by 9 PM,
+and two clean checkpoints (gt198 sim-leak fix, gt213 4x-speed audit).
+
 ### Open thread: Mixamo skinned animations
 `assets/meshy/golfer_for_mixamo.obj` is committed for Mixamo auto-rigging.
 When FBX clips (Idle, Walking, Golf Drive, Golf Putt + celebration;
