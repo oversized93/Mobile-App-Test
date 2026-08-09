@@ -2504,6 +2504,11 @@ function golferThink(s, text, v) {
             x: s.x, z: s.z, t0: performance.now(),
             txt: '\u{1F4A2} FREAKOUT!', col: '#ff5040', name: s.name, stack: 0
         });
+        if (typeof addComplaint === 'function') {
+            addComplaint(Math.floor(s.x / CELL), Math.floor(s.z / CELL),
+                s.holeId, (s.name || 'A golfer')
+                + ' stormed off in a rage here', 'freakout');
+        }
     }
 }
 
@@ -2793,6 +2798,29 @@ function updateAmbientNPCs3D(dt, hole) {
                         s.lastRound = s.simResult.strokes;
                         if (s.simResult.penalties > 0) {
                             golferThink(s, 'Found the water out there', -6);
+                            // Pin the gripe at the actual splash landing
+                            if (typeof addComplaint === 'function'
+                                && Math.random() < 0.55) {
+                                const sp = s.simResult.splashAt;
+                                const cc = sp ? Math.floor(sp.x / CELL)
+                                    : Math.floor(s.x / CELL);
+                                const cr = sp ? Math.floor(sp.y / CELL)
+                                    : Math.floor(s.z / CELL);
+                                const oob = typeof T !== 'undefined'
+                                    && hole.grid && hole.grid[cr]
+                                    && hole.grid[cr][cc] === T.OOB;
+                                const gripes = oob
+                                    ? ['Knocked one out of bounds here',
+                                       'This hole needs more room to miss']
+                                    : ['Lost my ball in the water here',
+                                       'This carry is brutal \u2014 splash!',
+                                       'The water keeps eating my drives'];
+                                addComplaint(cc, cr, s.holeId,
+                                    (s.name || 'A golfer') + ': '
+                                    + gripes[(s.freakouts || 0
+                                        + s.holeId + cc) % gripes.length],
+                                    'hazard');
+                            }
                         }
                     } else {
                         s.lastRound = (s.strokes || 0) + 1; // statistical fallback

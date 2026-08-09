@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt195';
+const BUILD_TAG = 'gt196';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -290,6 +290,17 @@ if (!worldCourse.decor) worldCourse.decor = seedDefaultDecor(worldCourse);
 // they are regenerated on load and after painting, never persisted.
 function refreshWorldHeights() {
     worldCourse.heights = generateHeights(worldCourse);
+}
+
+// Sim -> design feedback (pillar 2): golfers who suffer out there pin a
+// complaint to the map where it happened. Tap a pin to read it (which
+// acknowledges + clears it); unread ones age out after ~3 game hours.
+function addComplaint(c, r, holeId, text, kind) {
+    worldCourse.complaints = worldCourse.complaints || [];
+    worldCourse.complaints.push({ x: c, y: r, holeId: holeId, text: text,
+        kind: kind || 'gripe',
+        t: (typeof resort !== 'undefined' && resort) ? (resort.worldClock || 0) : 0 });
+    if (worldCourse.complaints.length > 12) worldCourse.complaints.shift();
 }
 
 function saveWorldCourse() {
@@ -914,6 +925,16 @@ function dailyUpkeep() {
 
 function tickWorld(dt) {
     resort.worldClock = (resort.worldClock || 0) + dt;
+    // Complaints age out after ~3 in-game hours (checked every 10 min)
+    if (worldCourse.complaints && worldCourse.complaints.length
+        && resort.worldClock - (window.__cmpTick || 0) > 10) {
+        window.__cmpTick = resort.worldClock;
+        const cut = resort.worldClock - 180;
+        const keep = worldCourse.complaints.filter(c => c.t > cut);
+        if (keep.length !== worldCourse.complaints.length) {
+            worldCourse.complaints = keep;
+        }
+    }
     // Drain one difficulty measurement per second (6 sims each)
     if (state === 'overworld'
         && performance.now() - (window.__lastRateDrain || 0) > 1000) {
@@ -933,7 +954,12 @@ function tickWorld(dt) {
                 const sk2 = ((q.driverSkill || 2) + (q.putterSkill || 2)
                     + (q.recoverySkill || 2)) / 3;
                 try {
-                    q.simResult = simulateWorldHoleRound(rec2, sk2);
+                    const tr2 = [];
+                    q.simResult = simulateWorldHoleRound(rec2, sk2, tr2);
+                    const sp2 = tr2.find(p => p.splash);
+                    if (q.simResult && sp2) {
+                        q.simResult.splashAt = { x: sp2.x, y: sp2.y };
+                    }
                 } catch (e) {
                     q.simResult = null;
                 }
@@ -3715,6 +3741,34 @@ function drawOverworld() {
     // ---- Placed holes: dotted polyline + tee/pin markers on the 3D scene ----
     for (const hole of worldCourse.holes) drawPlacedHole(hole, hole.id === owSelectedHole);
 
+    // ---- Complaint pins: sim-sourced gripes pinned where they happened ----
+    owComplaintRects = [];
+    if (!holeWizard && worldCourse.complaints && worldCourse.complaints.length) {
+        const bob = Math.sin(Date.now() / 320) * 2;
+        for (const cm of worldCourse.complaints) {
+            const p = cellCenterScreen(cm.x, cm.y);
+            if (!p || p.behind) continue;
+            const py = p.y - 18 + bob;
+            const col = cm.kind === 'freakout' ? '#e53935' : '#f0a860';
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.arc(p.x, py, 9, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(p.x - 4, py + 7);
+            ctx.lineTo(p.x, py + 16);
+            ctx.lineTo(p.x + 4, py + 7);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(p.x, py, 9, 0, Math.PI * 2); ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('!', p.x, py + 4);
+            owComplaintRects.push({ x: p.x, y: py, cm: cm });
+        }
+    }
+
     // ---- Decor handles: with a decor tool armed, ring every placed item
     // so taps have a visible target. Same-type items brighten (they rotate
     // on tap); others dim (switch tool or use erase).
@@ -4572,6 +4626,7 @@ let owLastGhostCell = null;
 let owUndoStack = [];      // per-stroke cell diffs, most recent last (cap 20)
 let owStrokeDiff = null;   // Map cellKey -> {c,r,prev} while a stroke is active
 let owSelectedHole = null; // hole id whose inspector card is open
+let owComplaintRects = []; // tappable complaint pins, rebuilt per frame
 let owCoachVisible = false;// first-run help overlay
 let owLongPress = null;    // pending eyedropper {sx, sy, timer}
 
@@ -5512,6 +5567,18 @@ function overworldTouchStart(sx, sy) {
     // a golfer standing on the tee is still selectable. Only route golfers
     // carry a name; ambient walkers are anonymous.
     if (!holeWizard && owTool === 'hand') {
+        // ---- Tap a complaint pin: read it, which acknowledges + clears ----
+        for (const pr of owComplaintRects) {
+            const dd0 = (sx - pr.x) * (sx - pr.x) + (sy - pr.y) * (sy - pr.y);
+            if (dd0 < 15 * 15) {
+                notify('\u{1F4AC} ' + pr.cm.text
+                    + (pr.cm.holeId ? ' (Hole ' + pr.cm.holeId + ')' : ''));
+                worldCourse.complaints =
+                    (worldCourse.complaints || []).filter(c => c !== pr.cm);
+                saveWorldCourse();
+                return;
+            }
+        }
         if (scene3dReady && typeof npcStates !== 'undefined'
             && typeof worldToScreen3D === 'function') {
             let best = null, bd = 26 * 26;

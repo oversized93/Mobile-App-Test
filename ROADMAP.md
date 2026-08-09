@@ -141,7 +141,10 @@ instancing on low-end devices).
 - [x] Tournaments — daily event, leaderboard, purse, champions history,
       player can enter and win
 - [x] Facility props placed as 3D objects (decor system)
-- [ ] Pinpointed complaint tracking (tap complaint → map pin)
+- [x] Pinpointed complaint tracking (gt196: sim water/OOB penalties pin
+      amber gripes at the actual splash cell, freakouts pin red where the
+      tantrum happened; tap to read + acknowledge, unread pins age out
+      after ~3 game hours; cap 12)
 - [ ] Per-facility stats panels
 
 ### M5 — Atmosphere & expansion (largely shipped by the parity run)
