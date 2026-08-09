@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt261';
+const BUILD_TAG = 'gt262';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1086,6 +1086,9 @@ function tickWorld(dt) {
     if (window.__autosaveAt == null) window.__autosaveAt = resort.worldClock;
     if (Math.abs(resort.worldClock - window.__autosaveAt) > 30) {
         window.__autosaveAt = resort.worldClock;
+        // Everything up to this instant is banked live — stamp the tick
+        // clock so the next boot's offline catch-up doesn't pay again
+        resort.lastTickMs = Date.now();
         saveResort();
         saveWorldCourse();
     }
