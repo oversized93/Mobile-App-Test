@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt198';
+const BUILD_TAG = 'gt199';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -327,6 +327,7 @@ function stateEnterOverworld() {
     // owRosterOpen intentionally persists — peeking at Manage and coming
     // back shouldn't close the panel you were reading
     owRosterChip = null;
+    owComplaintChip = null;
     owSelectedGolfer = null;
     if (!worldCourse.heights) refreshWorldHeights();
     if (scene3dReady) {
@@ -448,6 +449,7 @@ let owFollowRect = null;
 let gameSpeed = 1;        // 0 = paused, 1 = normal, 4 = fast-forward
 let owSpeedRects = null;  // screen rects of the speed strip (set each draw)
 let owRosterChip = null;  // screen rect of the roster chip (set each draw)
+let owComplaintChip = null; // screen rect of the top-bar complaint badge
 let owFlyout = null;      // parent id whose sub-options are showing
 let owCategory = 'surface'; // retained for save-compat; no longer drives UI
 
@@ -4202,6 +4204,20 @@ function drawOverworld() {
         ctx.fillText(rLabel, rx0 + rw / 2, L.undoY + 23);
         owRosterChip = { x: rx0, y: L.undoY + 3, w: rw, h: 30 };
 
+        // Complaint badge — angry-face count; tap pans to the oldest gripe
+        const cmpl = worldCourse.complaints || [];
+        if (cmpl.length) {
+            const bLabel = '\u{1F4A2} ' + cmpl.length;
+            const bw = ctx.measureText(bLabel).width + 26;
+            const bx0 = rx0 - 10 - bw;
+            glossyRect(bx0, L.undoY + 3, bw, 30, 15, '#8e2f28');
+            ctx.fillStyle = '#fff';
+            ctx.fillText(bLabel, bx0 + bw / 2, L.undoY + 23);
+            owComplaintChip = { x: bx0, y: L.undoY + 3, w: bw, h: 30 };
+        } else {
+            owComplaintChip = null;
+        }
+
         // Roster panel — everyone on the course and how their round is going
         if (owRosterOpen) {
             const rows = onCourse.slice(0, 8);
@@ -5297,6 +5313,8 @@ function overworldHUDHit(sx, sy) {
     }
     if (owRosterChip && hitBtn(sx, sy, owRosterChip.x, owRosterChip.y,
         owRosterChip.w, owRosterChip.h)) return 'roster';
+    if (owComplaintChip && hitBtn(sx, sy, owComplaintChip.x, owComplaintChip.y,
+        owComplaintChip.w, owComplaintChip.h)) return 'complaints';
     if (owRosterOpen && owRosterChip && owRosterChip.panel
         && hitBtn(sx, sy, owRosterChip.panel.x, owRosterChip.panel.y,
             owRosterChip.panel.w, owRosterChip.panel.h)) return 'roster:panel';
@@ -5407,6 +5425,17 @@ function overworldTouchStart(sx, sy) {
         return;
     }
     if (hit === 'roster') { owRosterOpen = !owRosterOpen; return; }
+    if (hit === 'complaints') {
+        const cs = worldCourse.complaints || [];
+        if (cs.length && typeof setCameraOrbit === 'function') {
+            const cm = cs[0]; // oldest — they evict first, read them first
+            setCameraOrbit((cm.x + 0.5) * CELL, (cm.y + 0.5) * CELL,
+                420, null, null);
+            notify('\u{1F4CD} ' + cm.text
+                + (cm.holeId ? ' (Hole ' + cm.holeId + ')' : ''));
+        }
+        return;
+    }
     if (hit === 'roster:panel') {
         // Tapping a golfer's row jumps straight to their inspector
         if (owRosterChip && owRosterChip.rows) {
