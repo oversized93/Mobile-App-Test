@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt350';
+const BUILD_TAG = 'gt351';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4603,11 +4603,20 @@ function drawOverworld() {
         const fmt = (m) => m >= 90 ? Math.round(m / 60) + 'h' : Math.round(m) + 'm';
         const rainbowNow = typeof rainbowUntil !== 'undefined'
             && rainbowUntil > performance.now();
-        const wTxt = rainingNow
+        let wTxt = rainingNow
             ? '\u{1F327} clears in ' + (cross ? fmt(cross) : '?')
             : rainbowNow ? '\u{1F308} clearing skies'
             : (cross && cross <= 300 ? '\u26C5 rain in ' + fmt(cross)
                                      : '\u2600\uFE0F clear skies');
+        // Breeze readout: map-fixed arrow + mph, so the lean every ball
+        // shows in the air can be read off the chip
+        if (typeof wind !== 'undefined' && wind && wind.speed >= 2) {
+            const ARR = ['\u2192', '\u2198', '\u2193', '\u2199',
+                '\u2190', '\u2196', '\u2191', '\u2197'];
+            const ai = Math.round((((wind.angle % (Math.PI * 2))
+                + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8;
+            wTxt += '  \u2022  ' + ARR[ai] + ' ' + Math.round(wind.speed);
+        }
         ctx.font = 'bold 11px -apple-system,sans-serif';
         const ww = ctx.measureText(wTxt).width + 24;
         const wx = W() - L.pad - (30 * 3 + 6 * 2) - 10 - ww;
