@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt229';
+const BUILD_TAG = 'gt230';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4345,7 +4345,8 @@ function drawOverworld() {
             owWeatherPanelRect = null;
         }
         // Tournament countdown chip when tee-off is under 3 game-hours out
-        if (!window.__tourney && worldCourse.holes.length) {
+        // (suppressed while the roster panel occupies that corner)
+        if (!window.__tourney && worldCourse.holes.length && !owRosterOpen) {
             const mod = Math.floor((resort.worldClock || 0) % 1440);
             const until = (720 - mod + 1440) % 1440;
             if (until > 0 && until <= 180) {
