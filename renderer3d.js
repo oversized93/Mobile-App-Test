@@ -3637,8 +3637,15 @@ function updateAmbientNPCs3D(dt, hole) {
         }
         // Smoothed heading: lerp toward the walk direction (with wrap)
         // so waypoint turns read as turns, not teleport snaps
-        const yawT = s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
-                            : Math.atan2(s.tx - s.x, s.tz - s.z);
+        let yawT = s.idle ? Math.sin(t * 0.7 + s.phase) * 0.6 + s.phase
+                          : Math.atan2(s.tx - s.x, s.tz - s.z);
+        // Waiting to hit: square up toward the next shot target so the
+        // launched ball flies the way the golfer is facing
+        if (s.route && s.pause > 0 && s.ptIdx < s.route.length - 1
+            && !s.returning && !s.leaving) {
+            const nsp = s.route[s.ptIdx + 1];
+            yawT = Math.atan2(nsp.x - s.x, nsp.z - s.z);
+        }
         if (s.dispYaw == null) s.dispYaw = yawT;
         let yawD = yawT - s.dispYaw;
         while (yawD > Math.PI) yawD -= Math.PI * 2;
