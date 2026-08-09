@@ -3845,6 +3845,21 @@ function updateAmbientNPCs3D(dt, hole) {
             const nsp = s.route[s.ptIdx + 1];
             yawT = Math.atan2(nsp.x - s.x, nsp.z - s.z);
         }
+        // Settled spectators track the nearest ball in flight — the
+        // grandstand turns its heads as one when a drive sails past
+        if (!s.route && !s.idle && s.pause > 0 && npcFlights.length) {
+            let bfx = 0, bfz = 0, bfd = 300 * 300, bfOk = false;
+            for (const f2 of npcFlights) {
+                const fdx = f2.spr.position.x - s.x;
+                const fdz = f2.spr.position.z - s.z;
+                const fd2 = fdx * fdx + fdz * fdz;
+                if (fd2 < bfd) {
+                    bfd = fd2; bfx = f2.spr.position.x;
+                    bfz = f2.spr.position.z; bfOk = true;
+                }
+            }
+            if (bfOk) yawT = Math.atan2(bfx - s.x, bfz - s.z);
+        }
         if (s.dispYaw == null) s.dispYaw = yawT;
         let yawD = yawT - s.dispYaw;
         while (yawD > Math.PI) yawD -= Math.PI * 2;
