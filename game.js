@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt206';
+const BUILD_TAG = 'gt207';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4489,6 +4489,29 @@ function drawOverworld() {
                         my + (hrec.pin.y + 0.5) / worldCourse.rows * mh,
                         2.5, 0, Math.PI * 2);
                 ctx.fill();
+            }
+            // Live layer: golfers as colored dots, complaints as pins
+            if (typeof npcStates !== 'undefined') {
+                for (const gs of npcStates) {
+                    if (!gs.name) continue;
+                    ctx.fillStyle = '#ffe082';
+                    ctx.beginPath();
+                    ctx.arc(mx + gs.x / (worldCourse.cols * CELL) * mw,
+                            my + gs.z / (worldCourse.rows * CELL) * mh,
+                            1.8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            for (const cm2 of (worldCourse.complaints || [])) {
+                ctx.fillStyle = cm2.kind === 'freakout' ? '#ff5252' : '#ffb74d';
+                ctx.beginPath();
+                ctx.arc(mx + (cm2.x + 0.5) / worldCourse.cols * mw,
+                        my + (cm2.y + 0.5) / worldCourse.rows * mh,
+                        2.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                ctx.lineWidth = 0.8;
+                ctx.stroke();
             }
             // Camera pivot: dot + a wedge pointing along the view yaw
             if (typeof cam3dPivotX !== 'undefined') {
