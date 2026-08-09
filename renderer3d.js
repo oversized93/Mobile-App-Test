@@ -4184,10 +4184,17 @@ function updateCritters3D(hole) {
         for (let i = 0; i < gullStates.length; i++) {
             const s = gullStates[i];
             const a = t * s.spd + s.phase;
+            // Occasional fishing swoop: a slow per-gull cycle spikes
+            // (sixth power keeps it rare), plunging the gull toward the
+            // water with a banked dive, then climbing back out
+            const dv = Math.max(0, Math.sin(t * 0.13 + s.phase * 3.7));
+            const diveK = dv * dv * dv * dv * dv * dv;
             dummy.position.set(s.x + Math.cos(a) * s.rad,
-                               s.h + Math.sin(t * 0.7 + s.phase) * 6,
+                               s.h + Math.sin(t * 0.7 + s.phase) * 6
+                                   - diveK * Math.max(0, s.h - 12),
                                s.z + Math.sin(a) * s.rad);
-            dummy.rotation.set(0, -a, Math.sin(t * 3 + s.phase) * 0.25);
+            dummy.rotation.set(diveK * 0.7, -a,
+                Math.sin(t * 3 + s.phase) * 0.25 + diveK * 0.5);
             dummy.scale.set(1, 1, 1);
             dummy.updateMatrix();
             gullInst.setMatrixAt(i, dummy.matrix);
