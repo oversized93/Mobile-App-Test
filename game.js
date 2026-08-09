@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt368';
+const BUILD_TAG = 'gt369';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4891,7 +4891,8 @@ function drawOverworld() {
                 const face = s.mood == null ? ''
                     : s.mood >= 65 ? '\u{1F600} '
                     : s.mood >= 35 ? '\u{1F610} ' : '\u{1F61E} ';
-                ctx.fillText(face + s.name + (isHolder ? ' \u{1F3C5}' : ''),
+                ctx.fillText(face + s.name + (isHolder ? ' \u{1F3C5}' : '')
+                    + ((s.heater || 0) >= 2 ? ' \u{1F525}' : ''),
                     px + 14, ry + 19);
                 ctx.fillStyle = (s.mood != null && s.mood < 35)
                     ? 'rgba(240,140,120,0.85)' : 'rgba(255,255,255,0.55)';
