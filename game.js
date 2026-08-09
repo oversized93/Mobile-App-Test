@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt178';
+const BUILD_TAG = 'gt179';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -7281,6 +7281,7 @@ function initAmbientAudio() {
             if (env > 0.5 && prevRainLevel <= 0.5
                 && (state === 'overworld' || state === 'playing' || state === 'menu')) {
                 playThunder();
+                window.__lightningAt = performance.now(); // renderer flickers
             }
             prevRainLevel = env;
         }, 1000);

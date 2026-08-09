@@ -3599,6 +3599,17 @@ function updateDayNightTint(minutes) {
     const gold = Math.exp(-Math.pow(h - 7, 2) / 2) + Math.exp(-Math.pow(h - 19, 2) / 2);
     dirLightRef.intensity = (0.55 + 0.75 * dayW) * (1 - rainEnvNow * 0.45);
     hemiLightRef.intensity = (0.5 + 0.4 * dayW) * (1 - rainEnvNow * 0.2);
+    // Lightning: a double-flicker of the whole sky when thunder rolls
+    if (window.__lightningAt) {
+        const dtL = performance.now() - window.__lightningAt;
+        if (dtL < 420) {
+            const fl = (dtL < 90 || (dtL > 180 && dtL < 260)) ? 1 : 0;
+            dirLightRef.intensity += fl * 1.3;
+            hemiLightRef.intensity += fl * 0.9;
+        } else {
+            window.__lightningAt = null;
+        }
+    }
     // Sun color: day white -> gold at the rims -> cool moonlight
     const day = [1.0, 0.955, 0.88], gd = [1.0, 0.72, 0.45], night = [0.66, 0.74, 1.0];
     const m = (a, b, k) => a + (b - a) * k;
