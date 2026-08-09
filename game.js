@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt238';
+const BUILD_TAG = 'gt239';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1656,6 +1656,7 @@ function simulateHoleRound(rec, skill, clubScale, trace) {
     const wps = (rec.waypoints || []).map(p =>
         ({ x: (p.x + 0.5) * CELL, y: (p.y + 0.5) * CELL }));
     let wpIdx = 0, used = 0, holed = false, penalties = 0, layup = 0;
+    let powerAdapt = 1; // golfers club down on fast/downhill conditions
     while (used < 9 && !holed) {
         const distYds = Math.hypot(pin.x - px, pin.y - py) / YDS_TO_WORLD;
         if (distYds < 12) {
@@ -1684,8 +1685,17 @@ function simulateHoleRound(rec, skill, clubScale, trace) {
         let powerPct = Math.min(1,
             (aimYds / (CLUBS[clubIdx].maxYds * cs)) * (0.92 + Math.random() * 0.12));
         if (layup > 0) { powerPct *= 0.62; layup--; } // club down after water
-        const r = simulateShot(px, py, adx, ady, powerPct, clubIdx);
+        const r = simulateShot(px, py, adx, ady, powerPct * powerAdapt, clubIdx);
         used++;
+        // Downhill/firm lies carry shots far past the aim — a golfer
+        // notices and swings easier next time instead of ping-ponging
+        // across the valley all round
+        const traveled = Math.hypot(r.x - px, r.y - py) / YDS_TO_WORLD;
+        if (traveled > aimYds * 1.35 + 8) {
+            powerAdapt = Math.max(0.45, powerAdapt * 0.72);
+        } else if (traveled < aimYds * 0.6 && powerAdapt < 1) {
+            powerAdapt = Math.min(1, powerAdapt * 1.15); // eased too much
+        }
         if (trace) trace.push({ x: r.x, y: r.y, n: used, holed: r.holed,
             splash: r.terrain === T.WATER || r.terrain === T.OOB });
         if (r.holed) { holed = true; break; }
@@ -1734,7 +1744,10 @@ function updateBall(dt) {
         const slopeMag = Math.sqrt(hslope.sx * hslope.sx + hslope.sy * hslope.sy);
         // Friction strong enough to hold on this gradient?
         const ter = terrainAt(ball.x, ball.y);
-        const staticHold = (1 - (TERRAIN_FRICTION[ter] || 0.97)) * 0.8;
+        // Grabby surfaces hold a resting ball on steeper gradients
+        const holdMul = (ter === T.ROUGH || ter === T.GRASS
+            || ter === T.SAND) ? 2.2 : 1;
+        const staticHold = (1 - (TERRAIN_FRICTION[ter] || 0.97)) * 0.8 * holdMul;
         if (slopeMag < staticHold) {
             ball.vx = 0; ball.vy = 0; ball.vz = 0;
             ball.z = terrainHeightAt(ball.x, ball.y);
@@ -1909,8 +1922,13 @@ function updateBall(dt) {
         // Heightmap slope force — downhill gravity on every terrain type.
         // Keeps the ball rolling on slopes and dead-flats it on plateaus.
         const hslope = terrainSlopeAt(ball.x, ball.y);
-        // Greens are flatter (10% height) so boost their slope response a bit for feel.
-        const slopeGain = (ter === T.GREEN) ? 420 : 350;
+        // Greens are flatter (10% height) so boost their slope response a
+        // bit for feel. Tall rough and sand grab the ball instead — without
+        // this, hillside rough turns into an ice rink and balls run out
+        // 40+ yards to the valley floor (ping-ponging past the hole).
+        const slopeGain = (ter === T.GREEN) ? 420
+            : (ter === T.ROUGH || ter === T.GRASS) ? 190
+            : (ter === T.SAND) ? 110 : 350;
         ball.vx += hslope.sx * slopeGain * stepDt;
         ball.vy += hslope.sy * slopeGain * stepDt;
         // Keep the ball in the heightmap pocket (don't let it float off a hill)
