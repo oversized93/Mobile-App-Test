@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt296';
+const BUILD_TAG = 'gt297';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6259,7 +6259,9 @@ function overworldTouchStart(sx, sy) {
                     // course — selecting a ghost would leave an invisible
                     // panel hit-zone floating over the map
                     if (!npcStates.some(n => n.name === rr.name)) {
-                        notify(rr.name + ' isn\u2019t on the course right now');
+                        notify(rr.name === 'You'
+                            ? '\u{1F3C6} That\u2019s YOUR title \u2014 well played'
+                            : rr.name + ' isn\u2019t on the course right now');
                         return;
                     }
                     owSelectedGolfer = rr.name;
@@ -6381,6 +6383,10 @@ function overworldTouchStart(sx, sy) {
                     owSelectedHole = null;
                     window.__greetGolfer = holder.name;
                     focusGolfer(holder.name);
+                } else {
+                    notify(owRecordLineRect.name === 'You'
+                        ? '\u{1F3C5} That\u2019s YOUR record \u2014 set in a playtest'
+                        : owRecordLineRect.name + ' isn\u2019t on the course right now');
                 }
                 return;
             }
