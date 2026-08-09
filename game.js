@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt173';
+const BUILD_TAG = 'gt174';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -645,6 +645,16 @@ function polylineLengthYards(w) {
 // length. Pure grid analysis — no physics fork.
 // Resort star rating: holes + variety + decor + vendors + golfer mood.
 // 0-5 in half-star steps; shown on the Manage screen.
+// Fireworks over the entrance for landmark celebrations
+function celebrateFireworks() {
+    if (typeof spawnFirework3D !== 'function') return;
+    const ex = (Math.floor(worldCourse.cols / 2) + 0.5) * CELL;
+    const ez = (worldCourse.rows - (worldCourse.border || 4) + 0.5) * CELL;
+    spawnFirework3D(ex - 90, ez - 60, 0xffd24a);
+    spawnFirework3D(ex + 70, ez - 110, 0xff6a5a);
+    spawnFirework3D(ex, ez - 30, 0x3adbe8);
+}
+
 function computeCourseRating() {
     let r = Math.min(2.5, worldCourse.holes.length * 0.4);
     const diffs = new Set(worldCourse.holes.map(h => holeDifficulty(h)));
@@ -890,6 +900,7 @@ function tickWorld(dt) {
                 notify('\u{1F382} ' + label + ' of ' + worldCourse.name
                     + '! Members chip in $' + gift);
                 if (typeof playFanfare === 'function') playFanfare();
+                celebrateFireworks();
             }
         }
     }
@@ -1070,6 +1081,7 @@ function tickWorld(dt) {
                 ? '\u{1F31F} FIVE STARS \u2014 a world-class resort!'
                 : '\u2B50 Three stars \u2014 ' + worldCourse.name + ' is on the map!');
             if (typeof playFanfare === 'function') playFanfare();
+            celebrateFireworks();
             const ex = (Math.floor(worldCourse.cols / 2) + 0.5) * CELL;
             const ez = (worldCourse.rows - (worldCourse.border || 4) + 0.5) * CELL;
             (window.__scorePopups = window.__scorePopups || []).push({

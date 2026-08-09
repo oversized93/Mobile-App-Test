@@ -2556,6 +2556,61 @@ function updateTrailPuffs3D() {
     }
 }
 
+// ---- Fireworks: bursts for the resort's biggest moments ----
+let fwParticles = [];
+function spawnFirework3D(wx, wz, colHex) {
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    if (!trailPuffTex) spawnTrailPuff3D(-99999, -99999, -99999);
+    if (!trailPuffTex) return;
+    const h = 130 + Math.random() * 60;
+    for (let i = 0; i < 16; i++) {
+        const mat = new THREE.SpriteMaterial({
+            map: trailPuffTex, color: colHex || 0xffd24a, transparent: true,
+            opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false
+        });
+        mat.toneMapped = false;
+        const spr = new THREE.Sprite(mat);
+        spr.position.set(wx, h, wz);
+        spr.scale.set(6, 6, 1);
+        scene3d.add(spr);
+        const th = (i / 16) * Math.PI * 2;
+        const sp = 26 + Math.random() * 22;
+        fwParticles.push({
+            spr, mat, t0: performance.now(),
+            vx: Math.cos(th) * sp, vy: 18 + Math.random() * 14,
+            vz: Math.sin(th) * sp
+        });
+    }
+    while (fwParticles.length > 120) {
+        const old2 = fwParticles.shift();
+        scene3d.remove(old2.spr);
+        old2.mat.dispose();
+    }
+}
+let fwLastT = 0;
+function updateFireworks3D() {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - (fwLastT || now)) / 1000);
+    fwLastT = now;
+    for (let i = fwParticles.length - 1; i >= 0; i--) {
+        const p = fwParticles[i];
+        const k = (now - p.t0) / 1500;
+        if (k >= 1) {
+            scene3d.remove(p.spr);
+            p.mat.dispose();
+            fwParticles.splice(i, 1);
+            continue;
+        }
+        p.vy -= 55 * dt;
+        p.spr.position.x += p.vx * dt;
+        p.spr.position.y += p.vy * dt;
+        p.spr.position.z += p.vz * dt;
+        p.mat.opacity = 1 - k;
+        const sc = 6 * (1 - k * 0.4);
+        p.spr.scale.set(sc, sc, 1);
+    }
+}
+
 // ---- Swing flash: a quick white glint when an ambient golfer strikes ----
 let swingFlashes = [];
 function spawnSwingFlash3D(wx, wy, wz) {
@@ -2633,6 +2688,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateSplashes3D();
     updateTrailPuffs3D();
     updateSwingFlashes3D();
+    updateFireworks3D();
     // A freshly inspected golfer greets the camera (set by the game UI)
     if (window.__greetGolfer && npcStates.length) {
         const g = npcStates.find(n => n.name === window.__greetGolfer);
