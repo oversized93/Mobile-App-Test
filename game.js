@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt180';
+const BUILD_TAG = 'gt181';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3795,8 +3795,11 @@ function drawOverworld() {
             if ((wAt(t0 + d) > 1.15) !== rainingNow) { cross = d; break; }
         }
         const fmt = (m) => m >= 90 ? Math.round(m / 60) + 'h' : Math.round(m) + 'm';
+        const rainbowNow = typeof rainbowUntil !== 'undefined'
+            && rainbowUntil > performance.now();
         const wTxt = rainingNow
             ? '\u{1F327} clears in ' + (cross ? fmt(cross) : '?')
+            : rainbowNow ? '\u{1F308} clearing skies'
             : (cross && cross <= 300 ? '\u26C5 rain in ' + fmt(cross)
                                      : '\u2600\uFE0F clear skies');
         ctx.font = 'bold 11px -apple-system,sans-serif';
