@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt187';
+const BUILD_TAG = 'gt188';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1411,6 +1411,46 @@ function generateHeights(hole) {
 // ---- Ball physics update ----
 const GRAVITY = 304; // tuned for 15% slower flight, 20% higher arc
 
+// Headless shot simulation over the REAL physics (design pillar: one
+// simulator powers everything, never fork the physics). simMode
+// suppresses the human-facing side effects (notify, strokes, splash,
+// hole ceremony) while updateBall runs off-screen.
+let simMode = false;
+function simulateShot(fromX, fromY, dirX, dirY, powerPct, clubIdx) {
+    const snap = {
+        ball: Object.assign({}, ball),
+        strokes: strokes,
+        holeComplete: holeComplete,
+        trail: shotTrail,
+        club: selectedClub
+    };
+    simMode = true;
+    window.__simHoled = false;
+    try {
+        selectedClub = clubIdx != null ? clubIdx : 0; // default: Driver
+        ball.x = fromX; ball.y = fromY;
+        ball.topSpin = 0; ball.curl = 0;
+        shotTrail = [];
+        takeShot(CLUBS[selectedClub].maxPower * Math.min(1, powerPct || 1),
+                 dirX, dirY);
+        let guard = 0;
+        while (ball.moving && guard++ < 1800) updateBall(1 / 60);
+        return {
+            x: ball.x, y: ball.y,
+            terrain: terrainAt(ball.x, ball.y),
+            holed: !!window.__simHoled,
+            settled: !ball.moving
+        };
+    } finally {
+        simMode = false;
+        Object.assign(ball, snap.ball);
+        strokes = snap.strokes;
+        holeComplete = snap.holeComplete;
+        shotTrail = snap.trail;
+        selectedClub = snap.club;
+    }
+}
+
 function updateBall(dt) {
     if (!ball.moving) return;
     const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
@@ -1483,6 +1523,7 @@ function updateBall(dt) {
                 const ter = terrainAt(ball.x, ball.y);
                 if (ter === T.WATER) {
                     ball.vx = 0; ball.vy = 0; ball.vz = 0; ball.moving = false;
+                    if (simMode) return;
                     if (typeof spawnSplash3D === 'function') spawnSplash3D(ball.x, ball.y);
                     notify('Splash! +1 stroke');
                     strokes++;
@@ -1491,6 +1532,7 @@ function updateBall(dt) {
                 }
                 if (ter === T.OOB) {
                     ball.vx = 0; ball.vy = 0; ball.vz = 0; ball.moving = false;
+                    if (simMode) return;
                     notify('Out of bounds! +1 stroke');
                     strokes++;
                     resetBallToLastSafe();
@@ -1500,7 +1542,7 @@ function updateBall(dt) {
                     // Hit tree canopy — drops straight down with heavy speed loss
                     ball.vx *= 0.15;
                     ball.vy *= 0.15;
-                    notify('Landed in trees!');
+                    if (!simMode) notify('Landed in trees!');
                 }
 
                 ball.bounceCount = (ball.bounceCount || 0) + 1;
@@ -1565,6 +1607,7 @@ function updateBall(dt) {
 
         if (ter === T.WATER) {
             ball.vx = 0; ball.vy = 0; ball.moving = false;
+            if (simMode) { ball.moving = false; return; }
             notify('Water! +1 stroke');
             strokes++;
             resetBallToLastSafe();
@@ -1572,6 +1615,7 @@ function updateBall(dt) {
         }
         if (ter === T.OOB) {
             ball.vx = 0; ball.vy = 0; ball.moving = false;
+            if (simMode) { ball.moving = false; return; }
             notify('Out of bounds! +1 stroke');
             strokes++;
             resetBallToLastSafe();
@@ -1582,7 +1626,7 @@ function updateBall(dt) {
             ball.vy *= -0.4;
             ball.x += ball.vx * stepDt * 3;
             ball.y += ball.vy * stepDt * 3;
-            notify('Hit a tree!');
+            if (!simMode) notify('Hit a tree!');
         }
 
         // Apply terrain friction
@@ -1683,6 +1727,11 @@ function onBallStopped() {
 }
 
 function onHoleComplete() {
+    if (simMode) {
+        window.__simHoled = true;
+        ball.moving = false;
+        return;
+    }
     holeComplete = true;
     const diff = strokes - currentHole.par;
     const name = SCORE_NAMES[String(diff)] || (diff > 0 ? '+' + diff : '' + diff);
