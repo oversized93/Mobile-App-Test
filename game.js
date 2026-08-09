@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt332';
+const BUILD_TAG = 'gt333';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5401,6 +5401,39 @@ function drawOverworld() {
         ctx.font = 'bold 15px -apple-system,sans-serif';
         ctx.fillText('Got it!', W() / 2, gotY + gotH / 2 + 5);
     }
+    // ---- Flyover broadcast chips: a TV lower-third rides the sweep ----
+    if (owFlyover && owFlyover.rec) {
+        const fu = (performance.now() - owFlyover.t0) / owFlyover.dur;
+        const rec = owFlyover.rec;
+        const fadeIn = Math.min(1, fu / 0.07);
+        const fadeOut = fu > 0.9 ? Math.max(0, (1 - fu) / 0.1) : 1;
+        const al = Math.max(0, fadeIn * fadeOut);
+        if (al > 0.01) {
+            const st = (worldCourse.holeStats || {})[rec.id];
+            const line1 = (rec.name || ('Hole ' + rec.id))
+                + '  \u2022  Par ' + (rec.par || 4);
+            const line2 = st && st.n
+                ? 'Avg ' + (st.sum / st.n).toFixed(1)
+                    + (st.best != null
+                        ? '  \u2022  \ud83c\udfc5 ' + st.best + ' by ' + (st.bestBy || '?')
+                        : '')
+                : 'No rounds on record yet';
+            ctx.globalAlpha = al;
+            const pw2 = 250, ph2 = 52;
+            const px2 = (W() - pw2) / 2, py2 = H() - ph2 - 24;
+            glossyRect(px2, py2, pw2, ph2, 12, '#22384f');
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px -apple-system,sans-serif';
+            ctx.fillText(line1, W() / 2, py2 + 21);
+            ctx.fillStyle = 'rgba(255,255,255,0.72)';
+            ctx.font = '11px -apple-system,sans-serif';
+            // Second line joins once the sweep is underway
+            ctx.globalAlpha = al * Math.max(0, Math.min(1, (fu - 0.3) / 0.1));
+            ctx.fillText(line2, W() / 2, py2 + 40);
+            ctx.globalAlpha = 1;
+        }
+    }
 }
 
 // ---- Brush ghost in screen space ----
@@ -5685,7 +5718,7 @@ function startHoleFlyover(rec) {
     }
     if (total < 1) return;
     owFlyover = {
-        pts: pts, segs: segs, total: total,
+        pts: pts, segs: segs, total: total, rec: rec,
         t0: performance.now(),
         dur: 2500 + total * 1.1,
         yaw: cam3dYaw,
