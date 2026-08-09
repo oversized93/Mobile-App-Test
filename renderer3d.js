@@ -2691,7 +2691,7 @@ function setupAmbientNPCs(hole) {
             diff: rg.diff,
             hunger: 8 + (gnIdx * 11) % 25, thirst: 6 + (gnIdx * 17) % 25,
             pendingSim: true, simResult: null,
-            tier: ['basic', 'silver', 'gold'][(rg.holeId * 7 + rg.off * 3 + gnIdx) % 3]
+            tier: golferTier(rg.holeId, rg.off, gnIdx)
         });
     }
     for (let i = 0; i < total; i++) {
@@ -2757,6 +2757,19 @@ function setupAmbientNPCs(hole) {
 
 // Golfer inner life: push a thought (capped log) and recompute mood.
 // The inspector panel in game.js renders these verbatim.
+// Membership tier for a route golfer: an even three-way hash split,
+// nudged upward by clubhouse level — the Grand Clubhouse's pro shop
+// upsells half the basics to silver, the Lodge half the silvers to gold
+function golferTier(holeId, off, idx) {
+    const h = holeId * 7 + off * 3 + idx;
+    let t = h % 3;
+    const am = (typeof resort !== 'undefined' && resort
+        && resort.amenities) || {};
+    if (am.clubhouse2 && t === 0 && (h >> 2) % 2) t = 1;
+    if (am.clubhouse3 && t === 1 && (h >> 3) % 2) t = 2;
+    return ['basic', 'silver', 'gold'][t];
+}
+
 // Chance a rain-soaked golfer quits at hole-out: a clubhouse and
 // gazebo/bench shelters talk them into waiting the shower out
 function rainQuitChance() {

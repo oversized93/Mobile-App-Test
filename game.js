@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt362';
+const BUILD_TAG = 'gt363';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -933,10 +933,10 @@ const AMENITIES = [
       upkeep: 5, desc: 'Golfers relax here — and wait out rain instead of leaving.' },
     { id: 'clubhouse2', name: 'Grand Clubhouse', icon: '\u{1F3E8}', cost: 1500,
       memberBoost: 20, feeBoost: 0.1, requires: 'clubhouse', upkeep: 15,
-      desc: 'Upgrade: pro shop + restaurant. Green fees +10%.' },
+      desc: 'Pro shop upsells memberships. Green fees +10%.' },
     { id: 'clubhouse3', name: 'Resort Lodge', icon: '\u{1F3F0}', cost: 6000,
       memberBoost: 40, feeBoost: 0.2, requires: 'clubhouse2', upkeep: 35,
-      desc: 'Upgrade: spa, suites, prestige. Green fees +20% more.' }
+      desc: 'Spa and suites mint gold members. Fees +20% more.' }
 ];
 
 // Clubhouse level lifts every green fee collected (multiplier stacks)
