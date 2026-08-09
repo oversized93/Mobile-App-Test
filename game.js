@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt208';
+const BUILD_TAG = 'gt209';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1098,6 +1098,14 @@ function tickWorld(dt) {
                             t0: performance.now(), txt: '\u{1F3C5} RECORD!',
                             col: '#ffd24a', name: ho.name, stack: 1
                         });
+                        // Fireworks burst right over the record pin
+                        if (typeof spawnFirework3D === 'function') {
+                            const fpx = (rec.pin.x + 0.5) * CELL;
+                            const fpz = (rec.pin.y + 0.5) * CELL;
+                            spawnFirework3D(fpx - 60, fpz - 40, 0xffd24a);
+                            spawnFirework3D(fpx + 55, fpz + 30, 0xff6a5a);
+                            spawnFirework3D(fpx, fpz - 80, 0x3adbe8);
+                        }
                     }
                 }
             }
