@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt230';
+const BUILD_TAG = 'gt231';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6110,14 +6110,19 @@ function overworldTouchStart(sx, sy) {
     // a golfer standing on the tee is still selectable. Only route golfers
     // carry a name; ambient walkers are anonymous.
     if (!holeWizard && owTool === 'hand') {
-        // ---- Tap a complaint pin: read it, which acknowledges + clears ----
-        for (const pr of owComplaintRects) {
-            const dd0 = (sx - pr.x) * (sx - pr.x) + (sy - pr.y) * (sy - pr.y);
-            if (dd0 < 15 * 15) {
-                notify('\u{1F4AC} ' + pr.cm.text
-                    + (pr.cm.holeId ? ' (Hole ' + pr.cm.holeId + ')' : ''));
+        // ---- Tap a complaint pin: read it, which acknowledges + clears.
+        // Finger-friendly: 24px reach, nearest pin wins when they cluster
+        {
+            let bestPin = null, bestD = 24 * 24;
+            for (const pr of owComplaintRects) {
+                const dd0 = (sx - pr.x) * (sx - pr.x) + (sy - pr.y) * (sy - pr.y);
+                if (dd0 < bestD) { bestD = dd0; bestPin = pr; }
+            }
+            if (bestPin) {
+                notify('\u{1F4AC} ' + bestPin.cm.text
+                    + (bestPin.cm.holeId ? ' (Hole ' + bestPin.cm.holeId + ')' : ''));
                 worldCourse.complaints =
-                    (worldCourse.complaints || []).filter(c => c !== pr.cm);
+                    (worldCourse.complaints || []).filter(c => c !== bestPin.cm);
                 saveWorldCourse();
                 return;
             }
