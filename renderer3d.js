@@ -2841,6 +2841,22 @@ function updateAmbientNPCs3D(dt, hole) {
     const t = windClock.value;
     for (let i = 0; i < npcStates.length; i++) {
         const s = npcStates[i];
+        if (s.gone) {
+            // Left the resort: park every instanced part out of sight
+            dummy.position.set(0, -900, 0);
+            dummy.rotation.set(0, 0, 0);
+            dummy.scale.set(0.001, 0.001, 0.001);
+            dummy.updateMatrix();
+            npcBodyInst.setMatrixAt(i, dummy.matrix);
+            npcHeadInst.setMatrixAt(i, dummy.matrix);
+            if (npcModelInsts) {
+                for (const im of npcModelInsts) im.setMatrixAt(i, dummy.matrix);
+            }
+            if (npcHatInst && i < npcWalkerCount) npcHatInst.setMatrixAt(i, dummy.matrix);
+            if (npcUmbrellaInst) npcUmbrellaInst.setMatrixAt(i, dummy.matrix);
+            dummy.scale.set(1, 1, 1);
+            continue;
+        }
         const dx = s.tx - s.x, dz = s.tz - s.z;
         const d = Math.sqrt(dx * dx + dz * dz);
         if (s.idle) {
@@ -2851,6 +2867,30 @@ function updateAmbientNPCs3D(dt, hole) {
             s.age = (s.age || 0) + dt;
             s.hunger = Math.min(100, (s.hunger || 0) + dt * 0.3);
             s.thirst = Math.min(100, (s.thirst || 0) + dt * 0.45);
+            // Storming out: walkway route to the entrance, then gone
+            // (the slot stays parked until the next terrain rebuild
+            // reseeds a fresh roster)
+            if (s.leaving) {
+                const pth2 = s.walkPath;
+                if (pth2 && pth2.length) {
+                    const wp2 = pth2[0];
+                    if ((wp2.x - s.x) * (wp2.x - s.x)
+                        + (wp2.z - s.z) * (wp2.z - s.z) < 42) pth2.shift();
+                }
+                const on2 = s.walkPath && s.walkPath.length;
+                const gx2 = on2 ? s.walkPath[0].x : s.leaveX;
+                const gz2 = on2 ? s.walkPath[0].z : s.leaveZ;
+                const dd2x = gx2 - s.x, dd2z = gz2 - s.z;
+                const dd2 = Math.sqrt(dd2x * dd2x + dd2z * dd2z) || 1;
+                s.tx = gx2; s.tz = gz2;
+                if (!on2 && dd2 < 10) {
+                    s.gone = true;
+                    s.name = null; // rosters, taps and sims all ignore them
+                } else {
+                    s.x += (dd2x / dd2) * s.speed * dt;
+                    s.z += (dd2z / dd2) * s.speed * dt;
+                }
+            } else
             // Detour to a kiosk/stall: walk over, buy, walk back to the tee
             if (s.detour || s.returning) {
                 const fx = s.detour ? s.detour.x : s.route[0].x;
@@ -3038,6 +3078,24 @@ function updateAmbientNPCs3D(dt, hole) {
                             : diff === 0 ? 'Solid par out there'
                             : 'That hole beat me up',
                             diff <= -1 ? 14 : diff === 0 ? 6 : -5);
+                    }
+                    // A truly rotten day ends early: mood in the gutter
+                    // after several rounds sends them to the exit
+                    if (s.mood != null && s.mood <= 20 && (s.rounds || 0) >= 3
+                        && !s.leaving) {
+                        s.leaving = true;
+                        s.detour = null;
+                        s.returning = false;
+                        const eCol2 = Math.floor(hole.cols / 2);
+                        const eRow2 = hole.rows - (hole.border || 4);
+                        s.leaveX = (eCol2 + 0.5) * CELL;
+                        s.leaveZ = (eRow2 + 0.5) * CELL;
+                        s.walkPath = pathRoute(s.x, s.z, s.leaveX, s.leaveZ);
+                        golferThink(s, "That's it \u2014 going home early", -2);
+                        if (typeof notify === 'function') {
+                            notify('\u{1F61E} ' + s.name
+                                + ' had a rough day and left early');
+                        }
                     }
                     s.ptIdx = 0;
                     s.x = s.route[0].x + (s.queueOff ? s.queueOff.x : 0);
