@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt222';
+const BUILD_TAG = 'gt223';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3641,7 +3641,11 @@ function drawIslandCreator() {
     islandUIRects = { sliders: {}, buttons: {} };
     const inX = px + 12, inW = pw - 24;
     let y = py + 42;
-    const rowH = Math.max(22, Math.min(30, Math.floor((ph - 46 - 204) / 7)));
+    // Short screens (phone landscape) compact every vertical metric so
+    // the button rows never clip past the panel
+    const compact = H() < 430;
+    const rowH = Math.max(compact ? 19 : 22,
+        Math.min(30, Math.floor((ph - 46 - 204) / 7)));
     for (const [key, label] of ISLAND_SLIDERS) {
         const v = islandDraft.params[key];
         const trackH = rowH - 8;
@@ -3680,7 +3684,7 @@ function drawIslandCreator() {
     ctx.font = 'bold 11px -apple-system,sans-serif';
     ctx.fillText(String(islandDraft.params.seed), inX + inW - 9, y + 15);
     islandUIRects.buttons.seed = { x: inX, y: y, w: inW, h: 22 };
-    y += 26;
+    y += compact ? 24 : 26;
     // Biome chips — the island's whole palette in one tap
     islandUIRects.biomes = [];
     {
@@ -3703,7 +3707,7 @@ function drawIslandCreator() {
             ctx.fillText(blab, bx3 + bws / 2, y + 14);
             islandUIRects.biomes.push({ id: bid, x: bx3, y: y, w: bws, h: 20 });
         }
-        y += 26;
+        y += compact ? 24 : 26;
     }
     // Starting property picker: mini parcel map shaded by land coverage;
     // tap a section to put your gate (and first deed) there
@@ -3716,7 +3720,7 @@ function drawIslandCreator() {
     {
         const course = islandDraft.course;
         const tw4 = (inW - (PARCEL_COLS - 1) * 3) / PARCEL_COLS;
-        const th4 = 15;
+        const th4 = compact ? 13 : 15;
         const chosen = islandDraft.params.startParcel != null
             ? islandDraft.params.startParcel : (PARCEL_ROWS - 1) * PARCEL_COLS + 1;
         for (let pr = 0; pr < PARCEL_ROWS; pr++) {
@@ -3763,24 +3767,40 @@ function drawIslandCreator() {
             inX, y + 8);
         y += 14;
     }
-    // Button grid: 2 x 2
-    const bw = (inW - 8) / 2, bh = 34;
-    const btns = [
-        ['regen', '\u{1F3B2} Regenerate', '#2c5c74'],
-        ['reset', 'Restore Default', '#37474f'],
-        ['back', '\u2190 Back', '#5d4037'],
-        ['create', islandDraft.confirm ? 'Replace resort?!' : '\u2714 Create Island',
-         islandDraft.confirm ? '#c0392b' : '#2e7d32']
-    ];
-    for (let i = 0; i < btns.length; i++) {
-        const bx = inX + (i % 2) * (bw + 8);
-        const by = y + Math.floor(i / 2) * (bh + 8);
-        glossyRect(bx, by, bw, bh, 10, btns[i][2]);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 11px -apple-system,sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(btns[i][1], bx + bw / 2, by + bh / 2 + 4);
-        islandUIRects.buttons[btns[i][0]] = { x: bx, y: by, w: bw, h: bh };
+    // Buttons: top row thirds (dice / surprise / restore), bottom halves
+    const bh = compact ? 28 : 34;
+    {
+        const bw3 = (inW - 12) / 3;
+        const topBtns = [
+            ['regen', '\u{1F3B2} Seed', '#2c5c74'],
+            ['surprise', '\u{1F381} Surprise', '#6a3f8f'],
+            ['reset', '\u21BA Reset', '#37474f']
+        ];
+        for (let i = 0; i < topBtns.length; i++) {
+            const bx = inX + i * (bw3 + 6);
+            glossyRect(bx, y, bw3, bh, 10, topBtns[i][2]);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(topBtns[i][1], bx + bw3 / 2, y + bh / 2 + 4);
+            islandUIRects.buttons[topBtns[i][0]] = { x: bx, y: y, w: bw3, h: bh };
+        }
+        const bw2 = (inW - 8) / 2;
+        const botBtns = [
+            ['back', '\u2190 Back', '#5d4037'],
+            ['create', islandDraft.confirm ? 'Replace resort?!' : '\u2714 Create Island',
+             islandDraft.confirm ? '#c0392b' : '#2e7d32']
+        ];
+        for (let i = 0; i < botBtns.length; i++) {
+            const bx = inX + i * (bw2 + 8);
+            const by = y + bh + (compact ? 5 : 8);
+            glossyRect(bx, by, bw2, bh, 10, botBtns[i][2]);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(botBtns[i][1], bx + bw2 / 2, by + bh / 2 + 4);
+            islandUIRects.buttons[botBtns[i][0]] = { x: bx, y: by, w: bw2, h: bh };
+        }
     }
     // Hint under the preview
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
@@ -3829,6 +3849,23 @@ function islandTouchStart(sx, sy) {
     }
     if (hitBtn(sx, sy, b.regen.x, b.regen.y, b.regen.w, b.regen.h)) {
         islandDraft.params.seed = 1000 + Math.floor(Math.random() * 9000);
+        regenIslandDraft();
+        return;
+    }
+    if (b.surprise && hitBtn(sx, sy, b.surprise.x, b.surprise.y,
+        b.surprise.w, b.surprise.h)) {
+        // One tap, whole new island: sliders inside sane bands, any
+        // biome, fresh seed
+        const R = Math.random;
+        const P = islandDraft.params;
+        P.water = 0.15 + R() * 0.5;
+        P.hills = R();
+        P.trees = 0.25 + R() * 0.7;
+        P.rocks = R();
+        P.roundness = 0.3 + R() * 0.7;
+        P.grass = 0.4 + R() * 0.6;
+        P.biome = ['meadows', 'autumn', 'links'][Math.floor(R() * 3)];
+        P.seed = 1000 + Math.floor(R() * 9000);
         regenIslandDraft();
         return;
     }
