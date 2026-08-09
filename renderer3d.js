@@ -3066,10 +3066,20 @@ function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin, skill, drama) {
     spr.scale.set(putt ? 2.4 : 3.4, putt ? 2.4 : 3.4, 1);
     scene3d.add(spr);
     // Shot shape: everyone curves the ball a little; weaker drivers
-    // curve it a lot. Sign picks draw vs fade per swing.
+    // curve it a lot. Sign picks draw vs fade per swing — and the
+    // world's crosswind adds a consistent drift on top, so all the
+    // flights on a breezy day lean the same way.
     const sk = Math.max(1, Math.min(4, skill || 2));
+    let wBend = 0;
+    if (!putt && typeof wind !== 'undefined' && wind && wind.speed) {
+        const cross = (-dz / dist) * Math.cos(wind.angle)
+                    + (dx / dist) * Math.sin(wind.angle);
+        wBend = cross * wind.speed * Math.min(1.2, dist / 100) * 0.5;
+    }
     const bend = putt ? 0
-        : (Math.random() * 2 - 1) * Math.min(10, dist * 0.10) * (1.25 - sk * 0.22);
+        : Math.max(-12, Math.min(12,
+            (Math.random() * 2 - 1) * Math.min(10, dist * 0.10)
+                * (1.25 - sk * 0.22) + wBend));
     npcFlights.push({
         spr, mat, x0, y0: putt ? y1 + 1.5 : y0, z0, x1, y1, z1, putt,
         bend, perpX: -dz / dist, perpZ: dx / dist, drama: !!drama,
