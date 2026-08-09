@@ -4408,6 +4408,26 @@ function setupCartDrive(hole) {
 function updateCartDrive3D(dt, hole) {
     if (!cartGroup || !cartState) return;
     const s = cartState;
+    // The cart clocks off with the golfers: parked overnight wherever
+    // its route ended, rolling again at opening time
+    if (typeof resort !== 'undefined' && resort) {
+        const hrC = (((resort.worldClock || 0) / 60) % 24 + 24) % 24;
+        if (hrC >= 21 || hrC < 5.5) {
+            const gyP = (hole && hole.heights)
+                ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
+            cartGroup.position.set(s.x, gyP, s.z);
+            cartGroup.rotation.y = s.yaw;
+            const fwdXp = Math.sin(s.yaw), fwdZp = Math.cos(s.yaw);
+            const sideXp = Math.cos(s.yaw), sideZp = -Math.sin(s.yaw);
+            for (const rider of cartRiders) {
+                rider.grp.position.set(
+                    s.x - fwdXp * 2 + sideXp * rider.side, gyP + 7,
+                    s.z - fwdZp * 2 + sideZp * rider.side);
+                rider.grp.rotation.y = s.yaw;
+            }
+            return;
+        }
+    }
     // Courtesy stop: a golfer near the cart gets right of way — the
     // cart halts ~1.5s with a friendly honk, then a cooldown so it
     // doesn't stutter through a walking group
