@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt215';
+const BUILD_TAG = 'gt216';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -457,6 +457,7 @@ let manageBiomeRects = []; // biome chips on the Manage screen
 // ---- Birds-eye minimap (bottom-left, toggled, persisted) ----
 let owMinimapOn = loadData('minimapOn', false);
 let owMiniCanvas = null, owMiniKey = null;
+let owMiniLamps = []; // lamp cells cached with the canvas rebuild
 let owMiniRect = null, owMiniBtnRect = null;
 let owMuteBtnRect = null;
 
@@ -474,11 +475,17 @@ function ensureMiniCanvas() {
         && BIOME_ALBEDO[worldCourse.biome]) || {};
     const base = (typeof ALBEDO_COLORS !== 'undefined')
         ? ALBEDO_COLORS.base : {};
+    owMiniLamps = [];
     for (let r = 0; r < worldCourse.rows; r++) {
         for (let c = 0; c < worldCourse.cols; c++) {
             const t = worldCourse.grid[r][c];
             g.fillStyle = bio[t] || base[t] || '#2c6a31';
             g.fillRect(c * 2, r * 2, 2, 2);
+            // Mirror the 3D lamp formula so night dots match real lamps
+            if (t === T.PATH && (c * 7 + r * 13) % 9 === 0
+                && owMiniLamps.length < 60) {
+                owMiniLamps.push({ c, r });
+            }
         }
     }
 }
@@ -4559,6 +4566,31 @@ function drawOverworld() {
                         my + (hrec.pin.y + 0.5) / worldCourse.rows * mh,
                         2.5, 0, Math.PI * 2);
                 ctx.fill();
+            }
+            // Day/night: the map darkens with the world clock, and the
+            // path lamps glow as warm dots after lighting-up time
+            {
+                const hr2 = (((resort.worldClock || 0) / 60) % 24 + 24) % 24;
+                let dark = 0;
+                if (hr2 < 5.5 || hr2 >= 20.5) dark = 1;
+                else if (hr2 < 7) dark = (7 - hr2) / 1.5;
+                else if (hr2 >= 19) dark = (hr2 - 19) / 1.5;
+                dark = Math.max(0, Math.min(1, dark));
+                if (dark > 0.02) {
+                    ctx.fillStyle = 'rgba(10,16,44,' + (0.5 * dark).toFixed(3) + ')';
+                    ctx.fillRect(mx, my, mw, mh);
+                }
+                if (dark > 0.3) {
+                    ctx.fillStyle = 'rgba(255,204,110,'
+                        + (0.9 * dark).toFixed(3) + ')';
+                    for (const lp of owMiniLamps) {
+                        ctx.beginPath();
+                        ctx.arc(mx + (lp.c + 0.5) / worldCourse.cols * mw,
+                                my + (lp.r + 0.5) / worldCourse.rows * mh,
+                                1.6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
             }
             // Live layer: golfers as colored dots, complaints as pins
             if (typeof npcStates !== 'undefined') {
