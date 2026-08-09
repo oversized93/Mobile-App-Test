@@ -3263,6 +3263,7 @@ function updateAmbientNPCs3D(dt, hole) {
             }
             if (npcHatInst && i < npcWalkerCount) npcHatInst.setMatrixAt(i, dummy.matrix);
             if (npcUmbrellaInst) npcUmbrellaInst.setMatrixAt(i, dummy.matrix);
+            if (npcBagInst) npcBagInst.setMatrixAt(i, dummy.matrix);
             dummy.scale.set(1, 1, 1);
             continue;
         }

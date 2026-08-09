@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt329';
+const BUILD_TAG = 'gt330';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6523,6 +6523,13 @@ function overworldTouchStart(sx, sy) {
             if (bestPin) {
                 notify('\u{1F4AC} ' + bestPin.cm.text
                     + (bestPin.cm.holeId ? ' (Hole ' + bestPin.cm.holeId + ')' : ''));
+                // Follow the gripe with a concrete fix suggestion
+                const fixTip = bestPin.cm.kind === 'freakout'
+                    ? '\u{1F4A1} Tempers cool on easier holes \u2014 or add benches nearby'
+                    : /bounds|room to miss/i.test(bestPin.cm.text)
+                        ? '\u{1F4A1} Fix: paint more rough where those drives land'
+                        : '\u{1F4A1} Fix: widen the landing zone or shrink the water';
+                setTimeout(() => notify(fixTip), 2600);
                 worldCourse.complaints =
                     (worldCourse.complaints || []).filter(c => c !== bestPin.cm);
                 saveWorldCourse();
