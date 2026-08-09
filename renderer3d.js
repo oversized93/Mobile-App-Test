@@ -3558,9 +3558,13 @@ function updateAmbientNPCs3D(dt, hole) {
                             diff <= -1 ? 14 : diff === 0 ? 6 : -5);
                     }
                     // A truly rotten day ends early: mood in the gutter
-                    // after several rounds sends them to the exit
-                    if (s.mood != null && s.mood <= 20 && (s.rounds || 0) >= 3
-                        && !s.leaving) {
+                    // after several rounds sends them to the exit. Heavy
+                    // rain thins the field too — a soaked golfer finishing
+                    // a hole sometimes just calls it.
+                    const rainQuit = rainEnvNow > 0.55 && (s.rounds || 0) >= 1
+                        && Math.random() < 0.3;
+                    if (((s.mood != null && s.mood <= 20
+                        && (s.rounds || 0) >= 3) || rainQuit) && !s.leaving) {
                         s.leaving = true;
                         s.detour = null;
                         s.returning = false;
@@ -3569,10 +3573,18 @@ function updateAmbientNPCs3D(dt, hole) {
                         s.leaveX = (eCol2 + 0.5) * CELL;
                         s.leaveZ = (eRow2 + 0.5) * CELL;
                         s.walkPath = pathRoute(s.x, s.z, s.leaveX, s.leaveZ);
-                        golferThink(s, "That's it \u2014 going home early", -2);
-                        if (typeof notify === 'function') {
-                            notify('\u{1F61E} ' + s.name
-                                + ' had a rough day and left early');
+                        if (rainQuit) {
+                            golferThink(s, 'Not playing through THIS', -2);
+                            if (typeof notify === 'function') {
+                                notify('\u{1F327}\uFE0F ' + s.name
+                                    + ' called it a day \u2014 too wet');
+                            }
+                        } else {
+                            golferThink(s, "That's it \u2014 going home early", -2);
+                            if (typeof notify === 'function') {
+                                notify('\u{1F61E} ' + s.name
+                                    + ' had a rough day and left early');
+                            }
                         }
                     }
                     // Variety: a third of finished rounds move the group
