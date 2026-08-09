@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt292';
+const BUILD_TAG = 'gt293';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -907,7 +907,9 @@ function finalizeHole() {
         worldCourse.holes.push(recNew);
     }
     saveWorldCourse();
-    notify('Hole ' + holeWizard.holeId + ' created \u2022 Par ' + par + ' \u2022 ' + Math.round(yds) + 'y');
+    notify('Hole ' + holeWizard.holeId
+        + (holeWizard.editing != null ? ' reshaped' : ' created')
+        + ' \u2022 Par ' + par + ' \u2022 ' + Math.round(yds) + 'y');
     holeWizard = null;
 }
 
