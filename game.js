@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt241';
+const BUILD_TAG = 'gt242';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5565,7 +5565,10 @@ function drawHoleWizardOverlay() {
         const fee = 3 + 2 * diff;
         let info = yds + ' yds  •  Par ' + par + '  •  '
             + '★'.repeat(diff) + '☆'.repeat(5 - diff) + '  •  $' + fee + ' fee';
-        if (w.traceRes && w.traceRes.strokes) {
+        if (w.simAvg3) {
+            // Provenance on the label: par comes from played test rounds
+            info += '  •  plays ~' + w.simAvg3;
+        } else if (w.traceRes && w.traceRes.strokes) {
             info += '  •  sim ' + w.traceRes.strokes;
         }
         const infoW = Math.min(W() - 20, 340);
@@ -5665,6 +5668,7 @@ function drawHoleWizardOverlay() {
                 for (let k = 0; k < 2; k++) {
                     totT += simulateWorldHoleRound(recT, 3).strokes;
                 }
+                w.simAvg3 = +(totT / 3).toFixed(1);
                 w.simParEst = Math.max(3, Math.min(5, Math.round(totT / 3 - 0.6)));
             } catch (e) { w.traceRes = null; w.simParEst = null; }
             w.trace = tr;
