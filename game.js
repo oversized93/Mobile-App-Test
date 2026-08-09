@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt270';
+const BUILD_TAG = 'gt271';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4228,7 +4228,11 @@ function drawOverworld() {
                 ? '\u{1F512} Buy for $' + price + '  (need $' + short + ' more)'
                 : '\u{1F512} Unowned land \u2014 buy for $' + price;
             const bw2 = ctx.measureText(bTxt).width + 30;
-            const bx2 = (W() - bw2) / 2, by2 = L.topBarH + 44;
+            // The wizard's shape step parks its readout (and possibly a
+            // carry warning) in the default slot — drop below them
+            const by2 = (holeWizard && holeWizard.step === 'shape')
+                ? L.topBarH + 108 : L.topBarH + 44;
+            const bx2 = (W() - bw2) / 2;
             glossyRect(bx2, by2, bw2, 30, 15, short > 0 ? '#7a4a3a' : '#8a6d1d');
             ctx.fillStyle = '#fff';
             ctx.textAlign = 'center';
