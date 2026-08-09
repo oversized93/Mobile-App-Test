@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt188';
+const BUILD_TAG = 'gt189';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1449,6 +1449,67 @@ function simulateShot(fromX, fromY, dirX, dirY, powerPct, clubIdx) {
         shotTrail = snap.trail;
         selectedClub = snap.club;
     }
+}
+
+// Play one hole with chained real-physics shots (sim-rounds arc B).
+// Club by distance, waypoint-then-pin aim with skill-based scatter,
+// water/OOB re-hit penalties, statistical putt-out inside 12 yds.
+// Returns { strokes, holed }. Dormant until NPC rounds adopt it.
+function simulateHoleRound(rec, skill, clubScale) {
+    const sk = skill == null ? 2.5 : skill;
+    // World scale: island holes measure 40-150 yds, so NPC "clubs" swing
+    // shorter than the player's full bag (default 45% reach) to make
+    // rounds multi-shot journeys instead of single-wedge holes
+    const cs = clubScale == null ? 0.45 : clubScale;
+    const pin = { x: (rec.pin.x + 0.5) * CELL, y: (rec.pin.y + 0.5) * CELL };
+    let px = (rec.tee.x + 0.5) * CELL, py = (rec.tee.y + 0.5) * CELL;
+    const wps = (rec.waypoints || []).map(p =>
+        ({ x: (p.x + 0.5) * CELL, y: (p.y + 0.5) * CELL }));
+    let wpIdx = 0, used = 0, holed = false;
+    while (used < 9 && !holed) {
+        const distYds = Math.hypot(pin.x - px, pin.y - py) / YDS_TO_WORLD;
+        if (distYds < 12) {
+            // Green statistics: sim putting uses the meter minigame, so
+            // putt-out is modeled — one putt or two, skill-weighted
+            used += (Math.random() < Math.max(0.12, 0.72 - distYds * 0.035
+                + sk * 0.045)) ? 1 : 2;
+            holed = true;
+            break;
+        }
+        let tx = pin.x, ty = pin.y;
+        // Waypoints are dogleg guides: only route through them on long
+        // approaches, and only while they're still ahead of us
+        if (distYds > 100 && wpIdx < wps.length) {
+            tx = wps[wpIdx].x;
+            ty = wps[wpIdx].y;
+        }
+        const eff = (i2) => CLUBS[i2].maxYds * cs;
+        const clubIdx = distYds > eff(0) * 0.83 ? 0 : distYds > eff(1) * 0.77 ? 1
+            : distYds > eff(2) * 0.69 ? 2 : distYds > eff(3) * 0.58 ? 3 : 4;
+        const err = (Math.random() * 2 - 1) * (0.16 - sk * 0.022);
+        const dx = tx - px, dy = ty - py;
+        const adx = dx * Math.cos(err) - dy * Math.sin(err);
+        const ady = dx * Math.sin(err) + dy * Math.cos(err);
+        const aimYds = Math.hypot(tx - px, ty - py) / YDS_TO_WORLD;
+        const powerPct = Math.min(1,
+            (aimYds / (CLUBS[clubIdx].maxYds * cs)) * (0.92 + Math.random() * 0.12));
+        const r = simulateShot(px, py, adx, ady, powerPct, clubIdx);
+        used++;
+        if (r.holed) { holed = true; break; }
+        if (r.terrain === T.WATER || r.terrain === T.OOB) {
+            used++; // penalty; replay from the same lie
+            continue;
+        }
+        px = r.x; py = r.y;
+        // Progress-based advance: drop any waypoint that's no longer
+        // closer to the pin than we are
+        const myPinD = Math.hypot(pin.x - px, pin.y - py);
+        while (wpIdx < wps.length
+            && Math.hypot(pin.x - wps[wpIdx].x, pin.y - wps[wpIdx].y) >= myPinD - 60) {
+            wpIdx++;
+        }
+    }
+    return { strokes: used, holed: holed };
 }
 
 function updateBall(dt) {
