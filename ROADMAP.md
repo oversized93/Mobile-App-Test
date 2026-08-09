@@ -154,9 +154,14 @@ instancing on low-end devices).
       playing groups and green fees, and draw a CLOSED badge on the map)
 
 ### M2.5 — Economy grounding
-- Build costs per terrain/object; daily upkeep (needs world clock)
-- Fun/score-based payouts replace the abstract coin formula
-- Retire legacy career courses + 2D builder (~600-900 dead lines)
+- [x] Object costs + daily upkeep (decor priced, land parcels gate
+      expansion, per-hole/decor/clubhouse-tier upkeep at midnight;
+      terrain painting stays deliberately free — hand-authoring is the
+      core joy per pillar 1, land is the cost gate instead)
+- [x] Fun/score-based payouts replace the abstract coin formula
+      (gt284: playtests pay green-fee scale, away rounds pay tour
+      prizes, membership decoupled)
+- [ ] Retire legacy career courses + 2D builder (~600-900 dead lines)
 
 ### M3 — Living resort (largely shipped by the parity run)
 - [x] Persistent NPC golfers — names, skills, careers (rounds/best) in the

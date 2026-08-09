@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt284';
+const BUILD_TAG = 'gt285';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -910,12 +910,12 @@ function memberCapacity() {
 
 const AMENITIES = [
     { id: 'clubhouse', name: 'Clubhouse', icon: '\u{1F3DB}\uFE0F', cost: 200, memberBoost: 10,
-      desc: 'Somewhere for golfers to relax after a round.' },
+      upkeep: 5, desc: 'Somewhere for golfers to relax after a round.' },
     { id: 'clubhouse2', name: 'Grand Clubhouse', icon: '\u{1F3E8}', cost: 1500,
-      memberBoost: 20, feeBoost: 0.1, requires: 'clubhouse',
+      memberBoost: 20, feeBoost: 0.1, requires: 'clubhouse', upkeep: 15,
       desc: 'Upgrade: pro shop + restaurant. Green fees +10%.' },
     { id: 'clubhouse3', name: 'Resort Lodge', icon: '\u{1F3F0}', cost: 6000,
-      memberBoost: 40, feeBoost: 0.2, requires: 'clubhouse2',
+      memberBoost: 40, feeBoost: 0.2, requires: 'clubhouse2', upkeep: 35,
       desc: 'Upgrade: spa, suites, prestige. Green fees +20% more.' }
 ];
 
@@ -1057,7 +1057,11 @@ function dailyUpkeep() {
     const holeCost = worldCourse.holes.length * 25;
     const decorCost = Math.floor((worldCourse.decor || []).reduce(
         (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) * 0.04);
-    return { holes: holeCost, decor: decorCost, total: holeCost + decorCost };
+    // A grander clubhouse costs more to run each day
+    const amenityCost = AMENITIES.reduce((sum, a) =>
+        sum + (resort.amenities && resort.amenities[a.id] ? (a.upkeep || 0) : 0), 0);
+    return { holes: holeCost, decor: decorCost, amenities: amenityCost,
+             total: holeCost + decorCost + amenityCost };
 }
 
 function tickWorld(dt) {
@@ -4477,7 +4481,8 @@ function drawOverworld() {
         line("Yesterday's income", '+$' + Math.round(led.prevIncome), '#8be06a', fy + 76);
         line("Yesterday's expenses", '-$' + Math.round(led.prevExpenses), '#e77d6a', fy + 92);
         line('Upkeep/day', '$' + up.total + '  (' + worldCourse.holes.length
-            + ' holes + decor)', 'rgba(255,255,255,0.8)', fy + 112);
+            + ' holes + decor' + (up.amenities ? ' + clubhouse' : '') + ')',
+            'rgba(255,255,255,0.8)', fy + 112);
         line('Lifetime', 'fees $' + (resort.feesEarned || 0) + ' \u2022 stalls $'
             + (resort.stallSales || 0) + ' \u2022 purses $'
             + (resort.purseEarned || 0), 'rgba(255,255,255,0.8)', fy + 130);
