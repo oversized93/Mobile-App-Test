@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt174';
+const BUILD_TAG = 'gt175';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1006,6 +1006,8 @@ function tickWorld(dt) {
             notify('\u{1F3C6} ' + name + ' wins the tournament (' + relTxt
                 + ' avg)! Gallery spends $' + purse);
             if (typeof playFanfare === 'function') playFanfare();
+            // Your title gets the fireworks (there's no NPC to hop for you)
+            if (name === 'You') celebrateFireworks();
             // The champion celebrates on the spot — hop, glow, and a
             // proud thought for the record
             if (typeof npcStates !== 'undefined') {
