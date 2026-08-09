@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt251';
+const BUILD_TAG = 'gt252';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4374,7 +4374,10 @@ function drawOverworld() {
         const led = resort.ledger;
         const up = dailyUpkeep();
         const fw = 250;
-        const fh = (resort.tourneyStreak > 1) ? 164 : 146;
+        const hasStreak = resort.tourneyStreak > 1;
+        const hasClubMul = (typeof clubhouseFeeMul === 'function')
+            && clubhouseFeeMul() > 1;
+        const fh = 146 + (hasStreak ? 18 : 0) + (hasClubMul ? 18 : 0);
         const fx = (W() - fw) / 2, fy = L.topBarH + 8;
         ctx.fillStyle = 'rgba(12,24,32,0.94)';
         roundRect(fx, fy, fw, fh, 12); ctx.fill();
@@ -4404,10 +4407,16 @@ function drawOverworld() {
         line('Lifetime', 'fees $' + (resort.feesEarned || 0) + ' \u2022 stalls $'
             + (resort.stallSales || 0) + ' \u2022 purses $'
             + (resort.purseEarned || 0), 'rgba(255,255,255,0.8)', fy + 130);
-        if (resort.tourneyStreak > 1) {
+        let extraY = fy + 148;
+        if (hasClubMul) {
+            line('\u{1F3E8} Clubhouse bonus', 'fees collect at '
+                + Math.round(clubhouseFeeMul() * 100) + '%', '#81d4fa', extraY);
+            extraY += 18;
+        }
+        if (hasStreak) {
             const pct = Math.min(10, resort.tourneyStreak - 1) * 8;
             line('\u{1F3C6} Tourney streak', resort.tourneyStreak
-                + ' days \u2022 +' + pct + '% purse', '#ffd24a', fy + 148);
+                + ' days \u2022 +' + pct + '% purse', '#ffd24a', extraY);
         }
         owFinancesRect = { x: fx, y: fy, w: fw, h: fh };
     }
