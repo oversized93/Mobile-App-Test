@@ -85,6 +85,12 @@ function builderPaint(sx, sy) {
 }
 
 function builderDraw() {
+    // Armor: entering the builder state without builderInit (harness,
+    // future shortcuts) must not crash the frame loop on a null grid
+    if (!builderState || !builderState.grid) {
+        if (typeof builderInit === 'function') builderInit();
+        if (!builderState || !builderState.grid) return;
+    }
     const bs = builderState;
     ctx.fillStyle = '#1a3d1a';
     ctx.fillRect(0, 0, W(), H());
