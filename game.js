@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt366';
+const BUILD_TAG = 'gt367';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5067,13 +5067,22 @@ function drawOverworld() {
             // Live layer: golfers as colored dots, complaints as pins
             if (typeof npcStates !== 'undefined') {
                 for (const gs of npcStates) {
-                    if (!gs.name) continue;
-                    ctx.fillStyle = '#ffe082';
+                    if (!gs.name || gs.gone) continue;
+                    // Premium guests read on the map: gold ring for gold
+                    // members, silver-grey for silver, soft amber basic
+                    const isG = gs.tier === 'gold';
+                    ctx.fillStyle = isG ? '#ffd24a'
+                        : gs.tier === 'silver' ? '#cdd9e0' : '#ffe082';
                     ctx.beginPath();
                     ctx.arc(mx + gs.x / (worldCourse.cols * CELL) * mw,
                             my + gs.z / (worldCourse.rows * CELL) * mh,
-                            1.8, 0, Math.PI * 2);
+                            isG ? 2.4 : 1.8, 0, Math.PI * 2);
                     ctx.fill();
+                    if (isG) {
+                        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+                        ctx.lineWidth = 0.8;
+                        ctx.stroke();
+                    }
                 }
             }
             const cmPulse = 1.8 + Math.abs(Math.sin(Date.now() / 320)) * 1.3;
