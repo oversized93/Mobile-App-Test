@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt223';
+const BUILD_TAG = 'gt224';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -764,6 +764,7 @@ function drainSimRating() {
         // average golfer's measured mean, clamped to the 3-5 range
         rec.par = Math.max(3, Math.min(5, Math.round(total / runs - 0.6)));
         const over = total / runs - rec.par;
+        rec.simAvg = +(total / runs).toFixed(1); // measured mean, for the card
         rec.simDiff = {
             rev: worldCourse.terrainRev || 0,
             stars: Math.max(1, Math.min(5, Math.round(1 + over * 1.4)))
@@ -4911,6 +4912,15 @@ function drawOverworld() {
                  cmpN >= 2 ? '#ef5350'
                      : diff <= 2 ? '#66bb6a' : diff <= 3 ? '#f0a860' : '#ef5350']
             ];
+            // Measured reality: what the physics sim says an average
+            // golfer actually shoots here (design pillar made visible)
+            if (selHole.simAvg != null) {
+                const overPar = selHole.simAvg - selHole.par;
+                rows.push(['Sim average', selHole.simAvg + ' strokes',
+                    Math.min(1, selHole.simAvg / 8),
+                    overPar <= 0.7 ? '#66bb6a'
+                        : overPar <= 1.5 ? '#f0a860' : '#ef5350']);
+            }
             let ry = hc.y + 44;
             for (const [label, val, frac, col] of rows) {
                 ctx.fillStyle = 'rgba(255,255,255,0.55)';
@@ -5299,7 +5309,9 @@ function drawGolferPanel(s) {
 }
 
 function holeCardLayout() {
-    const w = 216, h = 278;
+    // One extra stat row when the sim has measured this hole
+    const sel = worldCourse.holes.find(h2 => h2.id === owSelectedHole);
+    const w = 216, h = 278 + ((sel && sel.simAvg != null) ? 26 : 0);
     const x = W() - w - 10, y = 58;
     return { x, y, w, h,
              flyX: x + 12, flyY: y + h - 132, flyW: w - 24, flyH: 34,
