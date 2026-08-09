@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt205';
+const BUILD_TAG = 'gt206';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -453,6 +453,34 @@ let owComplaintChip = null; // screen rect of the top-bar complaint badge
 let owSelectedFacility = null; // decor index of the inspected kiosk/stall
 let owFacilityCardRect = null;
 let manageBiomeRects = []; // biome chips on the Manage screen
+
+// ---- Birds-eye minimap (bottom-left, toggled, persisted) ----
+let owMinimapOn = loadData('minimapOn', false);
+let owMiniCanvas = null, owMiniKey = null;
+let owMiniRect = null, owMiniBtnRect = null;
+
+// The grid renders to an offscreen canvas at 2px/cell, rebuilt only
+// when terrain edits (terrainRev) or the biome change — never per frame
+function ensureMiniCanvas() {
+    const key = (worldCourse.terrainRev || 0) + ':' + (worldCourse.biome || '');
+    if (owMiniCanvas && owMiniKey === key) return;
+    owMiniKey = key;
+    if (!owMiniCanvas) owMiniCanvas = document.createElement('canvas');
+    owMiniCanvas.width = worldCourse.cols * 2;
+    owMiniCanvas.height = worldCourse.rows * 2;
+    const g = owMiniCanvas.getContext('2d');
+    const bio = (typeof BIOME_ALBEDO !== 'undefined'
+        && BIOME_ALBEDO[worldCourse.biome]) || {};
+    const base = (typeof ALBEDO_COLORS !== 'undefined')
+        ? ALBEDO_COLORS.base : {};
+    for (let r = 0; r < worldCourse.rows; r++) {
+        for (let c = 0; c < worldCourse.cols; c++) {
+            const t = worldCourse.grid[r][c];
+            g.fillStyle = bio[t] || base[t] || '#2c6a31';
+            g.fillRect(c * 2, r * 2, 2, 2);
+        }
+    }
+}
 let owFlyout = null;      // parent id whose sub-options are showing
 let owCategory = 'surface'; // retained for save-compat; no longer drives UI
 
@@ -4429,6 +4457,64 @@ function drawOverworld() {
         }
     }
 
+    // ---- Minimap toggle chip + map (bottom-left) ----
+    owMiniBtnRect = null;
+    owMiniRect = null;
+    if (!holeWizard) {
+        const bs2 = 34;
+        const bx2 = 12, by2 = H() - 12 - bs2;
+        glossyRect(bx2, by2, bs2, bs2, 10, owMinimapOn ? '#3f7a4d' : '#2c3a42');
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.font = '16px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('\u{1F5FA}', bx2 + bs2 / 2, by2 + bs2 / 2 + 6);
+        owMiniBtnRect = { x: bx2, y: by2, w: bs2, h: bs2 };
+        if (owMinimapOn && !owRailOpen) {
+            ensureMiniCanvas();
+            const mw = Math.min(190, Math.floor(W() * 0.22));
+            const mh = Math.round(mw * worldCourse.rows / worldCourse.cols);
+            const mx = 12, my = by2 - 8 - mh;
+            ctx.save();
+            roundRect(mx - 3, my - 3, mw + 6, mh + 6, 10);
+            ctx.fillStyle = 'rgba(10,22,30,0.85)';
+            ctx.fill();
+            roundRect(mx, my, mw, mh, 7);
+            ctx.clip();
+            ctx.drawImage(owMiniCanvas, mx, my, mw, mh);
+            // Hole pins as dots
+            for (const hrec of worldCourse.holes) {
+                ctx.fillStyle = hrec.open === false ? '#9e9e9e' : '#ff5252';
+                ctx.beginPath();
+                ctx.arc(mx + (hrec.pin.x + 0.5) / worldCourse.cols * mw,
+                        my + (hrec.pin.y + 0.5) / worldCourse.rows * mh,
+                        2.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // Camera pivot: dot + a wedge pointing along the view yaw
+            if (typeof cam3dPivotX !== 'undefined') {
+                const px2 = mx + cam3dPivotX / (worldCourse.cols * CELL) * mw;
+                const pz2 = my + cam3dPivotZ / (worldCourse.rows * CELL) * mh;
+                const yw = (typeof cam3dYaw !== 'undefined') ? cam3dYaw : 0;
+                ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                ctx.beginPath();
+                ctx.arc(px2, pz2, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(px2, pz2);
+                ctx.lineTo(px2 - Math.sin(yw) * 11, pz2 - Math.cos(yw) * 11);
+                ctx.stroke();
+            }
+            ctx.restore();
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth = 1;
+            roundRect(mx, my, mw, mh, 7);
+            ctx.stroke();
+            owMiniRect = { x: mx, y: my, w: mw, h: mh };
+        }
+    }
+
     // ---- Camera control rail (right edge) ----
     const camIconLabels = { tiltUp: '\u25B2', tiltDown: '\u25BC', rotL: '\u21BA', rotR: '\u21BB', reset: '\u25CE' };
     for (let i = 0; i < L.camBtns.length; i++) {
@@ -5477,6 +5563,10 @@ function overworldHUDHit(sx, sy) {
         owRosterChip.w, owRosterChip.h)) return 'roster';
     if (owComplaintChip && hitBtn(sx, sy, owComplaintChip.x, owComplaintChip.y,
         owComplaintChip.w, owComplaintChip.h)) return 'complaints';
+    if (owMiniBtnRect && hitBtn(sx, sy, owMiniBtnRect.x, owMiniBtnRect.y,
+        owMiniBtnRect.w, owMiniBtnRect.h)) return 'mini:toggle';
+    if (owMiniRect && hitBtn(sx, sy, owMiniRect.x, owMiniRect.y,
+        owMiniRect.w, owMiniRect.h)) return 'mini:go';
     if (owRosterOpen && owRosterChip && owRosterChip.panel
         && hitBtn(sx, sy, owRosterChip.panel.x, owRosterChip.panel.y,
             owRosterChip.panel.w, owRosterChip.panel.h)) return 'roster:panel';
@@ -5587,6 +5677,22 @@ function overworldTouchStart(sx, sy) {
         return;
     }
     if (hit === 'roster') { owRosterOpen = !owRosterOpen; return; }
+    if (hit === 'mini:toggle') {
+        owMinimapOn = !owMinimapOn;
+        saveData('minimapOn', owMinimapOn);
+        return;
+    }
+    if (hit === 'mini:go') {
+        // Tap the map to fly the camera there (zoom level preserved)
+        const wx2 = (sx - owMiniRect.x) / owMiniRect.w * worldCourse.cols * CELL;
+        const wz2 = (sy - owMiniRect.y) / owMiniRect.h * worldCourse.rows * CELL;
+        if (typeof setCameraOrbit === 'function') {
+            setCameraOrbit(wx2, wz2,
+                (typeof cam3dDistance !== 'undefined') ? cam3dDistance : null,
+                null, null);
+        }
+        return;
+    }
     if (hit === 'complaints') {
         const cs = worldCourse.complaints || [];
         if (cs.length && typeof setCameraOrbit === 'function') {
