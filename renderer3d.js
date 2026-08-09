@@ -3639,6 +3639,17 @@ function updateAmbientNPCs3D(dt, hole) {
                         });
                         s.celeb = diff; // drives green-side body language
                         s.lastRel = diff; // roster chip: last round vs par
+                        // Heater: consecutive under-par rounds catch fire
+                        if (diff <= -1) {
+                            s.heater = (s.heater || 0) + 1;
+                            if (s.heater === 2) {
+                                golferThink(s, "I'm heating up!", 6);
+                            } else if (s.heater === 3) {
+                                golferThink(s, "I'm on FIRE!", 10);
+                            }
+                        } else {
+                            s.heater = 0;
+                        }
                         if (s.lipDrama && diff > 0) {
                             // The horseshoe still stings on the walk off
                             s.freakout = 2.2;
