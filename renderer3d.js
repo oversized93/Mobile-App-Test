@@ -3000,7 +3000,7 @@ function updateSwingFlashes3D() {
 // The signature living-course visual: every ambient strike launches a
 // real airborne ball toward the next landing spot, shedding vapor.
 let npcFlights = [];
-function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin) {
+function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin, skill) {
     if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
     const dx = x1 - x0, dz = z1 - z0;
     const dist = Math.sqrt(dx * dx + dz * dz);
@@ -3015,8 +3015,14 @@ function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin) {
     spr.position.set(x0, putt ? y1 + 1.5 : y0, z0);
     spr.scale.set(putt ? 2.4 : 3.4, putt ? 2.4 : 3.4, 1);
     scene3d.add(spr);
+    // Shot shape: everyone curves the ball a little; weaker drivers
+    // curve it a lot. Sign picks draw vs fade per swing.
+    const sk = Math.max(1, Math.min(4, skill || 2));
+    const bend = putt ? 0
+        : (Math.random() * 2 - 1) * Math.min(10, dist * 0.10) * (1.25 - sk * 0.22);
     npcFlights.push({
         spr, mat, x0, y0: putt ? y1 + 1.5 : y0, z0, x1, y1, z1, putt,
+        bend, perpX: -dz / dist, perpZ: dx / dist,
         px: pin ? pin.x : null, pz: pin ? pin.z : null,
         apex: putt ? 0.7 : Math.min(60, 10 + dist * 0.28),
         t0: performance.now(),
@@ -3094,9 +3100,14 @@ function updateNpcFlights3D(hole) {
             f.dur = f.bounce === 1 ? 320 : 260;
             continue;
         }
-        const x = f.x0 + (f.x1 - f.x0) * k;
-        const z = f.z0 + (f.z1 - f.z0) * k;
+        let x = f.x0 + (f.x1 - f.x0) * k;
+        let z = f.z0 + (f.z1 - f.z0) * k;
         const y = f.y0 + (f.y1 - f.y0) * k + f.apex * 4 * k * (1 - k);
+        if (f.bend && f.bounce == null) {
+            const sway = f.bend * Math.sin(Math.PI * k);
+            x += f.perpX * sway;
+            z += f.perpZ * sway;
+        }
         f.spr.position.set(x, y, z);
         if (f.bounce === 2) f.mat.opacity = 1 - k; // roll-out fade
         if (!f.bounce && !f.putt && now - f.puffAt > 130 && k < 0.75) {
@@ -3338,7 +3349,7 @@ function updateAmbientNPCs3D(dt, hole) {
                         const toPin = (s.ptIdx + 2 === s.route.length)
                             ? s.route[s.route.length - 1] : null;
                         spawnNpcFlight3D(s.x + 3, gy2 + 14, s.z,
-                            lx, ny2 + 2, lz, toPin);
+                            lx, ny2 + 2, lz, toPin, s.driverSkill);
                         const ddx = lx - s.x, ddz = lz - s.z;
                         const dd = Math.hypot(ddx, ddz) || 1;
                         if (dd >= 20) {
