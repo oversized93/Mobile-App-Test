@@ -2938,7 +2938,13 @@ function updateAmbientNPCs3D(dt, hole) {
                 s.arriveSit = false;
             } else {
                 const h = Math.floor(t * 7 + i * 131);
-                if (npcSocialSpots.length && h % 4 === 0) {
+                // In the rain, nearly everyone makes for a gazebo or kiosk
+                if (npcSocialSpots.length && rainEnvNow > 0.4 && h % 5 !== 0) {
+                    const sp2 = npcSocialSpots[(i * 17 + h) % npcSocialSpots.length];
+                    s.tx = sp2.x;
+                    s.tz = sp2.z;
+                    s.arriveSit = true;
+                } else if (npcSocialSpots.length && h % 4 === 0) {
                     // Detour to a bench or gazebo for a rest
                     const sp = npcSocialSpots[(i * 31 + h) % npcSocialSpots.length];
                     s.tx = sp.x;
