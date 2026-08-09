@@ -3340,9 +3340,9 @@ function updateAmbientNPCs3D(dt, hole) {
                 }
             }
         } else {
-            const stW = Math.min(d, s.speed * dt);
-            s.x += (dx / d) * stW;
-            s.z += (dz / d) * stW;
+            // Strollers skirt ponds too (bench/gazebo detours cut
+            // across open ground between path cells)
+            walkStepAvoid(hole, s, s.tx, s.tz, dt);
         }
         const gy = (hole && hole.heights)
             ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
