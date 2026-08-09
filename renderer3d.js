@@ -3667,8 +3667,19 @@ function updateAmbientNPCs3D(dt, hole) {
                                 if (dv < vd) { vd = dv; vb = v; }
                             }
                         }
-                        s.detour = { x: vb.x, z: vb.z, need: need };
-                        s.walkPath = pathRoute(s.x, s.z, vb.x, vb.z);
+                        // Join the back of the line: customers already
+                        // headed to this cart push the new arrival's
+                        // standing spot further from the counter
+                        let inLine = 0;
+                        for (const o2 of npcStates) {
+                            if (o2 !== s && o2.detour
+                                && o2.detour.vx === vb.x
+                                && o2.detour.vz === vb.z) inLine++;
+                        }
+                        const qoff2 = 9 + Math.min(4, inLine) * 8;
+                        s.detour = { x: vb.x, z: vb.z + qoff2, need: need,
+                            vx: vb.x, vz: vb.z };
+                        s.walkPath = pathRoute(s.x, s.z, vb.x, vb.z + qoff2);
                         s.pause = 1;
                     } else if (need && !s.grumbled) {
                         s.grumbled = true;
