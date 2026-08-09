@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt236';
+const BUILD_TAG = 'gt237';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3394,7 +3394,12 @@ function exportCourseCode() {
         // Share the DESIGN: strip regenerable heights, your play history
         // (the receiver's golfers write their own records), and parcel
         // ownership (receivers get the whole island as a gift)
-        const { heights, holeStats, parcels, freshDefault, ...persistable } = worldCourse;
+        // ...plus complaints, careers, and vendor sales books — all of
+        // it is the sender's play history, not the design
+        const { heights, holeStats, parcels, freshDefault,
+                complaints, golferCareers, ...persistable } = worldCourse;
+        persistable.decor = (worldCourse.decor || []).map(d =>
+            ({ t: d.t, x: d.x, y: d.y, rot: d.rot || 0 }));
         const code = 'GTC1.' + btoa(unescape(encodeURIComponent(JSON.stringify(persistable))));
         if (navigator.clipboard && navigator.clipboard.writeText) {
             const kb = Math.round(code.length / 102.4) / 10;
