@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt183';
+const BUILD_TAG = 'gt184';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -508,6 +508,7 @@ let owWeatherRect = null;  // weather chip rect (tap for forecast)
 let owWeatherPanelRect = null;
 let owWeatherOpen = false;
 let owMarkerTap = null;    // { id, t } for double-tap flyover detection
+let owRecordLineRect = null; // hole-card record line (tap -> holder)
 let owNameRect = null;     // resort name rect in the top bar (tap to rename)
 let owDecorDrag = null;    // { i, moved } while repositioning a decor item
 let owBuyRect = null;  // screen rect of the buy chip
@@ -4213,6 +4214,10 @@ function drawOverworld() {
                         ctx.font = '9px -apple-system,sans-serif';
                         ctx.fillText('\u{1F3C5} Record: ' + st.best + ' \u2014 '
                             + (st.bestBy || '?'), hc.x + 14, ry + 12);
+                        owRecordLineRect = { x: hc.x + 10, y: ry + 2,
+                            w: hc.w - 20, h: 14, name: st.bestBy };
+                    } else {
+                        owRecordLineRect = null;
                     }
                 } else {
                     ctx.fillStyle = 'rgba(255,255,255,0.35)';
@@ -5113,6 +5118,17 @@ function overworldTouchStart(sx, sy) {
         const hc = holeCardLayout();
         const selHole = worldCourse.holes.find(h => h.id === owSelectedHole);
         if (selHole && hitBtn(sx, sy, hc.x, hc.y, hc.w, hc.h)) {
+            if (owRecordLineRect && owRecordLineRect.name
+                && hitBtn(sx, sy, owRecordLineRect.x, owRecordLineRect.y,
+                    owRecordLineRect.w, owRecordLineRect.h)) {
+                const holder = npcStates.find(n => n.name === owRecordLineRect.name);
+                if (holder) {
+                    owSelectedGolfer = holder.name;
+                    owSelectedHole = null;
+                    window.__greetGolfer = holder.name;
+                }
+                return;
+            }
             if (hitBtn(sx, sy, hc.x + 3, hc.y + 3, hc.w - 6, 26)) {
                 const cur = selHole.name || ('Hole ' + selHole.id);
                 const inp = prompt('Name this hole:', cur);
