@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt254';
+const BUILD_TAG = 'gt255';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6263,7 +6263,14 @@ function overworldTouchStart(sx, sy) {
                 return;
             }
             if (hitBtn(sx, sy, hc.delX, hc.delY, hc.delW, hc.delH)) {
-                worldCourse.holes = worldCourse.holes.filter(h => h.id !== owSelectedHole);
+                const deadId = owSelectedHole;
+                worldCourse.holes = worldCourse.holes.filter(h => h.id !== deadId);
+                // A deleted hole takes its records with it: complaints
+                // pinned to it and its play stats (otherwise the course
+                // report can name a hole that no longer exists)
+                worldCourse.complaints = (worldCourse.complaints || [])
+                    .filter(c => c.holeId !== deadId);
+                if (worldCourse.holeStats) delete worldCourse.holeStats[deadId];
                 owSelectedHole = null;
                 saveWorldCourse();
                 notify('Hole deleted');
