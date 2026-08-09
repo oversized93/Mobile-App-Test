@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt286';
+const BUILD_TAG = 'gt287';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -554,9 +554,10 @@ function parcelOwned(c, r) {
 }
 function parcelPrice() {
     // Land is the pacing gate (GolfTopia-style): measured early income
-    // is ~$120/game-hour with plot-one built out, so $750 makes the
-    // second plot ~6 game-minutes of running a real resort rather than
-    // pocket change, and 1.7x growth keeps later plots pressing
+    // is ~$100-120/game-hour with plot-one built out (re-measured after
+    // clubhouse upkeep landed), so $750 puts the second plot ~6-7 real
+    // minutes into running the resort, and 1.7x growth keeps later
+    // plots pressing
     return Math.round(750 * Math.pow(1.7, ensureParcels().bought || 0));
 }
 let owBalanceRect = null;   // balance chip rect (tap -> finances)
