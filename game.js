@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt259';
+const BUILD_TAG = 'gt260';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5639,7 +5639,7 @@ function drawPlacedHole(hole, selected) {
     ctx.beginPath();
     ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - 20);
     ctx.stroke();
-    ctx.fillStyle = '#e53935';
+    ctx.fillStyle = closed ? '#9e9e9e' : '#e53935'; // grey flag = closed
     ctx.beginPath();
     ctx.moveTo(p.x, p.y - 20);
     ctx.lineTo(p.x + 11, p.y - 15.5);

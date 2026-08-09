@@ -1956,7 +1956,8 @@ function buildTerrain3D(hole, opts) {
             const cnv = document.createElement('canvas');
             cnv.width = cnv.height = 128;
             const g = cnv.getContext('2d');
-            const col = HOLE_COLORS3D[(rec.id - 1) % HOLE_COLORS3D.length];
+            const col = rec.open === false ? '#8a8f94'
+                : HOLE_COLORS3D[(rec.id - 1) % HOLE_COLORS3D.length];
             g.shadowColor = col;
             g.shadowBlur = 18;
             g.fillStyle = col;
