@@ -2565,12 +2565,20 @@ function setupAmbientNPCs(hole) {
             arcIdx: gp.arcIdx != null ? gp.arcIdx : null
         });
     }
-    const GOLFER_NAMES = ['Ace Watson', 'Birdie Chen', 'Chip Alvarez', 'Divot Dan',
-        'Eagle Kim', 'Fairway Fran', 'Gimme Grace', 'Hook Harper',
-        'Iron Ivy', 'Jorge Links', 'Kara Putt', 'Loft Lucas'];
+    // 12 firsts x 8 lasts = 96 unique regulars before any name repeats —
+    // a big resort no longer fields three golfers who share one name,
+    // one career record, and one inspector entry. Deterministic order
+    // keeps early names identical to the classic roster.
+    const GOLFER_FIRSTS = ['Ace', 'Birdie', 'Chip', 'Divot',
+        'Eagle', 'Fairway', 'Gimme', 'Hook',
+        'Iron', 'Jorge', 'Kara', 'Loft'];
+    const GOLFER_LASTS = ['Watson', 'Chen', 'Alvarez', 'Dan',
+        'Kim', 'Fran', 'Grace', 'Harper'];
+    const golferName = (i) => GOLFER_FIRSTS[i % 12] + ' '
+        + GOLFER_LASTS[(Math.floor(i / 12) + i) % 8];
     let gnIdx = 0;
     for (const rg of routeGolfers) {
-        const gname = GOLFER_NAMES[gnIdx % GOLFER_NAMES.length];
+        const gname = golferName(gnIdx);
         // Innate skills shape play: strong Recovery duffs less, a silky
         // Putter lips out fewer first putts (same hash as the inspector)
         const sk = (typeof golferSkills === 'function') ? golferSkills(gname) : null;
