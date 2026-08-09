@@ -2968,22 +2968,23 @@ function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin) {
     if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
     const dx = x1 - x0, dz = z1 - z0;
     const dist = Math.sqrt(dx * dx + dz * dz);
-    if (dist < 20) return; // tap-ins stay on the turf
+    if (dist < 3) return;
+    const putt = dist < 20; // short game: a low roll, not a flight
     const mat = new THREE.SpriteMaterial({
         map: trailPuffTex, color: 0xffffff, transparent: true, opacity: 1,
         blending: THREE.AdditiveBlending, depthWrite: false
     });
     mat.toneMapped = false;
     const spr = new THREE.Sprite(mat);
-    spr.position.set(x0, y0, z0);
-    spr.scale.set(3.4, 3.4, 1);
+    spr.position.set(x0, putt ? y1 + 1.5 : y0, z0);
+    spr.scale.set(putt ? 2.4 : 3.4, putt ? 2.4 : 3.4, 1);
     scene3d.add(spr);
     npcFlights.push({
-        spr, mat, x0, y0, z0, x1, y1, z1,
+        spr, mat, x0, y0: putt ? y1 + 1.5 : y0, z0, x1, y1, z1, putt,
         px: pin ? pin.x : null, pz: pin ? pin.z : null,
-        apex: Math.min(60, 10 + dist * 0.28),
+        apex: putt ? 0.7 : Math.min(60, 10 + dist * 0.28),
         t0: performance.now(),
-        dur: 700 + dist * 5.5, // longer shots hang longer
+        dur: putt ? 420 + dist * 22 : 700 + dist * 5.5,
         puffAt: 0
     });
     if (npcFlights.length > 20) {
@@ -2998,6 +2999,12 @@ function updateNpcFlights3D(hole) {
         const f = npcFlights[i];
         const k = (now - f.t0) / f.dur;
         if (k >= 1) {
+            if (f.putt) { // a roll just stops where it stops
+                scene3d.remove(f.spr);
+                f.mat.dispose();
+                npcFlights.splice(i, 1);
+                continue;
+            }
             // Touchdown: splash out in water, else two dampened hops
             const wc = Math.floor(f.x1 / CELL), wr = Math.floor(f.z1 / CELL);
             const wet = f.bounce == null && typeof T !== 'undefined'
@@ -3056,7 +3063,7 @@ function updateNpcFlights3D(hole) {
         const y = f.y0 + (f.y1 - f.y0) * k + f.apex * 4 * k * (1 - k);
         f.spr.position.set(x, y, z);
         if (f.bounce === 2) f.mat.opacity = 1 - k; // roll-out fade
-        if (!f.bounce && now - f.puffAt > 130 && k < 0.75) {
+        if (!f.bounce && !f.putt && now - f.puffAt > 130 && k < 0.75) {
             f.puffAt = now;
             spawnTrailPuff3D(x, y, z);
         }
