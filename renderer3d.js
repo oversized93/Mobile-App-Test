@@ -4581,6 +4581,13 @@ function updateDayNightTint(minutes) {
     if (waterMat) waterMat.uniforms.uNight.value = 0.35 + 0.65 * dayW;
     // Wet ground: turf darkens while a shower passes
     if (terrainMatRef) terrainMatRef.color.setScalar(1 - rainEnvNow * 0.18);
+    // Dew sheen: the sprinkler-hour ground catches the low sun until it
+    // burns off mid-morning; rain re-wets the turf at any hour
+    if (terrainMatRef) {
+        const hrT = ((minutes / 60) % 24 + 24) % 24;
+        const dew = Math.max(0, 1 - Math.abs(hrT - 6.5) / 1.5);
+        terrainMatRef.roughness = 0.95 - 0.23 * Math.max(dew, rainEnvNow);
+    }
     // Fireflies fade in after dark, invisible by day
     if (fireflyMatRef) fireflyMatRef.opacity = Math.max(0, 1 - dayW * 2.2);
     // Lighthouse beams only show after dark
