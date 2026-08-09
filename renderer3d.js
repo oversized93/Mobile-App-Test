@@ -4260,13 +4260,18 @@ function updateLeaves3D(hole) {
     if (!leafInst || !leafStates.length) return;
     const t = windClock.value;
     const dummy = sharedDummy3D;
+    // Leaves ride the live wind: drift direction follows the world's
+    // wind angle and travel distance scales with its speed
+    const wSp = (typeof wind !== 'undefined' && wind) ? (wind.speed || 4) : 4;
+    const wAng = (typeof wind !== 'undefined' && wind) ? (wind.angle || 0) : 0;
+    const wCos = Math.cos(wAng), wSin = Math.sin(wAng);
+    const travel = 25 + wSp * 4.5;
     for (let i = 0; i < leafStates.length; i++) {
         const s = leafStates[i];
-        // Each leaf loops a slow tumbling fall from canopy height,
-        // drifting downwind (+x) with a lateral sway
+        // Each leaf loops a slow tumbling fall from canopy height
         const cyc = (t * 0.14 + s.phase) % 1;
-        const x = s.x + cyc * 55 + Math.sin(t * 1.7 + s.phase) * 6;
-        const z = s.z + Math.sin(t * 0.9 + s.phase * 2) * 5;
+        const x = s.x + wCos * cyc * travel + Math.sin(t * 1.7 + s.phase) * 6;
+        const z = s.z + wSin * cyc * travel + Math.sin(t * 0.9 + s.phase * 2) * 5;
         const gy = (hole && hole.heights)
             ? ((hole.heights[Math.floor(z / CELL)] || [])[Math.floor(x / CELL)] || 0) : 0;
         dummy.position.set(x, gy + 80 - cyc * 74, z);
