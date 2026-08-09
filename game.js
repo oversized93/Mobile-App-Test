@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt271';
+const BUILD_TAG = 'gt272';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4720,8 +4720,13 @@ function drawOverworld() {
                 ctx.font = '11px -apple-system,sans-serif';
                 ctx.textAlign = 'right';
                 const car2 = (worldCourse.golferCareers || {})[s.name];
-                const prog = 'H' + s.holeId + ' • '
-                    + (s.strokes ? s.strokes + ' str' : 'tee')
+                // Live activity: snack runs, strolls to the next tee, and
+                // early exits read as themselves instead of 'tee'
+                const act = s.leaving ? 'heading home'
+                    : s.detour ? '\u{1F964} snack run'
+                    : s.returning ? 'walking in'
+                    : (s.strokes ? s.strokes + ' str' : 'tee');
+                const prog = 'H' + s.holeId + ' • ' + act
                     + (car2 && car2.best != null ? ' • best ' + car2.best
                         : s.lastRound ? ' • last ' + s.lastRound : '');
                 ctx.fillText(prog, px + pw - 14, ry + 19);
