@@ -2943,8 +2943,11 @@ function updateAmbientNPCs3D(dt, hole) {
             } else
             // Detour to a kiosk/stall: walk over, buy, walk back to the tee
             if (s.detour || s.returning) {
-                const fx = s.detour ? s.detour.x : s.route[0].x;
-                const fz = s.detour ? s.detour.z : s.route[0].z;
+                // Returning golfers head straight for their queue slot
+                const fx = s.detour ? s.detour.x
+                    : s.route[0].x + (s.queueOff ? s.queueOff.x : 0);
+                const fz = s.detour ? s.detour.z
+                    : s.route[0].z + (s.queueOff ? s.queueOff.z : 0);
                 // Walkway waypoints first, then the short off-path leg
                 const pth = s.walkPath;
                 if (pth && pth.length) {
@@ -3171,9 +3174,13 @@ function updateAmbientNPCs3D(dt, hole) {
                         }
                     }
                     s.ptIdx = 0;
-                    s.x = s.route[0].x + (s.queueOff ? s.queueOff.x : 0);
-                    s.z = s.route[0].z + (s.queueOff ? s.queueOff.z : 0);
-                    s.pause = 5;
+                    // No teleporting: stroll from the green back to the
+                    // (possibly new) tee along the walkways — the same
+                    // returning walk the kiosk detours use
+                    s.returning = true;
+                    s.walkPath = pathRoute(s.x, s.z,
+                        s.route[0].x, s.route[0].z);
+                    s.pause = 2.5; // a beat on the green first
                     s.pendingSim = true;   // presimulate the next round
                     s.simResult = null;
                     // Hungry or thirsty? Walk to the nearest kiosk/stall
