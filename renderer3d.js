@@ -3343,7 +3343,16 @@ function updateAmbientNPCs3D(dt, hole) {
                 const dd = Math.sqrt(ddx * ddx + ddz * ddz);
                 s.tx = gx; s.tz = gz;
                 if (!onPath && dd < 6) {
-                    if (s.detour) {
+                    // Wait your turn: each place back in the line holds a
+                    // beat before the counter serves them
+                    if (s.detour && s.detour.wait == null) {
+                        const qi3 = s.detour.vz != null ? Math.max(0,
+                            Math.round((s.detour.z - s.detour.vz - 9) / 8)) : 0;
+                        s.detour.wait = qi3 * 1.3;
+                    }
+                    if (s.detour && s.detour.wait > 0) {
+                        s.detour.wait -= dt;
+                    } else if (s.detour) {
                         // Buy for the triggering need — and top up the other
                         // one too if it's also run high (one stop, two sales)
                         let price = 0;
