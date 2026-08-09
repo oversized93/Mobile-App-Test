@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt234';
+const BUILD_TAG = 'gt235';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -7067,7 +7067,7 @@ function drawPlaying() {
     // Wind (compact left side — arrow + number)
     const wcx = 36, wcy = 76;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    roundRect(6, 58, 60, 38, 10);
+    roundRect(6, 58, 60, 44, 10);
     ctx.fill();
     // Arrow
     const arrowLen = 12;
@@ -7088,11 +7088,14 @@ function drawPlaying() {
     ctx.lineTo(wcx + wax * 0.8 - Math.cos(aAngle - 0.6) * 5, wcy + way * 0.8 - 4 - Math.sin(aAngle - 0.6) * 5);
     ctx.lineTo(wcx + wax * 0.8 - Math.cos(aAngle + 0.6) * 5, wcy + way * 0.8 - 4 - Math.sin(aAngle + 0.6) * 5);
     ctx.fill();
-    // Speed
+    // Speed with units — a bare number reads as a mystery stat
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 11px -apple-system,sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(Math.round(wind.speed * 10) / 10, wcx, wcy + 14);
+    ctx.fillText(Math.round(wind.speed * 10) / 10, wcx, wcy + 12);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '8px -apple-system,sans-serif';
+    ctx.fillText('WIND mph', wcx, wcy + 21);
 
     // Terrain (top left)
     const ter = terrainAt(ball.x, ball.y);
