@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt272';
+const BUILD_TAG = 'gt273';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5390,8 +5390,9 @@ function drawGolferPanel(s) {
         ctx.fillText(val, rx, y);
         y += 16;
     };
-    const task = s.detour ? 'Buying a ' + (s.detour.need === 'thirst' ? 'drink' : 'snack')
-        : s.returning ? 'Heading back'
+    const task = s.leaving ? 'Heading home'
+        : s.detour ? 'Buying a ' + (s.detour.need === 'thirst' ? 'drink' : 'snack')
+        : s.returning ? 'Walking to the tee'
         : s.pause > 0 && s.ptIdx >= s.route.length - 1 ? 'Celebrating'
         : s.pause > 0 ? 'Hitting' : 'Walking to ball';
     row('Hole ' + s.holeId + '  •  Stroke ' + ((s.strokes || 0) + 1), task);
