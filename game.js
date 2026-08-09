@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt220';
+const BUILD_TAG = 'gt221';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -983,6 +983,22 @@ function tickWorld(dt) {
         const keep = worldCourse.complaints.filter(c => c.t > cut);
         if (keep.length !== worldCourse.complaints.length) {
             worldCourse.complaints = keep;
+        }
+    }
+    // 6 AM: fresh tee sheet — golfers who stormed off yesterday come
+    // back each morning (roster reseeds via the leak-free rebuild, only
+    // when someone actually left)
+    {
+        const day6 = Math.floor(((resort.worldClock || 0) - 360) / 1440);
+        if (window.__teeSheetDay == null) window.__teeSheetDay = day6;
+        if (day6 > window.__teeSheetDay) {
+            window.__teeSheetDay = day6;
+            if (state === 'overworld' && scene3dReady
+                && typeof npcStates !== 'undefined'
+                && npcStates.some(n => n.gone)) {
+                buildTerrain3D(worldCourse, { distantScenery: false });
+                notify('\u26C5 Fresh tee sheet \u2014 everyone\u2019s back for a new day');
+            }
         }
     }
     // Drain one difficulty measurement per second (6 sims each)
