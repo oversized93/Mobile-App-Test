@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt243';
+const BUILD_TAG = 'gt244';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1009,6 +1009,19 @@ function tickWorld(dt) {
                 buildTerrain3D(worldCourse, { distantScenery: false });
                 notify('\u26C5 Fresh tee sheet \u2014 everyone\u2019s back for a new day');
             }
+        }
+    }
+    // Expansion nudge: the first time the bank covers the next parcel,
+    // invite the player onward (once per tier, per session)
+    if (state === 'overworld' && worldCourse.parcels) {
+        const pn = ensureParcels();
+        if (pn.owned.length < PARCEL_COLS * PARCEL_ROWS
+            && resort.coins >= parcelPrice()
+            && (window.__landNudge == null
+                || window.__landNudge < pn.owned.length + 1)) {
+            window.__landNudge = pn.owned.length + 1;
+            notify('\u{1F3DE} You can afford new land! Tap past the dashed border to buy ($' + parcelPrice() + ')');
+            if (typeof playChime === 'function') playChime();
         }
     }
     // Drain one difficulty measurement per second (6 sims each)
