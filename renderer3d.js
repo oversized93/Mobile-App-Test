@@ -2246,23 +2246,28 @@ function updateCamera3D(dt) {
         const spd = 3 * dt;
         camera3d.position.y += (cam3dTarget.y - camera3d.position.y) * spd;
     }
-    const targetLook = new THREE.Vector3(cam3dLookAt.x, cam3dLookAt.y, cam3dLookAt.z);
-    camera3d.lookAt(targetLook);
+    camera3d.lookAt(cam3dLookAt.x, cam3dLookAt.y, cam3dLookAt.z);
 }
 
 // ---- Raycast screen point to ground plane (y=0) ----
 const raycaster3d = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+// Scratch objects reused by the per-frame/per-event math below — these
+// paths run for every golfer, pin, popup, and touch-move, so allocating
+// fresh vectors in them was steady GC churn
+const _tmpVecA = new THREE.Vector3();
+const _tmpVecB = new THREE.Vector3();
+const _upVec = new THREE.Vector3(0, 1, 0);
+const _tmpVec2 = new THREE.Vector2();
 
 function screenToWorld3D(sx, sy) {
     if (!camera3d) return { x: 0, y: 0 };
-    const ndc = new THREE.Vector2(
+    _tmpVec2.set(
         (sx / window.innerWidth) * 2 - 1,
         -(sy / window.innerHeight) * 2 + 1
     );
-    raycaster3d.setFromCamera(ndc, camera3d);
-    const hit = new THREE.Vector3();
-    raycaster3d.ray.intersectPlane(groundPlane, hit);
+    raycaster3d.setFromCamera(_tmpVec2, camera3d);
+    const hit = raycaster3d.ray.intersectPlane(groundPlane, _tmpVecA);
     if (hit) return { x: hit.x, y: hit.z }; // return as 2D world coords (x, z → x, y)
     return { x: 0, y: 0 };
 }
@@ -2273,11 +2278,11 @@ function panCamera3D(dx, dy) {
     if (cam3dOrbitMode) { panCameraOrbit(dx, dy); return; }
 
     // Convert screen delta to world delta based on camera orientation
-    const right = new THREE.Vector3();
-    const forward = new THREE.Vector3();
+    const right = _tmpVecA;
+    const forward = _tmpVecB;
     camera3d.getWorldDirection(forward);
-    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-    forward.crossVectors(new THREE.Vector3(0, 1, 0), right).normalize();
+    right.crossVectors(forward, _upVec).normalize();
+    forward.crossVectors(_upVec, right).normalize();
 
     const scale = camera3d.position.y * 0.004;
     const mx = (-dx * right.x + dy * forward.x) * scale;
@@ -2315,7 +2320,7 @@ function orbitCamera3D(angle, centerX, centerZ) {
 // ---- Project world point to screen ----
 function worldToScreen3D(wx, wy) {
     if (!camera3d) return { x: 0, y: 0, behind: true };
-    const vec = new THREE.Vector3(wx, 0, wy);
+    const vec = _tmpVecA.set(wx, 0, wy);
     vec.project(camera3d);
     // Check if point is behind camera (z > 1 after projection)
     const behind = vec.z > 1;
