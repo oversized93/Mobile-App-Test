@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt253';
+const BUILD_TAG = 'gt254';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -956,7 +956,17 @@ function simulateHole(par) {
 function simulateRound(course) {
     let totalStrokes = 0, totalPar = 0, coins = 0;
     for (const hole of course.holes) {
-        const r = simulateHole(hole.par);
+        // Pillar 5: the exhibition plays the REAL physics per hole (this
+        // was the last statistical dice-roll fork). Closed holes sit out;
+        // the dice survive only as a fallback if a sim throws.
+        if (hole.open === false) continue;
+        let r;
+        try {
+            const sim = simulateWorldHoleRound(hole, 2.5);
+            r = { strokes: sim.strokes, par: hole.par || 4 };
+        } catch (e) {
+            r = simulateHole(hole.par);
+        }
         totalStrokes += r.strokes;
         totalPar += r.par;
         // Exhibition payout aligned with the green-fee economy: double
