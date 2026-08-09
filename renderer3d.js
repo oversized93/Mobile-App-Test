@@ -2363,9 +2363,15 @@ function render3D() {
         const t = windClock.value;
         for (const ch of flagGroup.children) {
             if (ch.userData && ch.userData.pinFlag) {
-                ch.rotation.y = Math.sin(t * 1.1) * 0.35
-                    + Math.sin(t * 3.3) * 0.12;
-                ch.scale.x = 0.92 + Math.sin(t * 5.1) * 0.08;
+                // The cloth points downwind and flutters harder in a blow
+                const wA = (typeof wind !== 'undefined' && wind)
+                    ? wind : { speed: 4, angle: 0 };
+                const wk = Math.min(1, (wA.speed || 0) / 13);
+                ch.rotation.y = -wA.angle
+                    + Math.sin(t * (0.9 + wk * 1.6)) * (0.12 + wk * 0.3)
+                    + Math.sin(t * 3.3) * 0.1;
+                ch.scale.x = 0.92
+                    + Math.sin(t * (3.5 + wk * 3)) * (0.04 + wk * 0.07);
             }
         }
     }
