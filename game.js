@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt278';
+const BUILD_TAG = 'gt279';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -8879,6 +8879,22 @@ document.addEventListener('visibilitychange', () => {
     if (!document.hidden && audioCtx && audioCtx.state === 'suspended') {
         audioCtx.resume().catch(() => {});
     }
+    // Backgrounding may be the last thing this tab ever does on iOS —
+    // bank everything right now instead of hoping for the next autosave
+    if (document.hidden) {
+        try {
+            resort.lastTickMs = Date.now();
+            saveResort();
+            saveWorldCourse();
+        } catch (e) {}
+    }
+});
+window.addEventListener('pagehide', () => {
+    try {
+        resort.lastTickMs = Date.now();
+        saveResort();
+        saveWorldCourse();
+    } catch (e) {}
 });
 document.addEventListener('touchstart', () => {
     if (audioCtx && audioCtx.state === 'suspended') {
