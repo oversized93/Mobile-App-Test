@@ -497,6 +497,24 @@ function loadWorldAssets() {
     const loader = new THREE.GLTFLoader();
     const loaded = {};
     let remaining = names.length;
+    // Two-phase swap: the two multi-MB heroes (golfer, grandstand) must
+    // not gate every tree and bench — when only they remain, the world
+    // upgrades immediately and they slot in on arrival
+    const HEAVY = { golfer: true, grandstand: true };
+    let heavyRemaining = names.filter(n => HEAVY[n]).length;
+    let midSwapDone = false;
+    const noteDone = (name) => {
+        if (HEAVY[name]) heavyRemaining--;
+        remaining--;
+        if (remaining === 0) {
+            finishAssets(loaded);
+        } else if (!midSwapDone && heavyRemaining > 0
+            && remaining === heavyRemaining) {
+            midSwapDone = true;
+            finishAssets(loaded);
+            worldAssetsLoading = true; // still waiting on the heroes
+        }
+    };
     const targetOf = (name) => {
         if (ASSET_TARGET_H_NAME[name]) return ASSET_TARGET_H_NAME[name];
         for (const k in ASSET_SPECIES) if (ASSET_SPECIES[k].includes(name)) return ASSET_TARGET_H[k];
@@ -545,9 +563,9 @@ function loadWorldAssets() {
             }
             const h = Math.max(0.001, box.max.y - box.min.y);
             loaded[name] = { parts, scale: targetOf(name) / h };
-            if (--remaining === 0) finishAssets(loaded);
+            noteDone(name);
         }, undefined, () => {
-            if (--remaining === 0) finishAssets(loaded);
+            noteDone(name);
         });
     }
 }
