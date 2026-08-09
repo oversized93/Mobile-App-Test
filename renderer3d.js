@@ -2882,7 +2882,26 @@ function updateAmbientNPCs3D(dt, hole) {
                             s.pause += 2;
                             golferThink(s, 'My ball found trouble', -6);
                         } else if (Math.random() < 0.1) {
-                            golferThink(s, 'I love coming to play golf', 8);
+                            // Varied musings — sometimes complimenting decor
+                            // they can actually see on this course
+                            const POOL = ['I love coming to play golf',
+                                'What a gorgeous day out here',
+                                'This course keeps getting better',
+                                'Best little resort on the coast',
+                                'I should bring my cousin next time'];
+                            const NICE = { windmill: 'That windmill is charming',
+                                lighthouse: 'Love that lighthouse',
+                                statue: 'Classy statue by the path',
+                                gazebo: 'The gazebo is a lovely touch',
+                                clubhouse: 'What a grand clubhouse',
+                                grandstand: 'Big-event energy today',
+                                arch: 'Grand entrance, this place' };
+                            let line = POOL[(Math.random() * POOL.length) | 0];
+                            if (hole.decor && hole.decor.length && Math.random() < 0.5) {
+                                const d2 = hole.decor[(Math.random() * hole.decor.length) | 0];
+                                if (NICE[d2.t]) line = NICE[d2.t];
+                            }
+                            golferThink(s, line, 8);
                         }
                     } else {
                         // Walk toward the next point, but sidestep water:
