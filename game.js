@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt370';
+const BUILD_TAG = 'gt371';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -105,6 +105,7 @@ function makeStarterCourse() {
         biome: 'meadows',
         freshDefault: true, // first overworld visit routes to the creator
         cols, rows, border,
+        entC: entranceCx, entR: entranceR0,
         grid,
         holes: [{
             id: 1, par: 4,
@@ -127,7 +128,10 @@ function makeIsland(params) {
         seed: 2990, water: 0.35, hills: 0.5, trees: 0.6,
         rocks: 0.4, roundness: 0.6, grass: 0.7
     }, params || {});
-    const cols = COURSE_COLS, rows = COURSE_ROWS;
+    // Generated islands are the big canvas (reference-style): 2.5x the
+    // tutorial island, split into a 4x4 property grid you buy piecewise
+    const cols = 192, rows = 128;
+    const ISLE_PC = 4, ISLE_PR = 4;
     const frame = 2; // hard OOB frame so pan clamps stay sane
     const seed = p.seed | 0;
     const rand = (n) => {
@@ -139,14 +143,19 @@ function makeIsland(params) {
         harm.push({ a: rand(k + 1), ph: rand(k + 40) * Math.PI * 2 });
     }
     const ccx = cols / 2, ccy = rows / 2;
-    const baseR = Math.min(cols, rows) / 2 - frame - 3;
+    // Elliptical base radius so the landmass fills the whole rectangle
+    // instead of a circle floating in sea
+    const erx = cols / 2 - frame - 3;
+    const ery = rows / 2 - frame - 3;
     const coastR = (theta) => {
         let n = 0;
         for (let k = 0; k < 6; k++) {
             n += harm[k].a * Math.sin((k + 1) * theta + harm[k].ph) / (k + 1);
         }
         const wob = 1 + (n / 1.6) * (1 - p.roundness) * 0.9;
-        return baseR * Math.max(0.35, wob);
+        const ct = Math.cos(theta), st = Math.sin(theta);
+        const er = (erx * ery) / Math.sqrt((ery * ct) ** 2 + (erx * st) ** 2);
+        return er * Math.max(0.35, wob);
     };
     const lat = (x, y) => rand(x * 731 + y * 1237);
     const s2 = (x, y, per) => {
@@ -184,10 +193,10 @@ function makeIsland(params) {
     // Entrance: the starting property picks the gate's column — the
     // southernmost land in that parcel column carries the entrance
     const startParcel = (p.startParcel != null)
-        ? p.startParcel : (PARCEL_ROWS - 1) * PARCEL_COLS + 1;
-    const startColIdx = startParcel % PARCEL_COLS;
+        ? p.startParcel : (ISLE_PR - 1) * ISLE_PC + 1;
+    const startColIdx = startParcel % ISLE_PC;
     const entC = Math.min(cols - frame - 4, Math.max(frame + 4,
-        Math.round((startColIdx + 0.5) * cols / PARCEL_COLS)));
+        Math.round((startColIdx + 0.5) * cols / ISLE_PC)));
     let entR = rows - frame - 1;
     while (entR > ccy && grid[entR][entC] === T.WATER) entR--;
     entR -= 1; // one row inland of the beach
@@ -197,43 +206,27 @@ function makeIsland(params) {
     for (let r = entR - 12; r < entR - 1; r++)
         for (let c = entC - 1; c <= entC + 1; c++)
             if (grid[r] && grid[r][c] !== undefined) grid[r][c] = T.PATH;
-    // Starter hole northwest of the walkway so day one has play running
-    const paint = (c0, r0, c1, r1, t) => {
-        for (let r = r0; r <= r1; r++)
-            for (let c = c0; c <= c1; c++)
-                if (grid[r] && grid[r][c] !== undefined && grid[r][c] !== T.OOB)
-                    grid[r][c] = t;
-    };
-    paint(entC - 8, entR - 16, entC - 4, entR - 12, T.TEE);
-    paint(entC - 10, entR - 34, entC - 2, entR - 16, T.FAIRWAY);
-    paint(entC - 2, entR - 40, entC + 10, entR - 30, T.FAIRWAY);
-    paint(entC + 10, entR - 42, entC + 16, entR - 36, T.GREEN);
-    paint(entC + 2, entR - 30, entC + 7, entR - 26, T.SAND);
-    paint(entC - 6, entR - 13, entC - 1, entR - 12, T.PATH);
+    // Blank canvas (reference-style): a new island ships with wild land,
+    // an entrance, and nothing else — every hole is yours to carve
+    const pIdx = (c, r) => Math.min(ISLE_PR - 1, Math.floor(r / (rows / ISLE_PR)))
+        * ISLE_PC + Math.min(ISLE_PC - 1, Math.floor(c / (cols / ISLE_PC)));
     return {
         id: 'course_1',
         name: 'My Resort',
         biome: 'meadows',
         cols, rows,
         border: rows - entR,      // keeps the ENTRANCE marker on the pad
+        entC: entC, entR: entR,   // gate position (may be off-center)
         grid,
         terrainSeed: seed,
-        parcels: (() => {
-            const pIdx = (c, r) => Math.min(PARCEL_ROWS - 1, Math.floor(r / (rows / PARCEL_ROWS)))
-                * PARCEL_COLS + Math.min(PARCEL_COLS - 1, Math.floor(c / (cols / PARCEL_COLS)));
-            return { owned: [...new Set([startParcel, pIdx(entC, entR),
-                pIdx(entC, entR - 22)])], bought: 0 };
-        })(),
+        parcels: { owned: [pIdx(entC, entR)], bought: 0,
+                   pc: ISLE_PC, pr: ISLE_PR },
         hillAmp: 0.4 + p.hills * 1.2,
         rockDensity: p.rocks,
         grassDensity: p.grass,
         islandParams: p,          // so the create screen can re-roll
-        holes: [{
-            id: 1, par: 4,
-            tee: { x: entC - 6, y: entR - 14 },
-            pin: { x: entC + 13, y: entR - 39 },
-            waypoints: [{ x: entC - 5, y: entR - 25 }]
-        }],
+        holes: [],
+        decor: [{ t: 'arch', x: entC + 0.5, y: entR - 1.2, rot: 0 }],
         facilities: [],
         scenery: []
     };
@@ -242,7 +235,11 @@ function makeIsland(params) {
 let worldCourse = loadData('course', null);
 // Invalidate any saved course that predates the bounded-rectangle schema.
 // These old saves were 100x100 open fields without a border — start fresh.
-if (!worldCourse || worldCourse.cols !== COURSE_COLS || worldCourse.rows !== COURSE_ROWS) {
+// Any structurally-sound course loads — island sizes vary by era
+// (tutorial 120x80, generated 192x128), and both stay playable
+if (!worldCourse || !worldCourse.grid || !worldCourse.cols || !worldCourse.rows
+    || worldCourse.grid.length !== worldCourse.rows
+    || !worldCourse.grid[0] || worldCourse.grid[0].length !== worldCourse.cols) {
     worldCourse = makeStarterCourse();
 }
 
@@ -534,14 +531,18 @@ function currentTool() {
 // The island is a 4x3 grid of parcels. New islands start with the two
 // entrance parcels; veteran saves own everything (no rug-pulls). Each
 // additional section costs more than the last.
-const PARCEL_COLS = 4, PARCEL_ROWS = 3;
+// Dims live on the course (legacy islands are 4x3, generated ones 4x4)
+// and sync into these globals whenever the active course is consulted.
+let PARCEL_COLS = 4, PARCEL_ROWS = 3;
 function ensureParcels() {
     if (!worldCourse.parcels) {
         worldCourse.parcels = {
-            owned: Array.from({ length: PARCEL_COLS * PARCEL_ROWS }, (_, i) => i),
-            bought: 0
+            owned: Array.from({ length: 12 }, (_, i) => i),
+            bought: 0, pc: 4, pr: 3
         };
     }
+    PARCEL_COLS = worldCourse.parcels.pc || 4;
+    PARCEL_ROWS = worldCourse.parcels.pr || 3;
     return worldCourse.parcels;
 }
 function parcelIndexAt(c, r) {
@@ -553,12 +554,11 @@ function parcelOwned(c, r) {
     return ensureParcels().owned.includes(parcelIndexAt(c, r));
 }
 function parcelPrice() {
-    // Land is the pacing gate (GolfTopia-style): measured early income
-    // is ~$100-120/game-hour with plot-one built out (re-measured after
-    // clubhouse upkeep landed), so $750 puts the second plot ~6-7 real
-    // minutes into running the resort, and 1.7x growth keeps later
-    // plots pressing
-    return Math.round(750 * Math.pow(1.7, ensureParcels().bought || 0));
+    // Land is the pacing gate (GolfTopia-style). Generated islands have
+    // fifteen parcels to buy, so growth is gentler than the old 3-plot
+    // tutorial curve: $750 for the second plot, 1.45x each after —
+    // the last corners of the island are late-game money sinks.
+    return Math.round(750 * Math.pow(1.45, ensureParcels().bought));
 }
 let owBalanceRect = null;   // balance chip rect (tap -> finances)
 let owFinancesRect = null;  // open finances panel rect
@@ -607,6 +607,10 @@ function buyOfferedParcel() {
     owBuyOffer = null;
     saveResort();
     saveWorldCourse();
+    // Lift the dusk wash off the new plot right away
+    if (typeof buildTerrainAlbedo === 'function' && scene3dReady) {
+        buildTerrainAlbedo(worldCourse);
+    }
     notify('\u{1F4CB} Property purchased! The resort grows');
 }
 
@@ -740,7 +744,7 @@ function tourneyTitle() {
 
 function celebrateFireworks() {
     if (typeof spawnFirework3D !== 'function') return;
-    const ex = (Math.floor(worldCourse.cols / 2) + 0.5) * CELL;
+    const ex = ((worldCourse.entC != null ? worldCourse.entC : Math.floor(worldCourse.cols / 2)) + 0.5) * CELL;
     const ez = (worldCourse.rows - (worldCourse.border || 4) + 0.5) * CELL;
     spawnFirework3D(ex - 90, ez - 60, 0xffd24a);
     spawnFirework3D(ex + 70, ez - 110, 0xff6a5a);
@@ -1430,7 +1434,7 @@ function tickWorld(dt) {
             resort.memMilestone = resort.members;
             notify('\u{1F389} ' + resort.members + ' members! The resort is thriving');
             if (typeof playFanfare === 'function') playFanfare();
-            const ex = (Math.floor(worldCourse.cols / 2) + 0.5) * CELL;
+            const ex = ((worldCourse.entC != null ? worldCourse.entC : Math.floor(worldCourse.cols / 2)) + 0.5) * CELL;
             const ez = (worldCourse.rows - (worldCourse.border || 4) + 0.5) * CELL;
             (window.__scorePopups = window.__scorePopups || []).push({
                 x: ex, z: ez, t0: performance.now(),
@@ -1466,7 +1470,7 @@ function tickWorld(dt) {
                 : '\u2B50 Three stars \u2014 ' + worldCourse.name + ' is on the map!');
             if (typeof playFanfare === 'function') playFanfare();
             celebrateFireworks();
-            const ex = (Math.floor(worldCourse.cols / 2) + 0.5) * CELL;
+            const ex = ((worldCourse.entC != null ? worldCourse.entC : Math.floor(worldCourse.cols / 2)) + 0.5) * CELL;
             const ez = (worldCourse.rows - (worldCourse.border || 4) + 0.5) * CELL;
             (window.__scorePopups = window.__scorePopups || []).push({
                 x: ex, z: ez, t0: performance.now(),
@@ -1758,10 +1762,12 @@ function generateHeights(hole) {
             }
             // Water vertices sit at 0 so they match surrounding terrain flat
             if (t === T.WATER) height = 0;
-            // Fold valleys up to ground level: land never dips below y=0,
-            // so the global water surface (y=-1.4) only ever shows inside
-            // carved ponds.
-            let q = Math.max(0, height);
+            // Fold valleys up above the sea's animated crest: the ocean
+            // plane sits at -1.4 but its waves displace upward, and on
+            // big islands the crests streaked through valley rows that
+            // sat at exactly 0. A 2.2 floor keeps every landlocked cell
+            // clear of the tallest wave.
+            let q = Math.max(2.2, height);
             if (t === T.SAND) {
                 // Bunkers dip into a shallow bowl below the surrounding
                 // turf. Floor stays above the global water plane (-1.4)
@@ -1781,7 +1787,9 @@ function generateHeights(hole) {
             const stepBase = Math.floor(q / STEP_H) * STEP_H;
             const frac = (q - stepBase) / STEP_H;
             const lip = frac < 0.68 ? 0 : (frac - 0.68) / 0.32;
-            h[r][c] = stepBase + lip * lip * STEP_H;
+            // Floor applied after terracing (the step quantization used
+            // to fold low ground straight back to sea level)
+            h[r][c] = Math.max(2.2, stepBase + lip * lip * STEP_H);
         }
     }
     return h;
@@ -3684,8 +3692,9 @@ function importCourseCode() {
                 return;
             }
             const data = JSON.parse(decodeURIComponent(escape(atob(txt.slice(5)))));
-            if (!data || data.cols !== COURSE_COLS || data.rows !== COURSE_ROWS
-                || !Array.isArray(data.grid) || !Array.isArray(data.holes)) {
+            if (!data || !data.cols || !data.rows
+                || !Array.isArray(data.grid) || data.grid.length !== data.rows
+                || !Array.isArray(data.holes)) {
                 notify('That code is not a valid course');
                 return;
             }
@@ -3883,7 +3892,9 @@ function regenIslandDraft() {
         if (typeof resetCameraFov === 'function') resetCameraFov();
         setCameraOrbit(islandDraft.course.cols * CELL / 2,
                        islandDraft.course.rows * CELL / 2,
-                       2700, Math.PI / 180 * 46, 0.5);
+                       Math.max(islandDraft.course.cols,
+                           islandDraft.course.rows * 1.6) * CELL * 0.72,
+                       Math.PI / 180 * 46, 0.5);
         if (typeof camera3d !== 'undefined' && camera3d) {
             camera3d.position.set(cam3dTarget.x, cam3dTarget.y, cam3dTarget.z);
         }
@@ -3993,19 +4004,21 @@ function drawIslandCreator() {
     islandUIRects.parcels = [];
     {
         const course = islandDraft.course;
-        const tw4 = (inW - (PARCEL_COLS - 1) * 3) / PARCEL_COLS;
+        const dPC = (course.parcels && course.parcels.pc) || 4;
+        const dPR = (course.parcels && course.parcels.pr) || 4;
+        const tw4 = (inW - (dPC - 1) * 3) / dPC;
         const th4 = compact ? 13 : 15;
         const chosen = islandDraft.params.startParcel != null
-            ? islandDraft.params.startParcel : (PARCEL_ROWS - 1) * PARCEL_COLS + 1;
-        for (let pr = 0; pr < PARCEL_ROWS; pr++) {
-            for (let pc = 0; pc < PARCEL_COLS; pc++) {
-                const pi = pr * PARCEL_COLS + pc;
+            ? islandDraft.params.startParcel : (dPR - 1) * dPC + 1;
+        for (let pr = 0; pr < dPR; pr++) {
+            for (let pc = 0; pc < dPC; pc++) {
+                const pi = pr * dPC + pc;
                 // Land fraction shades the tile: sea tiles read dark
                 let land = 0, tot = 0;
-                const c0 = Math.floor(pc * course.cols / PARCEL_COLS);
-                const c1 = Math.floor((pc + 1) * course.cols / PARCEL_COLS);
-                const r0 = Math.floor(pr * course.rows / PARCEL_ROWS);
-                const r1 = Math.floor((pr + 1) * course.rows / PARCEL_ROWS);
+                const c0 = Math.floor(pc * course.cols / dPC);
+                const c1 = Math.floor((pc + 1) * course.cols / dPC);
+                const r0 = Math.floor(pr * course.rows / dPR);
+                const r1 = Math.floor((pr + 1) * course.rows / dPR);
                 for (let r = r0; r < r1; r += 3)
                     for (let c = c0; c < c1; c += 3) {
                         tot++;
@@ -4029,7 +4042,7 @@ function drawIslandCreator() {
                 islandUIRects.parcels.push({ pi, x: tx4, y: ty4, w: tw4, h: th4 });
             }
         }
-        y += PARCEL_ROWS * (th4 + 3) + 4;
+        y += dPR * (th4 + 3) + 4;
     }
     if (islandDraft.stats) {
         const st = islandDraft.stats;
@@ -4983,7 +4996,8 @@ function drawOverworld() {
 
     // ---- Entrance marker — anchors the resort's front door ----
     {
-        const eCol = Math.floor(worldCourse.cols / 2);
+        const eCol = worldCourse.entC != null ? worldCourse.entC
+            : Math.floor(worldCourse.cols / 2);
         const eRow = worldCourse.rows - (worldCourse.border || 4);
         const es = cellCenterScreen(eCol, eRow);
         const entranceBottom = H() - 20;

@@ -218,7 +218,10 @@ function init3D() {
     scene3d.fog = new THREE.Fog(linC('#87b8d8'), 5000, 12000);
 
     // Camera
-    camera3d = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 15000);
+    // near=4: with far=15000 a near of 1 leaves ~1.3 units of depth
+    // resolution at big-island viewing distances — the 1.4-unit land/sea
+    // gap z-fought into stripes. Nothing renders closer than ~50.
+    camera3d = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 4, 15000);
     camera3d.position.set(0, 300, 0);
     camera3d.lookAt(0, 0, 0);
 
@@ -866,7 +869,8 @@ function buildWaterSurface(hole) {
     }
     waterMat.uniforms.uShore.value = buildShoreTexture(hole);
     waterMat.uniforms.uWorld.value.set(hole.cols * CELL, hole.rows * CELL);
-    const geo = new THREE.PlaneGeometry(hole.cols * CELL, hole.rows * CELL);
+    const geo = new THREE.PlaneGeometry(hole.cols * CELL, hole.rows * CELL,
+        24, 16); // subdivided: a single giant quad loses depth precision
     geo.rotateX(-Math.PI / 2);
     geo.translate(hole.cols * CELL / 2, -1.4, hole.rows * CELL / 2);
     waterMesh = new THREE.Mesh(geo, waterMat);
@@ -1187,6 +1191,15 @@ function paintAlbedoCell(hole, c, r) {
         if (s !== T.WATER) g.fillRect(x, y + px - sw2, px, sw2);
         if (w !== T.WATER) g.fillRect(x, y, sw2, px);
         if (e !== T.WATER) g.fillRect(x + px - sw2, y, sw2, px);
+    }
+
+    // Locked land reads locked: unowned parcels sit under a dusk wash
+    // (sea stays bright so the island's edge keeps its color)
+    if (t !== T.WATER && typeof parcelOwned === 'function'
+        && typeof worldCourse !== 'undefined' && hole === worldCourse
+        && hole.parcels && !parcelOwned(c, r)) {
+        g.fillStyle = 'rgba(18,26,34,0.34)';
+        g.fillRect(x, y, px, px);
     }
 }
 
@@ -1741,7 +1754,8 @@ function buildTerrain3D(hole, opts) {
 
         // ---- Entrance plaza dressing (props once assets are loaded) ----
     if (worldAssets && hole.border != null) {
-        const ec = Math.floor(hole.cols / 2);
+        const ec = hole.entC != null ? hole.entC
+            : Math.floor(hole.cols / 2);
         const er = hole.rows - hole.border;
         const hAt = (c, r) => (hole.heights && hole.heights[Math.round(r)])
             ? (hole.heights[Math.round(r)][Math.round(c)] || 0) : 0;
@@ -3414,7 +3428,8 @@ function updateAmbientNPCs3D(dt, hole) {
                     s.leaving = true;
                     s.detour = null;
                     s.returning = false;
-                    const eCol9 = Math.floor(hole.cols / 2);
+                    const eCol9 = hole.entC != null ? hole.entC
+                        : Math.floor(hole.cols / 2);
                     const eRow9 = hole.rows - (hole.border || 4);
                     s.leaveX = (eCol9 + 0.5) * CELL;
                     s.leaveZ = (eRow9 + 0.5) * CELL;
@@ -3738,7 +3753,8 @@ function updateAmbientNPCs3D(dt, hole) {
                         s.leaving = true;
                         s.detour = null;
                         s.returning = false;
-                        const eCol2 = Math.floor(hole.cols / 2);
+                        const eCol2 = hole.entC != null ? hole.entC
+                            : Math.floor(hole.cols / 2);
                         const eRow2 = hole.rows - (hole.border || 4);
                         s.leaveX = (eCol2 + 0.5) * CELL;
                         s.leaveZ = (eRow2 + 0.5) * CELL;
@@ -5330,7 +5346,8 @@ function setupShuttle(hole) {
         terrainGroup.add(w);
         shuttleWalkers.push({ grp: w, walking: false, x: 0, z: 0, tz: 0 });
     }
-    const eCol = Math.floor(hole.cols / 2);
+    const eCol = hole.entC != null ? hole.entC
+        : Math.floor(hole.cols / 2);
     const eRow = hole.rows - (hole.border || 4);
     shuttleState = {
         phase: 'hidden',
