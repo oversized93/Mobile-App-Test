@@ -1707,15 +1707,31 @@ function buildTerrain3D(hole, opts) {
             for (const d of hole.decor) {
                 const name = DECOR_MODELS[d.t];
                 if (!name) continue;
-                put(name, d.x, d.y, d.rot || 0);
+                // The clubhouse grows with its amenity tier so upgrades
+                // read on the island itself, not just the Manage screen
+                let scaleMul = 1;
+                if (d.t === 'clubhouse' && typeof resort !== 'undefined' && resort) {
+                    scaleMul = resort.amenities && resort.amenities.clubhouse3 ? 1.34
+                        : resort.amenities && resort.amenities.clubhouse2 ? 1.17 : 1;
+                }
+                put(name, d.x, d.y, d.rot || 0, scaleMul);
                 if (d.t === 'lighthouse') addLighthouseBeacon(d.x * CELL, hAt(d.x, d.y) + 195, d.y * CELL);
                 // Buildings glow from the inside after dark
+                const tierUp = d.t === 'clubhouse'
+                    && typeof resort !== 'undefined' && resort
+                    && resort.amenities && resort.amenities.clubhouse2;
                 const WINDOW_GLOWS = { clubhouse: [46, 64], kiosk: [24, 34],
                     stall: [22, 32], windmill: [40, 40], gazebo: [26, 36] };
                 const wg = WINDOW_GLOWS[d.t];
                 if (wg) {
-                    addWindowGlow(d.x * CELL, hAt(d.x, d.y) + wg[0],
-                        d.y * CELL, wg[1]);
+                    addWindowGlow(d.x * CELL, hAt(d.x, d.y) + wg[0] * scaleMul,
+                        d.y * CELL, wg[1] * scaleMul);
+                    // Upgraded clubhouses glow from a second storey too
+                    if (tierUp) {
+                        addWindowGlow(d.x * CELL,
+                            hAt(d.x, d.y) + wg[0] * scaleMul + 26,
+                            d.y * CELL, wg[1] * 0.7);
+                    }
                 }
             }
         }
