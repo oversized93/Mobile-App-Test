@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt260';
+const BUILD_TAG = 'gt261';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1078,6 +1078,16 @@ function tickWorld(dt) {
                 notify('\u26C5 Fresh tee sheet \u2014 everyone\u2019s back for a new day');
             }
         }
+    }
+    // Autosave: progress accrues while the player just watches (fees,
+    // members, records, careers) but saves only fired on interactions —
+    // a killed tab lost everything since the last tap. Every ~30 game
+    // minutes the world persists itself.
+    if (window.__autosaveAt == null) window.__autosaveAt = resort.worldClock;
+    if (Math.abs(resort.worldClock - window.__autosaveAt) > 30) {
+        window.__autosaveAt = resort.worldClock;
+        saveResort();
+        saveWorldCourse();
     }
     // Expansion nudge: the first time the bank covers the next parcel,
     // invite the player onward (once per tier, per session)
