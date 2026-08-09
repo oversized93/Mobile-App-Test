@@ -3478,6 +3478,7 @@ function updateAmbientNPCs3D(dt, hole) {
                     if (s.par && s.lastRound && s.lastRound < s.par) {
                         const tip = (s.par - s.lastRound) >= 2 ? 4 : 2;
                         window.__golfFees += tip;
+                        window.__tipFees = (window.__tipFees || 0) + tip;
                         window.__feePopups.push({
                             x: pinPt.x, z: pinPt.z, t0: performance.now(),
                             amt: tip, tag: '\u{1F4B5} tip',

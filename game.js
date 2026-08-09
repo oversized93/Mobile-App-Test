@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt323';
+const BUILD_TAG = 'gt324';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1188,6 +1188,12 @@ function tickWorld(dt) {
         resort.feesEarned = (resort.feesEarned || 0) + feeTake;
         ledgerIncome(feeTake);
         window.__golfFees = 0;
+        // Track the tip share separately for the finance panel
+        if (window.__tipFees) {
+            resort.tipsEarned = (resort.tipsEarned || 0)
+                + Math.round(window.__tipFees * clubhouseFeeMul());
+            window.__tipFees = 0;
+        }
     }
     // Day rollover: archive today's books, charge the new day's upkeep
     {
@@ -4516,7 +4522,9 @@ function drawOverworld() {
         line('Upkeep/day', '$' + up.total + '  (' + worldCourse.holes.length
             + ' holes + decor' + (up.amenities ? ' + clubhouse' : '') + ')',
             'rgba(255,255,255,0.8)', fy + 112);
-        line('Lifetime', 'fees $' + (resort.feesEarned || 0) + ' \u2022 stalls $'
+        line('Lifetime', 'fees $' + (resort.feesEarned || 0)
+            + (resort.tipsEarned ? ' (incl. $' + resort.tipsEarned + ' tips)' : '')
+            + ' \u2022 stalls $'
             + (resort.stallSales || 0) + ' \u2022 purses $'
             + (resort.purseEarned || 0), 'rgba(255,255,255,0.8)', fy + 130);
         let extraY = fy + 148;
