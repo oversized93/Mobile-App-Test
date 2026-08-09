@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt231';
+const BUILD_TAG = 'gt232';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -7549,10 +7549,19 @@ function drawPlaying() {
 
     // Hint text — sits just above the tray so it doesn't collide with tray contents
     if (flyoverActive) {
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.font = '14px -apple-system,sans-serif';
+        // Pill chip, not bare text — readable over any terrain/golfer
+        ctx.font = 'bold 13px -apple-system,sans-serif';
+        const skW = ctx.measureText('Tap to skip').width + 30;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        roundRect((W() - skW) / 2, H() - 134, skW, 28, 14);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 1;
+        roundRect((W() - skW) / 2, H() - 134, skW, 28, 14);
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
         ctx.textAlign = 'center';
-        ctx.fillText('Tap to skip', W() / 2, H() - 116);
+        ctx.fillText('Tap to skip', W() / 2, H() - 115);
     } else if (!ball.moving && !holeComplete) {
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.font = '11px -apple-system,sans-serif';
