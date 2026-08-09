@@ -2929,8 +2929,12 @@ function updateAmbientNPCs3D(dt, hole) {
                     s.gone = true;
                     s.name = null; // rosters, taps and sims all ignore them
                 } else {
-                    s.x += (dd2x / dd2) * s.speed * dt;
-                    s.z += (dd2z / dd2) * s.speed * dt;
+                    // Clamp to the remaining distance: big dt steps (4x
+                    // speed on a slow frame) must never overshoot into
+                    // an orbit around the arrival threshold
+                    const st2 = Math.min(dd2, s.speed * dt);
+                    s.x += (dd2x / dd2) * st2;
+                    s.z += (dd2z / dd2) * st2;
                 }
             } else
             // Detour to a kiosk/stall: walk over, buy, walk back to the tee
@@ -3003,8 +3007,9 @@ function updateAmbientNPCs3D(dt, hole) {
                 } else if (s.pause > 0) {
                     s.pause -= dt;
                 } else {
-                    s.x += (ddx / dd) * s.speed * dt;
-                    s.z += (ddz / dd) * s.speed * dt;
+                    const stD = Math.min(dd, s.speed * dt);
+                    s.x += (ddx / dd) * stD;
+                    s.z += (ddz / dd) * stD;
                 }
             } else {
             if (rainEnvNow > 0.4 && !s.rainMood) {
@@ -3270,8 +3275,9 @@ function updateAmbientNPCs3D(dt, hole) {
                 }
             }
         } else {
-            s.x += (dx / d) * s.speed * dt;
-            s.z += (dz / d) * s.speed * dt;
+            const stW = Math.min(d, s.speed * dt);
+            s.x += (dx / d) * stW;
+            s.z += (dz / d) * stW;
         }
         const gy = (hole && hole.heights)
             ? ((hole.heights[Math.floor(s.z / CELL)] || [])[Math.floor(s.x / CELL)] || 0) : 0;
