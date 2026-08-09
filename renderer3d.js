@@ -2556,13 +2556,15 @@ function setupAmbientNPCs(hole) {
         if (npcHatInst.instanceColor) npcHatInst.instanceColor.needsUpdate = true;
         terrainGroup.add(npcHatInst);
     }
-    // Umbrellas: popped open over walkers while a shower passes
+    // Umbrellas: popped open over walkers AND route golfers between
+    // shots while a shower passes (stationed swingers keep both hands
+    // on the club). Capacity covers every NPC; unused slots stay hidden.
     npcUmbrellaInst = null;
-    if (walkerCount > 0) {
+    if (total > 0) {
         const umbGeo = new THREE.ConeGeometry(6.5, 3.2, 8);
         const umbMat = new THREE.MeshStandardMaterial({ roughness: 0.7 });
-        npcUmbrellaInst = new THREE.InstancedMesh(umbGeo, umbMat, walkerCount);
-        for (let i = 0; i < walkerCount; i++) {
+        npcUmbrellaInst = new THREE.InstancedMesh(umbGeo, umbMat, total);
+        for (let i = 0; i < total; i++) {
             if (npcUmbrellaInst.setColorAt) {
                 npcUmbrellaInst.setColorAt(i,
                     new THREE.Color(NPC_COLORS[(i + 3) % NPC_COLORS.length]).convertSRGBToLinear());
@@ -3221,8 +3223,12 @@ function updateAmbientNPCs3D(dt, hole) {
             dummy.position.set(s.x, gy + 18.5 + bob, s.z);
             dummy.scale.set(1, 1, 1);
         }
-        if (npcUmbrellaInst && i < npcWalkerCount) {
-            if (rainEnvNow > 0.4) {
+        if (npcUmbrellaInst) {
+            // Strollers always shelter; playing golfers only between
+            // shots (walking), never mid-swing at a pause
+            const wantsUmb = rainEnvNow > 0.4
+                && (i < npcWalkerCount || (s.route && s.pause <= 0));
+            if (wantsUmb) {
                 dummy.position.y = gy + 25 + bob;
                 dummy.scale.set(1, 1, 1);
             } else {
