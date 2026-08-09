@@ -2510,7 +2510,7 @@ function setupAmbientNPCs(hole) {
                 npcSocialSpots.push({ x: d.x * CELL, z: d.y * CELL });
             }
             if (d.t === 'kiosk' || d.t === 'stall') {
-                npcVendorSpots.push({ x: d.x * CELL, z: d.y * CELL });
+                npcVendorSpots.push({ x: d.x * CELL, z: d.y * CELL, t: d.t });
             }
         }
     }
@@ -3158,11 +3158,25 @@ function updateAmbientNPCs3D(dt, hole) {
                     const need = Math.max(s.hunger || 0, s.thirst || 0) <= 60 ? null
                         : (s.hunger || 0) >= (s.thirst || 0) ? 'hunger' : 'thirst';
                     if (need && npcVendorSpots.length) {
+                        // Food cravings head for the snack stall, thirst
+                        // for the drinks kiosk — both vendors earn their
+                        // keep instead of the nearest one taking every
+                        // sale. Falls back to any vendor when the right
+                        // type isn't built yet.
+                        const wantT = need === 'hunger' ? 'stall' : 'kiosk';
                         let vb = null, vd = Infinity;
                         for (const v of npcVendorSpots) {
+                            if (v.t !== wantT) continue;
                             const dv = (v.x - s.x) * (v.x - s.x)
                                      + (v.z - s.z) * (v.z - s.z);
                             if (dv < vd) { vd = dv; vb = v; }
+                        }
+                        if (!vb) {
+                            for (const v of npcVendorSpots) {
+                                const dv = (v.x - s.x) * (v.x - s.x)
+                                         + (v.z - s.z) * (v.z - s.z);
+                                if (dv < vd) { vd = dv; vb = v; }
+                            }
                         }
                         s.detour = { x: vb.x, z: vb.z, need: need };
                         s.walkPath = pathRoute(s.x, s.z, vb.x, vb.z);
