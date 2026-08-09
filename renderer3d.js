@@ -3584,6 +3584,11 @@ function updateAmbientNPCs3D(dt, hole) {
                         s.leaveZ = (eRow2 + 0.5) * CELL;
                         s.walkPath = pathRoute(s.x, s.z, s.leaveX, s.leaveZ);
                         if (rainQuit) {
+                            // Hustle out of the wet — a visible dash
+                            if (!s.dashing) {
+                                s.dashing = true;
+                                s.speed = (s.speed || 12) * 1.6;
+                            }
                             golferThink(s, 'Not playing through THIS', -2);
                             if (typeof notify === 'function') {
                                 notify('\u{1F327}\uFE0F ' + s.name

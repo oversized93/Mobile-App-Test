@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt328';
+const BUILD_TAG = 'gt329';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -930,7 +930,7 @@ function memberCapacity() {
 
 const AMENITIES = [
     { id: 'clubhouse', name: 'Clubhouse', icon: '\u{1F3DB}\uFE0F', cost: 200, memberBoost: 10,
-      upkeep: 5, desc: 'Somewhere for golfers to relax after a round.' },
+      upkeep: 5, desc: 'Golfers relax here — and wait out rain instead of leaving.' },
     { id: 'clubhouse2', name: 'Grand Clubhouse', icon: '\u{1F3E8}', cost: 1500,
       memberBoost: 20, feeBoost: 0.1, requires: 'clubhouse', upkeep: 15,
       desc: 'Upgrade: pro shop + restaurant. Green fees +10%.' },
