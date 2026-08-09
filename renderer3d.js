@@ -3393,9 +3393,11 @@ function updateAmbientNPCs3D(dt, hole) {
                             ? s.route[s.route.length - 1] : null;
                         const badRound = s.simResult && s.par
                             && s.simResult.strokes > s.par;
+                        const lipDrama = !!(toPin && badRound
+                            && Math.random() < 0.5);
+                        s.lipDrama = lipDrama;
                         spawnNpcFlight3D(s.x + 3, gy2 + 14, s.z,
-                            lx, ny2 + 2, lz, toPin, s.driverSkill,
-                            toPin && badRound && Math.random() < 0.5);
+                            lx, ny2 + 2, lz, toPin, s.driverSkill, lipDrama);
                         const ddx = lx - s.x, ddz = lz - s.z;
                         const dd = Math.hypot(ddx, ddz) || 1;
                         if (dd >= 20) {
@@ -3507,6 +3509,12 @@ function updateAmbientNPCs3D(dt, hole) {
                             name: s.name || ''
                         });
                         s.celeb = diff; // drives green-side body language
+                        if (s.lipDrama && diff > 0) {
+                            // The horseshoe still stings on the walk off
+                            s.freakout = 2.2;
+                            golferThink(s, 'It lipped OUT. Unbelievable.', -6);
+                        }
+                        s.lipDrama = false;
                         s.rounds = (s.rounds || 0) + 1;
                         golferThink(s,
                             diff <= -1 ? 'What a hole — loved it!'
