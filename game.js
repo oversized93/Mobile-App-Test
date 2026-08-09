@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt291';
+const BUILD_TAG = 'gt292';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -886,13 +886,26 @@ function finalizeHole() {
     if (!holeWizard || !holeWizard.tee || !holeWizard.pin) return;
     const yds = polylineLengthYards(holeWizard);
     const par = holeWizard.simParEst || parFromYards(yds);
-    worldCourse.holes.push({
+    const recNew = {
         id: holeWizard.holeId,
         par,
         tee: { x: holeWizard.tee.x, y: holeWizard.tee.y },
         pin: { x: holeWizard.pin.x, y: holeWizard.pin.y },
         waypoints: holeWizard.waypoints.map(w => ({ x: w.x, y: w.y }))
-    });
+    };
+    if (holeWizard.editing != null) {
+        const idx = worldCourse.holes.findIndex(h => h.id === holeWizard.editing);
+        if (idx >= 0) {
+            // Preserve name + open state; the reshaped line re-measures
+            recNew.name = worldCourse.holes[idx].name;
+            recNew.open = worldCourse.holes[idx].open;
+            worldCourse.holes[idx] = recNew;
+        } else {
+            worldCourse.holes.push(recNew);
+        }
+    } else {
+        worldCourse.holes.push(recNew);
+    }
     saveWorldCourse();
     notify('Hole ' + holeWizard.holeId + ' created \u2022 Par ' + par + ' \u2022 ' + Math.round(yds) + 'y');
     holeWizard = null;
@@ -5249,6 +5262,12 @@ function drawOverworld() {
             ctx.font = 'bold 13px -apple-system,sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText('\u{1F3A5} Flyover', hc.flyX + hc.flyW / 2, hc.flyY + hc.flyH / 2 + 5);
+            // Edit layout: reopen the wizard on this hole's line
+            glossyRect(hc.editX, hc.editY, hc.editW, hc.editH, 10, '#5d4a8f');
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('\u270E', hc.editX + hc.editW / 2, hc.editY + hc.editH / 2 + 5);
             // Test Play button
             const playGrad = ctx.createLinearGradient(hc.playX, hc.playY, hc.playX + hc.playW, hc.playY);
             playGrad.addColorStop(0, '#2e7d32');
@@ -5589,7 +5608,8 @@ function holeCardLayout() {
     const w = 216, h = 278 + ((sel && sel.simAvg != null) ? 26 : 0);
     const x = W() - w - 10, y = 58;
     return { x, y, w, h,
-             flyX: x + 12, flyY: y + h - 132, flyW: w - 24, flyH: 34,
+             flyX: x + 12, flyY: y + h - 132, flyW: w - 24 - 42, flyH: 34,
+             editX: x + w - 12 - 34, editY: y + h - 132, editW: 34, editH: 34,
              playX: x + 12, playY: y + h - 88, playW: w - 24, playH: 34,
              delX: x + 12, delY: y + h - 44, delW: w - 24, delH: 34 };
 }
@@ -6379,6 +6399,21 @@ function overworldTouchStart(sx, sy) {
             }
             if (hitBtn(sx, sy, hc.flyX, hc.flyY, hc.flyW, hc.flyH)) {
                 startHoleFlyover(selHole);
+                return;
+            }
+            if (hitBtn(sx, sy, hc.editX, hc.editY, hc.editW, hc.editH)) {
+                // Rework the line without delete-and-recreate: the wizard
+                // opens on the shape step with this hole preloaded and
+                // Create replaces it in place (id, records, stats kept)
+                startHoleWizard();
+                holeWizard.holeId = selHole.id;
+                holeWizard.editing = selHole.id;
+                holeWizard.tee = { x: selHole.tee.x, y: selHole.tee.y };
+                holeWizard.pin = { x: selHole.pin.x, y: selHole.pin.y };
+                holeWizard.waypoints = (selHole.waypoints || [])
+                    .map(w2 => ({ x: w2.x, y: w2.y }));
+                holeWizard.step = 'shape';
+                owSelectedHole = null;
                 return;
             }
             if (hitBtn(sx, sy, hc.playX, hc.playY, hc.playW, hc.playH)) {
