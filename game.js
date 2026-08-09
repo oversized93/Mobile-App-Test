@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt214';
+const BUILD_TAG = 'gt215';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1144,13 +1144,16 @@ function tickWorld(dt) {
         window.__tourney = null;
         const qualified = entries.filter(e => e[1].n >= 2);
         const pool = qualified.length ? qualified : entries;
+        if (!pool.length) resort.tourneyStreak = 0; // a dead event cools off
         if (pool.length) {
             pool.sort((a, b) => (a[1].rel / a[1].n) - (b[1].rel / b[1].n));
             const name = pool[0][0], tb = pool[0][1];
-            // Purse scales with the resort's reputation: a 5-star venue
-            // draws a gallery that spends 1.6x what a 1-star one does
+            // Purse scales with reputation AND momentum: each consecutive
+            // hosted day grows the gallery's spend 8% (caps at +80%)
+            resort.tourneyStreak = (resort.tourneyStreak || 0) + 1;
+            const streakMul = 1 + Math.min(10, resort.tourneyStreak - 1) * 0.08;
             const purse = Math.round((40 + 2 * (resort.members || 0))
-                * (0.6 + computeCourseRating() * 0.2));
+                * (0.6 + computeCourseRating() * 0.2) * streakMul);
             resort.coins += purse;
             ledgerIncome(purse);
             const relAvg = tb.rel / tb.n;
@@ -4170,7 +4173,8 @@ function drawOverworld() {
         ensureLedger();
         const led = resort.ledger;
         const up = dailyUpkeep();
-        const fw = 250, fh = 146;
+        const fw = 250;
+        const fh = (resort.tourneyStreak > 1) ? 164 : 146;
         const fx = (W() - fw) / 2, fy = L.topBarH + 8;
         ctx.fillStyle = 'rgba(12,24,32,0.94)';
         roundRect(fx, fy, fw, fh, 12); ctx.fill();
@@ -4199,6 +4203,11 @@ function drawOverworld() {
             + ' holes + decor)', 'rgba(255,255,255,0.8)', fy + 112);
         line('Lifetime', 'fees $' + (resort.feesEarned || 0) + ' \u2022 stalls $'
             + (resort.stallSales || 0), 'rgba(255,255,255,0.8)', fy + 130);
+        if (resort.tourneyStreak > 1) {
+            const pct = Math.min(10, resort.tourneyStreak - 1) * 8;
+            line('\u{1F3C6} Tourney streak', resort.tourneyStreak
+                + ' days \u2022 +' + pct + '% purse', '#ffd24a', fy + 148);
+        }
         owFinancesRect = { x: fx, y: fy, w: fw, h: fh };
     }
 
