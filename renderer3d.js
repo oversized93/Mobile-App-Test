@@ -2335,6 +2335,7 @@ let npcHatInst = null;
 let npcStates = [];
 let npcPathCells = [];
 let npcPathIdx = null; // "c,r" -> npcPathCells index, built lazily
+let npcHoleRoutes = {}; // holeId -> route data, for hole rotation
 
 // Shortest walkway route between two world points (BFS over path cells,
 // 4-connected). Returns world-space waypoints, or null when either end
@@ -2442,6 +2443,7 @@ function setupAmbientNPCs(hole) {
     }
     // Playing groups: pairs that walk each hole's route, pausing to hit
     const routeGolfers = [];
+    npcHoleRoutes = {};
     if (hole.holes) {
         for (const rec of hole.holes) {
             if (rec.open === false) continue; // closed: no rounds, no fees
@@ -2455,6 +2457,7 @@ function setupAmbientNPCs(hole) {
                 const fee = 3 + 2 * diff;
                 const grp = { pts: pts, fee: fee, holeId: rec.id,
                               par: rec.par || 4, diff: diff };
+                npcHoleRoutes[rec.id] = grp;
                 routeGolfers.push(Object.assign({ off: 0 }, grp));
                 routeGolfers.push(Object.assign({ off: 1 }, grp));
                 // Popular resorts send out foursomes, not just pairs
@@ -3143,6 +3146,28 @@ function updateAmbientNPCs3D(dt, hole) {
                         if (typeof notify === 'function') {
                             notify('\u{1F61E} ' + s.name
                                 + ' had a rough day and left early');
+                        }
+                    }
+                    // Variety: a third of finished rounds move the group
+                    // to a different open hole — golfers migrate around
+                    // the course instead of grinding one hole all day
+                    // (also resets the boredom clock)
+                    {
+                        const ids = Object.keys(npcHoleRoutes);
+                        if (ids.length > 1 && Math.random() < 0.35) {
+                            const others = ids.filter(k => +k !== s.holeId);
+                            const pick = npcHoleRoutes[
+                                others[Math.floor(Math.random() * others.length)]];
+                            if (pick) {
+                                s.route = pick.pts;
+                                s.holeId = pick.holeId;
+                                s.par = pick.par;
+                                s.fee = pick.fee;
+                                s.diff = pick.diff;
+                                s.age = 0;
+                                golferThink(s, 'Let\u2019s try hole '
+                                    + pick.holeId + ' next', 4);
+                            }
                         }
                     }
                     s.ptIdx = 0;
