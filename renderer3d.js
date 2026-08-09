@@ -3074,6 +3074,19 @@ function updateNpcFlights3D(hole) {
             if (f.px != null && f.bounce == null && typeof T !== 'undefined'
                 && hole && hole.grid && hole.grid[wr]
                 && hole.grid[wr][wc] === T.GREEN) {
+                // Stiff one: an approach dropped inside ~4.5 units of the
+                // cup draws an appreciative murmur over the pin
+                if (Math.hypot(f.x1 - f.px, f.z1 - f.pz) < 4.5) {
+                    (window.__scorePopups = window.__scorePopups || []).push({
+                        x: f.px, z: f.pz, t0: performance.now(),
+                        txt: 'Ooh!', col: '#9fd7ff', name: '', stack: 0
+                    });
+                    if (window.__tourney && typeof playApplause === 'function'
+                        && performance.now() - (window.__lastClap || 0) > 10000) {
+                        window.__lastClap = performance.now();
+                        playApplause();
+                    }
+                }
                 f.bounce = 2; // final fading phase
                 f.x0 = f.x1; f.z0 = f.z1; f.y0 = f.y1;
                 f.x1 = f.px + Math.random() * 4 - 2;
