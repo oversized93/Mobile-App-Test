@@ -117,24 +117,31 @@ instancing on low-end devices).
 - Fun/score-based payouts replace the abstract coin formula
 - Retire legacy career courses + 2D builder (~600-900 dead lines)
 
-### M3 — Living resort
-- Shuttle arrivals at the entrance; persistent NPC golfers (stats/skill/
-  leveling across visits) stored in the save
-- NPCs walk paths when available, cut across grass when not (dynamic
-  path-routing rule); play open holes via the headless sim with skill-based
-  scatter
-- Instanced low-poly NPC bodies (single draw call for hundreds)
+### M3 — Living resort (largely shipped by the parity run)
+- [x] Persistent NPC golfers — names, skills, careers (rounds/best) in the
+      course save; records and rivalries across sessions
+- [x] Instanced low-poly NPC bodies (Meshy golfer, one InstancedMesh/part)
+- [x] Route play with skill-based scoring scatter (duff/putt odds by skill)
+- [ ] Shuttle arrivals at the entrance (walkers currently spawn on paths)
+- [ ] Dynamic path-routing (walk paths when available, cut grass when not)
+- [ ] Headless-sim-driven ball flight for NPC rounds (current rounds are
+      route-walk + statistical scoring, not simulated shots)
 
-### M4 — Feedback & depth
-- Thought bubbles + pinpointed complaint tracking (click complaint → map pin)
-- Queues + benches; comfort systems
-- Tournaments (simulated leaderboards first)
-- Clubhouse + facility props as placed 3D objects with per-facility stats
+### M4 — Feedback & depth (largely shipped by the parity run)
+- [x] Thought logs with mood deltas + timestamps (inspector), freakouts
+- [x] Benches/gazebos as rest + rain shelter; needs drive stall purchases
+- [x] Tournaments — daily event, leaderboard, purse, champions history,
+      player can enter and win
+- [x] Facility props placed as 3D objects (decor system)
+- [ ] Pinpointed complaint tracking (tap complaint → map pin)
+- [ ] Per-facility stats panels
 
-### M5 — Atmosphere & expansion
-- Night cycle + lighting-as-mechanic (lights, upkeep)
-- Map-generation sliders at new-course creation (water level, hills, trees)
-- Land expansion purchases; biomes
+### M5 — Atmosphere & expansion (largely shipped by the parity run)
+- [x] Night cycle (signs, glows, lamp pools, moon, stars) — lighting is
+      cosmetic, not yet a mechanic with upkeep
+- [x] Map-generation sliders at new-game (Create Your Island)
+- [x] Land expansion purchases (Buy Property parcels)
+- [ ] Biomes beyond the temperate island
 
 ## Deferred / parked decisions
 - Brush vs tile placement granularity (revisit during M2 playtesting)
