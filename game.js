@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt185';
+const BUILD_TAG = 'gt186';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -432,6 +432,8 @@ const OW_TOOL_PARENT = {
 let owRailOpen = false;   // build rail expanded?
 let owRosterOpen = false; // golfer roster panel visible?
 let owSelectedGolfer = null; // name of golfer whose inspector is open
+let owFollowGolfer = false;  // camera tracks the selected golfer
+let owFollowRect = null;
 let gameSpeed = 1;        // 0 = paused, 1 = normal, 4 = fast-forward
 let owSpeedRects = null;  // screen rects of the speed strip (set each draw)
 let owRosterChip = null;  // screen rect of the roster chip (set each draw)
@@ -4415,6 +4417,14 @@ function drawGolferPanel(s) {
     ctx.lineWidth = 1.5;
     roundRect(gp.x, gp.y, gp.w, gp.h, 14); ctx.stroke();
     glossyRect(gp.x + 3, gp.y + 3, gp.w - 6, 26, 11, '#2e7d32');
+    // Follow toggle in the header corner
+    glossyRect(gp.x + gp.w - 34, gp.y + 5, 26, 22, 8,
+        owFollowGolfer ? '#1976d2' : 'rgba(0,0,0,0.25)');
+    ctx.font = '12px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('\u{1F4CD}', gp.x + gp.w - 21, gp.y + 21);
+    owFollowRect = { x: gp.x + gp.w - 34, y: gp.y + 5, w: 26, h: 22 };
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 14px -apple-system,sans-serif';
     ctx.textAlign = 'center';
@@ -4918,6 +4928,14 @@ function overworldHUDHit(sx, sy) {
         owWeatherPanelRect.y, owWeatherPanelRect.w, owWeatherPanelRect.h)) return 'weather:panel';
     if (owFinancesOpen && owFinancesRect && hitBtn(sx, sy, owFinancesRect.x,
         owFinancesRect.y, owFinancesRect.w, owFinancesRect.h)) return 'finances:panel';
+    // An open golfer panel owns its screen area (it draws over the
+    // speed strip's corner) — its taps must not fall through to HUD chips
+    if (owSelectedGolfer && !holeWizard) {
+        if (owFollowRect && hitBtn(sx, sy, owFollowRect.x, owFollowRect.y,
+            owFollowRect.w, owFollowRect.h)) return 'follow';
+        const gpr = golferPanelLayout();
+        if (hitBtn(sx, sy, gpr.x, gpr.y, gpr.w, gpr.h)) return 'golferpanel';
+    }
     if (owSpeedRects) {
         for (const sr of owSpeedRects) {
             if (hitBtn(sx, sy, sr.x, sr.y, sr.w, sr.h)) return 'speed:' + sr.spd;
@@ -5024,6 +5042,12 @@ function overworldTouchStart(sx, sy) {
     if (hit === 'finances') { owFinancesOpen = !owFinancesOpen; return; }
     if (hit === 'finances:panel') return;
     if (owFinancesOpen) { owFinancesOpen = false; return; }
+    if (hit === 'follow') {
+        owFollowGolfer = !owFollowGolfer;
+        if (owFollowGolfer) focusGolfer(owSelectedGolfer);
+        return;
+    }
+    if (hit === 'golferpanel') return; // absorbed by the open panel
     if (hit && hit.startsWith('speed:')) {
         gameSpeed = parseInt(hit.slice(6), 10);
         return;
@@ -5122,8 +5146,15 @@ function overworldTouchStart(sx, sy) {
     // closes it but still falls through (so tapping another golfer works) ----
     if (owSelectedGolfer && !holeWizard) {
         const gp = golferPanelLayout();
+        if (owFollowRect && hitBtn(sx, sy, owFollowRect.x, owFollowRect.y,
+            owFollowRect.w, owFollowRect.h)) {
+            owFollowGolfer = !owFollowGolfer;
+            if (owFollowGolfer) focusGolfer(owSelectedGolfer);
+            return;
+        }
         if (hitBtn(sx, sy, gp.x, gp.y, gp.w, gp.h)) return;
         owSelectedGolfer = null;
+        owFollowGolfer = false;
     }
 
     // ---- Hole inspector card (open) — taps inside it are handled/absorbed,
@@ -5328,6 +5359,7 @@ function overworldTouchStart(sx, sy) {
 }
 
 function overworldTouchMove(sx, sy) {
+    if (owFollowGolfer && scouting) owFollowGolfer = false; // pan breaks follow
     if (owDecorDrag) {
         const cell = screenToCell(sx, sy);
         if (cell && parcelOwned(cell.c, cell.r)) {
@@ -7163,6 +7195,14 @@ function gameLoop(time) {
             if (typeof updateDayNightTint === 'function') updateDayNightTint(resort.worldClock || 0);
             if (typeof setBuildGridVisible === 'function') setBuildGridVisible((owTool && owTool !== 'hand') || !!holeWizard);
             updateTarget3D(0, 0, false);
+            // Follow-cam: glide the pivot with the selected golfer
+            if (owFollowGolfer && owSelectedGolfer && typeof npcStates !== 'undefined') {
+                const fg = npcStates.find(n => n.name === owSelectedGolfer);
+                if (fg && typeof setCameraOrbit === 'function') {
+                    setCameraOrbit(fg.x, fg.z + 30,
+                        Math.min(cam3dDistance, 1000), cam3dPitch, cam3dYaw);
+                }
+            }
             // Continuous rotate/tilt while a HUD button is held
             tickOverworldCamera(dt);
             tickHoleFlyover();
