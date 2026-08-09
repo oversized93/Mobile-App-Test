@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt244';
+const BUILD_TAG = 'gt245';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -585,6 +585,24 @@ function buyOfferedParcel() {
     if (typeof playChime === 'function') playChime();
     p.owned.push(owBuyOffer.parcel);
     p.bought = (p.bought || 0) + 1;
+    // New ground deserves a moment: fly the camera to the fresh plot
+    // and burst fireworks over it (a land deal is a milestone here)
+    {
+        const pc = owBuyOffer.parcel % PARCEL_COLS;
+        const pr = Math.floor(owBuyOffer.parcel / PARCEL_COLS);
+        const wx = (pc + 0.5) * worldCourse.cols / PARCEL_COLS * CELL;
+        const wz = (pr + 0.5) * worldCourse.rows / PARCEL_ROWS * CELL;
+        if (typeof setCameraOrbit === 'function') {
+            setCameraOrbit(wx, wz, Math.max(1100,
+                (typeof cam3dDistance !== 'undefined') ? cam3dDistance : 1100),
+                null, null);
+        }
+        if (typeof spawnFirework3D === 'function') {
+            spawnFirework3D(wx - 80, wz - 50, 0xffd24a);
+            spawnFirework3D(wx + 70, wz + 40, 0x3adbe8);
+            spawnFirework3D(wx, wz - 90, 0x8be06a);
+        }
+    }
     owBuyOffer = null;
     saveResort();
     saveWorldCourse();
