@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt293';
+const BUILD_TAG = 'gt294';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -907,6 +907,10 @@ function finalizeHole() {
         worldCourse.holes.push(recNew);
     }
     saveWorldCourse();
+    // The confirm tap's touch-end consumes this: arcs, tee signs, and
+    // route golfers for the new line appear immediately instead of
+    // waiting for the next unrelated terrain edit
+    owNeedsRebuild = true;
     notify('Hole ' + holeWizard.holeId
         + (holeWizard.editing != null ? ' reshaped' : ' created')
         + ' \u2022 Par ' + par + ' \u2022 ' + Math.round(yds) + 'y');
@@ -6425,6 +6429,7 @@ function overworldTouchStart(sx, sy) {
             if (hitBtn(sx, sy, hc.delX, hc.delY, hc.delW, hc.delH)) {
                 const deadId = owSelectedHole;
                 worldCourse.holes = worldCourse.holes.filter(h => h.id !== deadId);
+                owNeedsRebuild = true; // the dead hole's arcs must go too
                 // A deleted hole takes its records with it: complaints
                 // pinned to it and its play stats (otherwise the course
                 // report can name a hole that no longer exists)
@@ -6757,6 +6762,14 @@ function overworldTouchEnd() {
     if (owDragPainting) {
         finishPaintStroke();
         return;
+    }
+    // Non-paint taps also request rebuilds (hole confirm/delete, the
+    // open/closed toggle) — consume the flag here, not only inside
+    // paint strokes, or those changes stay stale until the next brush
+    if (owNeedsRebuild && scene3dReady) {
+        refreshWorldHeights();
+        buildTerrain3D(worldCourse, { distantScenery: false });
+        owNeedsRebuild = false;
     }
     scouting = false;
 }
