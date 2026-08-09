@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt295';
+const BUILD_TAG = 'gt296';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6471,6 +6471,13 @@ function overworldTouchStart(sx, sy) {
                 worldCourse.complaints =
                     (worldCourse.complaints || []).filter(c => c !== bestPin.cm);
                 saveWorldCourse();
+                // Reading a gripe opens the offending hole's card, so the
+                // fix (edit, close, or shrug) is one tap away
+                if (bestPin.cm.holeId != null
+                    && worldCourse.holes.some(h => h.id === bestPin.cm.holeId)) {
+                    owSelectedHole = bestPin.cm.holeId;
+                    owSelectedGolfer = null;
+                }
                 return;
             }
         }
