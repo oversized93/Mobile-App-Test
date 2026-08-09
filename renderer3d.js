@@ -2723,6 +2723,16 @@ function setupAmbientNPCs(hole) {
 
 // Golfer inner life: push a thought (capped log) and recompute mood.
 // The inspector panel in game.js renders these verbatim.
+// Chance a rain-soaked golfer quits at hole-out: a clubhouse and
+// gazebo/bench shelters talk them into waiting the shower out
+function rainQuitChance() {
+    const shelters = (typeof npcSocialSpots !== 'undefined')
+        ? npcSocialSpots.length : 0;
+    const club = (typeof resort !== 'undefined' && resort && resort.amenities
+        && resort.amenities.clubhouse) ? 0.08 : 0;
+    return Math.max(0.08, 0.3 - 0.04 * shelters - club);
+}
+
 function golferThink(s, text, v) {
     s.thoughts = s.thoughts || [];
     s.thoughts.unshift({ t: text, v: v,
@@ -3562,7 +3572,7 @@ function updateAmbientNPCs3D(dt, hole) {
                     // rain thins the field too — a soaked golfer finishing
                     // a hole sometimes just calls it.
                     const rainQuit = rainEnvNow > 0.55 && (s.rounds || 0) >= 1
-                        && Math.random() < 0.3;
+                        && Math.random() < rainQuitChance();
                     if (((s.mood != null && s.mood <= 20
                         && (s.rounds || 0) >= 3) || rainQuit) && !s.leaving) {
                         s.leaving = true;
