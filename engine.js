@@ -107,7 +107,7 @@ function saveData(key, val) {
         if (!saveData.__failed) {
             saveData.__failed = true;
             if (typeof notify === 'function') {
-                notify('\u26A0\uFE0F Could not save \u2014 device storage full?');
+                notify('\u26A0\uFE0F Saving unavailable \u2014 storage full or private browsing. Progress won\u2019t persist!');
             }
         }
     }
