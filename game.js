@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt290';
+const BUILD_TAG = 'gt291';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4708,7 +4708,9 @@ function drawOverworld() {
             const champs = (resort.tourneyHistory || (resort.lastTourney ? [resort.lastTourney] : []))
                 .slice(0, rows.length >= 7 ? 1 : 3);
             const footH = champs.length ? 14 + champs.length * 16 : 0;
-            const ph = headH + Math.max(rows.length, 1) * rowH + footH + 10;
+            const moreH = onCourse.length > 8 ? 14 : 0;
+            const ph = headH + Math.max(rows.length, 1) * rowH + footH
+                + moreH + 10;
             // Clear of the right-edge camera rail (which draws after us)
             const px = Math.min(rx0, W() - pw - 54);
             const py = L.undoY + 40;
@@ -4786,8 +4788,17 @@ function drawOverworld() {
                         : s.lastRound ? ' • last ' + s.lastRound : '');
                 ctx.fillText(prog, px + pw - 14, ry + 19);
             }
+            if (onCourse.length > rows.length) {
+                ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                ctx.font = '10px -apple-system,sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('+ ' + (onCourse.length - rows.length)
+                    + ' more out on the course', px + 14,
+                    py + headH + rows.length * rowH + 4);
+            }
             if (champs.length) {
-                let fy = py + headH + Math.max(rows.length, 1) * rowH + 12;
+                let fy = py + headH + Math.max(rows.length, 1) * rowH + 12
+                    + (onCourse.length > rows.length ? 14 : 0);
                 ctx.fillStyle = 'rgba(255,255,255,0.45)';
                 ctx.font = 'bold 9px -apple-system,sans-serif';
                 ctx.textAlign = 'left';
