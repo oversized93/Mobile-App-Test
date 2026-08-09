@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt364';
+const BUILD_TAG = 'gt365';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1333,8 +1333,18 @@ function tickWorld(dt) {
             // hosted day grows the gallery's spend 8% (caps at +80%)
             resort.tourneyStreak = (resort.tourneyStreak || 0) + 1;
             const streakMul = 1 + Math.min(10, resort.tourneyStreak - 1) * 0.08;
+            // Premium galleries spend bigger: the gold-member share of
+            // today's field lifts the purse up to +30%
+            let premMul = 1;
+            if (typeof npcStates !== 'undefined') {
+                const fld = npcStates.filter(n => n.name && !n.gone);
+                if (fld.length) {
+                    premMul = 1 + 0.3 * (fld.filter(n =>
+                        n.tier === 'gold').length / fld.length);
+                }
+            }
             const purse = Math.round((40 + 2 * (resort.members || 0))
-                * (0.6 + computeCourseRating() * 0.2) * streakMul);
+                * (0.6 + computeCourseRating() * 0.2) * streakMul * premMul);
             resort.coins += purse;
             resort.purseEarned = (resort.purseEarned || 0) + purse;
             ledgerIncome(purse);
