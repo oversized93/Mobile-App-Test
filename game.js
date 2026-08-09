@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt211';
+const BUILD_TAG = 'gt212';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5418,6 +5418,24 @@ function drawHoleWizardOverlay() {
         ctx.fillStyle = '#8fe3ec';
         ctx.font = 'bold 12px -apple-system,sans-serif';
         ctx.fillText(info, W() / 2, infoY + 17);
+        // Hazard verdict from the physics trace: repeated splashes in
+        // the test round mean the line punishes an average golfer
+        if (w.traceRes && (w.traceRes.penalties || 0) >= 2) {
+            const warn = '\u26A0 Brutal carry \u2014 '
+                + w.traceRes.penalties + ' splashes in the test round';
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            const ww2 = ctx.measureText(warn).width + 26;
+            const wy2 = infoY + 32;
+            ctx.fillStyle = 'rgba(84,48,8,0.9)';
+            roundRect((W() - ww2) / 2, wy2, ww2, 24, 12);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,183,77,0.8)';
+            ctx.lineWidth = 1.2;
+            roundRect((W() - ww2) / 2, wy2, ww2, 24, 12);
+            ctx.stroke();
+            ctx.fillStyle = '#ffb74d';
+            ctx.fillText(warn, W() / 2, wy2 + 16);
+        }
     }
 
     // Tee ghost (step 1) — follows finger last position
