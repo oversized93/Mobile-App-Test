@@ -2349,6 +2349,7 @@ function hide3D() {
 // set position/rotation/scale before updateMatrix (no field survives).
 const sharedDummy3D = new THREE.Object3D();
 let npcBodyInst = null, npcHeadInst = null, npcClubInst = null, npcUmbrellaInst = null;
+let npcBagInst = null; // golf bags standing beside waiting players
 let npcHatInst = null;
 let npcStates = [];
 let npcPathCells = [];
@@ -2458,6 +2459,7 @@ function setupAmbientNPCs(hole) {
     npcBodyInst = null;
     npcHeadInst = null;
     npcClubInst = null;
+    npcBagInst = null;
     setupHoverBots(hole);
     setupFountains(hole);
     setupCartDrive(hole);
@@ -2653,6 +2655,14 @@ function setupAmbientNPCs(hole) {
     if (npcBodyInst.instanceColor) npcBodyInst.instanceColor.needsUpdate = true;
     terrainGroup.add(npcBodyInst);
     terrainGroup.add(npcHeadInst);
+    // Leather golf bag: stands beside a player who's waiting to hit
+    const bagGeo = new THREE.CylinderGeometry(1.7, 1.9, 11, 7);
+    const bagMat = new THREE.MeshStandardMaterial({
+        color: linC(0x8a5a30), roughness: 0.85 });
+    npcBagInst = new THREE.InstancedMesh(bagGeo, bagMat, total);
+    npcBagInst.castShadow = true;
+    npcBagInst.frustumCulled = false;
+    terrainGroup.add(npcBagInst);
     // Sun hats on every other walker — cheap silhouette variety
     npcHatInst = null;
     if (walkerCount > 0) {
@@ -3699,6 +3709,25 @@ function updateAmbientNPCs3D(dt, hole) {
             dummy.position.set(s.x, gy + 18.5 + bob, s.z);
             dummy.scale.set(1, 1, 1);
         }
+        if (npcBagInst) {
+            const showBag = s.route && !s.returning && !s.leaving
+                && s.pause > 0 && s.name;
+            if (showBag) {
+                dummy.position.set(s.x + Math.cos(yaw + 2.2) * 7,
+                    gy + 5.2, s.z - Math.sin(yaw + 2.2) * 7);
+                dummy.rotation.set(0.22, yaw, 0);
+                dummy.scale.set(1, 1, 1);
+            } else {
+                dummy.position.set(0, -500, 0);
+                dummy.rotation.set(0, 0, 0);
+                dummy.scale.set(0.001, 0.001, 0.001);
+            }
+            dummy.updateMatrix();
+            npcBagInst.setMatrixAt(i, dummy.matrix);
+            dummy.position.set(s.x, gy + 7.5 + bob, s.z);
+            dummy.rotation.set(0, yaw, 0);
+            dummy.scale.set(1, 1, 1);
+        }
         if (npcUmbrellaInst) {
             // Strollers always shelter; playing golfers only between
             // shots (walking), never mid-swing at a pause
@@ -3747,6 +3776,7 @@ function updateAmbientNPCs3D(dt, hole) {
         if (npcClubInst) npcClubInst.visible = false; // model holds its own club
     }
     if (npcClubInst) npcClubInst.instanceMatrix.needsUpdate = true;
+    if (npcBagInst) npcBagInst.instanceMatrix.needsUpdate = true;
     if (npcUmbrellaInst) npcUmbrellaInst.instanceMatrix.needsUpdate = true;
     if (npcHatInst) npcHatInst.instanceMatrix.needsUpdate = true;
 }
