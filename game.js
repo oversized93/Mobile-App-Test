@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt279';
+const BUILD_TAG = 'gt280';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1710,8 +1710,12 @@ function simulateShot(fromX, fromY, dirX, dirY, powerPct, clubIdx) {
         strokes: strokes,
         holeComplete: holeComplete,
         trail: shotTrail,
-        club: selectedClub
+        club: selectedClub,
+        windSpeed: wind.speed
     };
+    // Ratings are measured in neutral conditions: live gusts must not
+    // bake today's weather into a hole's par or difficulty stars
+    wind.speed = 0;
     simMode = true;
     window.__simHoled = false;
     try {
@@ -1736,6 +1740,7 @@ function simulateShot(fromX, fromY, dirX, dirY, powerPct, clubIdx) {
         holeComplete = snap.holeComplete;
         shotTrail = snap.trail;
         selectedClub = snap.club;
+        wind.speed = snap.windSpeed;
     }
 }
 
