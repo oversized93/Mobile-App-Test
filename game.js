@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt237';
+const BUILD_TAG = 'gt238';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -830,9 +830,14 @@ function holeDifficultyHeuristic(rec) {
     return Math.max(1, Math.min(5, Math.round(score)));
 }
 
+// Par labels on the island's compressed scale (1 cell = 2 yds, one
+// land parcel spans ~60x53 yds). Tuned so the wizard's instant label
+// agrees with what the physics sim later measures: plot-one holes are
+// honest par 3s, a real par 4 needs the room a second parcel buys.
+// The background sim still re-rates from measured strokes afterwards.
 function parFromYards(yds) {
-    if (yds < 200) return 3;
-    if (yds < 430) return 4;
+    if (yds < 95) return 3;
+    if (yds < 160) return 4;
     return 5;
 }
 
