@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt353';
+const BUILD_TAG = 'gt354';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1396,8 +1396,12 @@ function tickWorld(dt) {
         if (resort.worldClock - resort.__windTick > 20) {
             resort.__windTick = resort.worldClock;
             wind.angle += (Math.random() - 0.5) * 0.5;
+            // Storm gusts: a passing shower biases the walk upward, so
+            // rain arrives with weather instead of on a still day
+            const gust = (typeof rainEnvNow !== 'undefined')
+                ? rainEnvNow * 1.6 : 0;
             wind.speed = Math.max(0, Math.min(13,
-                (wind.speed || 4) + (Math.random() - 0.5) * 2.5));
+                (wind.speed || 4) + (Math.random() - 0.5) * 2.5 + gust));
         }
     }
     // Membership drifts toward what the resort deserves: holes draw
