@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt257';
+const BUILD_TAG = 'gt258';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6510,7 +6510,9 @@ function overworldTouchMove(sx, sy) {
     // Wizard waypoint drag
     if (holeWizard && holeWizard.draggingIdx >= 0) {
         const cell = screenToCell(sx, sy);
-        if (cell) holeWizard.waypoints[holeWizard.draggingIdx] = { x: cell.c, y: cell.r };
+        if (cell && parcelOwned(cell.c, cell.r)) {
+            holeWizard.waypoints[holeWizard.draggingIdx] = { x: cell.c, y: cell.r };
+        }
         return;
     }
     // Brush painting
@@ -6551,6 +6553,11 @@ function overworldTouchEnd() {
     if (holeWizard && holeWizard.teeDrag) {
         holeWizard.teeDrag = false;
         if (owLastGhostCell) {
+            // Holes only route over land you own — same rule as painting
+            if (!parcelOwned(owLastGhostCell.c, owLastGhostCell.r)) {
+                offerParcel(owLastGhostCell.c, owLastGhostCell.r);
+                return;
+            }
             holeWizard.tee = { x: owLastGhostCell.c, y: owLastGhostCell.r };
             holeWizard.step = 'pin';
         }
@@ -6560,6 +6567,10 @@ function overworldTouchEnd() {
         holeWizard.pinDrag = false;
         const g = owLastGhostCell;
         if (g && !(holeWizard.tee && holeWizard.tee.x === g.c && holeWizard.tee.y === g.r)) {
+            if (!parcelOwned(g.c, g.r)) {
+                offerParcel(g.c, g.r);
+                return;
+            }
             holeWizard.pin = { x: g.c, y: g.r };
             holeWizard.step = 'shape';
             owLastGhostCell = null;
