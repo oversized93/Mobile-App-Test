@@ -5100,6 +5100,15 @@ function updateShuttle3D(dt, hole) {
     }
     if (s.phase === 'arrive') {
         s.z -= 42 * dt;
+        // Passengers visible aboard: the pair rides the bus in until
+        // the doors open, then the existing hop-out walk takes over
+        for (let k = 0; k < shuttleWalkers.length; k++) {
+            const w2 = shuttleWalkers[k];
+            w2.walking = false;
+            w2.grp.visible = true;
+            w2.grp.position.set(s.ex + (k === 0 ? -4 : 4),
+                gy(s.z) + 3, s.z + (k === 0 ? 2 : -3));
+        }
         if (s.z <= s.endZ) {
             s.z = s.endZ;
             s.phase = 'unload';
