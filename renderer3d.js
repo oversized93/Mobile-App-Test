@@ -2287,6 +2287,7 @@ function setupAmbientNPCs(hole) {
     setupHoverBots(hole);
     setupFountains(hole);
     setupCartDrive(hole);
+    setupShuttle(hole);
     setupCritters(hole);
     setupPathLamps(hole);
     setupFireflies(hole);
@@ -2709,6 +2710,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateFountains3D();
     updatePinRings3D();
     updateCartDrive3D(dt, hole);
+    updateShuttle3D(dt, hole);
     updateCritters3D(hole);
     updateFireflies3D(hole);
     updateBuoys3D();
@@ -4038,6 +4040,126 @@ function updateCartDrive3D(dt, hole) {
             gy + 7,
             s.z - fwdZ * 2 + sideZ * rider.side);
         rider.grp.rotation.y = s.yaw;
+    }
+}
+
+// ---- Shuttle arrivals: a cart rolls up the entrance drive, drops off
+// visitors who wander onto the paths, and heads back out. Everything is
+// built once at setup (one group + two walker figures, reused each
+// arrival) so repeated arrivals allocate nothing.
+let shuttleGroup = null, shuttleState = null;
+let shuttleWalkers = [];
+
+function setupShuttle(hole) {
+    shuttleGroup = null;
+    shuttleState = null;
+    shuttleWalkers = [];
+    if (!worldAssets || !worldAssets.golfcart) return;
+    if (!npcPathCells || npcPathCells.length < 6) return;
+    const model = worldAssets.golfcart;
+    const grp = new THREE.Group();
+    for (const part of model.parts) {
+        const mesh = new THREE.Mesh(part.geometry, part.material);
+        mesh.castShadow = true;
+        grp.add(mesh);
+    }
+    grp.scale.setScalar(model.scale * 1.25); // reads as the bigger shuttle
+    grp.visible = false;
+    terrainGroup.add(grp);
+    shuttleGroup = grp;
+    const walkCols = [0x3d9e5a, 0xd9a03c];
+    for (let k = 0; k < 2; k++) {
+        const w = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.9, 9, 7),
+            new THREE.MeshStandardMaterial({
+                color: new THREE.Color(walkCols[k]).convertSRGBToLinear(),
+                roughness: 0.9 }));
+        body.position.y = 4.5;
+        w.add(body);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(2.5, 7, 6),
+            new THREE.MeshStandardMaterial({ color: linC(0xf0c8a0), roughness: 0.85 }));
+        head.position.y = 11;
+        w.add(head);
+        w.visible = false;
+        terrainGroup.add(w);
+        shuttleWalkers.push({ grp: w, walking: false, x: 0, z: 0, tz: 0 });
+    }
+    const eCol = Math.floor(hole.cols / 2);
+    const eRow = hole.rows - (hole.border || 4);
+    shuttleState = {
+        phase: 'hidden',
+        // First bus shows up quickly so new resorts feel alive; later
+        // intervals stretch out (and shrink again as membership grows)
+        timer: 20 + Math.random() * 15,
+        ex: (eCol + 0.5) * CELL,
+        startZ: (hole.rows - 0.5) * CELL,
+        endZ: (eRow + 1.4) * CELL
+    };
+}
+
+function updateShuttle3D(dt, hole) {
+    if (!shuttleGroup || !shuttleState) return;
+    const s = shuttleState;
+    const gy = (z) => (hole && hole.heights)
+        ? ((hole.heights[Math.floor(z / CELL)] || [])[Math.floor(s.ex / CELL)] || 0) : 0;
+    if (s.phase === 'hidden') {
+        s.timer -= dt;
+        if (s.timer <= 0) {
+            s.phase = 'arrive';
+            s.z = s.startZ;
+            shuttleGroup.visible = true;
+        }
+        return;
+    }
+    if (s.phase === 'arrive') {
+        s.z -= 42 * dt;
+        if (s.z <= s.endZ) {
+            s.z = s.endZ;
+            s.phase = 'unload';
+            s.timer = 2.6;
+            // Visitors hop out and head up the entrance walk
+            for (let k = 0; k < shuttleWalkers.length; k++) {
+                const w = shuttleWalkers[k];
+                w.walking = true;
+                w.x = s.ex + (k === 0 ? -7 : 7);
+                w.z = s.z - 4;
+                w.tz = s.z - CELL * (5 + k * 2);
+                w.grp.visible = true;
+            }
+            if (typeof notify === 'function') {
+                notify('\u{1F68C} New arrivals! Visitors at the gate');
+            }
+            if (typeof playHonk === 'function') playHonk();
+        }
+    } else if (s.phase === 'unload') {
+        s.timer -= dt;
+        if (s.timer <= 0) s.phase = 'depart';
+    } else if (s.phase === 'depart') {
+        s.z += 42 * dt;
+        if (s.z >= s.startZ) {
+            s.phase = 'hidden';
+            shuttleGroup.visible = false;
+            const members = (typeof resort !== 'undefined' && resort)
+                ? (resort.members || 0) : 0;
+            s.timer = Math.max(55, 170 - members * 1.5) + Math.random() * 25;
+        }
+    }
+    shuttleGroup.position.set(s.ex, gy(s.z), s.z);
+    // Nose points along the direction of travel
+    shuttleGroup.rotation.y = s.phase === 'depart' ? 0 : Math.PI;
+    // Dropped-off visitors stroll north up the walk, then melt into the
+    // crowd (hidden until the next arrival reuses them)
+    for (const w of shuttleWalkers) {
+        if (!w.walking) continue;
+        w.z -= 13 * dt;
+        const wy = (hole && hole.heights)
+            ? ((hole.heights[Math.floor(w.z / CELL)] || [])[Math.floor(w.x / CELL)] || 0) : 0;
+        const bob = Math.abs(Math.sin(w.z * 0.12)) * 1.6;
+        w.grp.position.set(w.x, wy + bob, w.z);
+        if (w.z <= w.tz) {
+            w.walking = false;
+            w.grp.visible = false;
+        }
     }
 }
 

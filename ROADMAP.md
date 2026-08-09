@@ -130,7 +130,10 @@ instancing on low-end devices).
       course save; records and rivalries across sessions
 - [x] Instanced low-poly NPC bodies (Meshy golfer, one InstancedMesh/part)
 - [x] Route play with skill-based scoring scatter (duff/putt odds by skill)
-- [ ] Shuttle arrivals at the entrance (walkers currently spawn on paths)
+- [x] Shuttle arrivals at the entrance (gt197: a shuttle rolls up the
+      entrance drive every few in-game hours — more often as membership
+      grows — honks, drops visitors who stroll up the walk, and departs;
+      one reused group, zero per-arrival allocations)
 - [ ] Dynamic path-routing (walk paths when available, cut grass when not)
 - [x] Headless-sim-driven NPC rounds (presimulated through the real
       physics via a throttled queue; statistical scoring is fallback only)
