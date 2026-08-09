@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt213';
+const BUILD_TAG = 'gt214';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -698,6 +698,15 @@ function polylineLengthYards(w) {
 // Resort star rating: holes + variety + decor + vendors + golfer mood.
 // 0-5 in half-star steps; shown on the Manage screen.
 // Fireworks over the entrance for landmark celebrations
+// The daily tournament takes its name from the island's biome — links
+// resorts host The Island Open, autumn ones the Fall Classic
+function tourneyTitle() {
+    const b = worldCourse.biome || 'meadows';
+    return b === 'links' ? 'The Island Open'
+        : b === 'autumn' ? 'The Fall Classic'
+        : 'The Meadows Cup';
+}
+
 function celebrateFireworks() {
     if (typeof spawnFirework3D !== 'function') return;
     const ex = (Math.floor(worldCourse.cols / 2) + 0.5) * CELL;
@@ -1057,7 +1066,7 @@ function tickWorld(dt) {
         && worldCourse.holes.length > 0;
     if (tourneyActive && !window.__tourney) {
         window.__tourney = { board: {} };
-        notify('\u{1F3C6} Tournament teed off! Runs noon–3 PM');
+        notify('\u{1F3C6} ' + tourneyTitle() + ' teed off! Runs noon\u20133 PM');
     }
     // Per-hole play stats: fold finished ambient rounds into the course
     // record so the hole inspector can show how each hole really plays
@@ -1148,13 +1157,14 @@ function tickWorld(dt) {
             const relTxt = (relAvg <= 0 ? '' : '+') + relAvg.toFixed(1);
             resort.lastTourney = {
                 winner: name, rel: relTxt, rounds: tb.n, purse: purse,
+                title: tourneyTitle(),
                 day: Math.floor((resort.worldClock || 0) / 1440) + 1
             };
             resort.tourneyHistory = resort.tourneyHistory || [];
             resort.tourneyHistory.unshift(resort.lastTourney);
             if (resort.tourneyHistory.length > 5) resort.tourneyHistory.pop();
-            notify('\u{1F3C6} ' + name + ' wins the tournament (' + relTxt
-                + ' avg)! Gallery spends $' + purse);
+            notify('\u{1F3C6} ' + name + ' wins ' + tourneyTitle() + ' ('
+                + relTxt + ' avg)! Gallery spends $' + purse);
             if (typeof playFanfare === 'function') playFanfare();
             // Your title gets the fireworks (there's no NPC to hop for you)
             if (name === 'You') celebrateFireworks();
@@ -4293,7 +4303,7 @@ function drawOverworld() {
     if (window.__tourney) {
         const entries = Object.entries(window.__tourney.board)
             .sort((a, b) => (a[1].rel / a[1].n) - (b[1].rel / b[1].n));
-        let tTxt = '\u{1F3C6} TOURNAMENT';
+        let tTxt = '\u{1F3C6} ' + tourneyTitle().toUpperCase();
         if (entries.length) {
             // Rotate through the top three every few seconds
             const top = entries.slice(0, 3);
@@ -4453,7 +4463,8 @@ function drawOverworld() {
                     ctx.fillStyle = ci === 0 ? '#ffd24a' : 'rgba(255,210,74,0.6)';
                     ctx.font = (ci === 0 ? 'bold ' : '') + '10px -apple-system,sans-serif';
                     ctx.fillText((ci === 0 ? '\u{1F451}' : '\u{1F3C6}') + ' Day '
-                        + lt.day + '  ' + lt.winner + '  (' + lt.rel + ')', px + 14, fy);
+                        + lt.day + '  ' + lt.winner + '  (' + lt.rel + ')'
+                        + (lt.title ? ' \u2022 ' + lt.title : ''), px + 14, fy);
                     owRosterChip.rows.push({ name: lt.winner, x: px, y: fy - 12,
                         w: pw, h: 16 });
                     fy += 16;
