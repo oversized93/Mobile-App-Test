@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt280';
+const BUILD_TAG = 'gt281';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4693,15 +4693,27 @@ function drawOverworld() {
                 ctx.font = '10px -apple-system,sans-serif';
                 ctx.fillText(crText2, px + 14, py + 52);
             }
+            owRosterChip.skipNight = null;
             if (!rows.length) {
                 const hrR = (((resort.worldClock || 0) / 60) % 24 + 24) % 24;
                 const closed = hrR >= 21 || hrR < 5.5;
-                ctx.fillStyle = 'rgba(255,255,255,0.5)';
-                ctx.font = '12px -apple-system,sans-serif';
-                ctx.fillText(closed
-                    ? '\u{1F319} Course closed \u2014 tee-off at 6 AM'
-                    : 'No golfers out — build more holes!',
-                    px + 14, py + headH + 18);
+                if (closed) {
+                    // A tappable shortcut through the quiet hours
+                    glossyRect(px + 12, py + headH + 2, pw - 24, 26, 13, '#3a4d6b');
+                    ctx.fillStyle = '#cfe3ff';
+                    ctx.font = 'bold 11px -apple-system,sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('\u{1F319} Course closed \u2014 tap to skip to 6 AM',
+                        px + pw / 2, py + headH + 19);
+                    ctx.textAlign = 'left';
+                    owRosterChip.skipNight = { x: px + 12, y: py + headH + 2,
+                        w: pw - 24, h: 26 };
+                } else {
+                    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                    ctx.font = '12px -apple-system,sans-serif';
+                    ctx.fillText('No golfers out — build more holes!',
+                        px + 14, py + headH + 18);
+                }
             }
             owRosterChip.rows = [];
             for (let i = 0; i < rows.length; i++) {
@@ -6153,6 +6165,17 @@ function overworldTouchStart(sx, sy) {
         return;
     }
     if (hit === 'roster:panel') {
+        // Night shortcut: jump the world clock to opening time
+        if (owRosterChip && owRosterChip.skipNight
+            && hitBtn(sx, sy, owRosterChip.skipNight.x, owRosterChip.skipNight.y,
+                owRosterChip.skipNight.w, owRosterChip.skipNight.h)) {
+            const mins = ((resort.worldClock % 1440) + 1440) % 1440;
+            const dayBase = Math.floor(resort.worldClock / 1440) * 1440;
+            resort.worldClock = (mins < 360 ? dayBase : dayBase + 1440) + 359.5;
+            tickWorld(0.5); // rollovers, upkeep, and the tee sheet fire here
+            notify('\u26C5 Good morning \u2014 6:00 AM');
+            return;
+        }
         // Tapping a golfer's row jumps straight to their inspector
         if (owRosterChip && owRosterChip.rows) {
             for (const rr of owRosterChip.rows) {
