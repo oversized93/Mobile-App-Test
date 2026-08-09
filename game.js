@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt249';
+const BUILD_TAG = 'gt250';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1292,7 +1292,11 @@ function tickWorld(dt) {
     // Membership drifts toward what the resort deserves: holes draw
     // players, decor investment draws hangers-on. One member per game
     // minute so growth feels earned, not instant.
-    const memberTarget = 5 + worldCourse.holes.length * 4
+    // Amenities hold their boost permanently — without counting them
+    // here, the clubhouse's +members would drain right back to target
+    const amenityMembers = AMENITIES.reduce((sum, a) =>
+        sum + (resort.amenities && resort.amenities[a.id] ? a.memberBoost : 0), 0);
+    const memberTarget = 5 + worldCourse.holes.length * 4 + amenityMembers
         + Math.floor((worldCourse.decor || []).reduce(
             (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) / 100);
     if (resort.__memTick == null) resort.__memTick = resort.worldClock;
