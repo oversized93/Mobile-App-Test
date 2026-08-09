@@ -4488,7 +4488,50 @@ let rainPrevEnv = 0;
 let rainbowSprite = null, rainbowUntil = 0;
 const RAIN_COUNT = 240;
 
+// ---- Puddle rings: raindrop impacts popping on the ground ----
+let puddleRings = [];
+let puddleGeo = null;
+function spawnPuddleRing(wx, wy, wz) {
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    if (!puddleGeo) {
+        puddleGeo = new THREE.RingGeometry(0.7, 1.3, 12);
+        puddleGeo.rotateX(-Math.PI / 2);
+    }
+    const mat = new THREE.MeshBasicMaterial({
+        color: 0xcfe8f5, transparent: true, opacity: 0.65,
+        depthWrite: false, side: THREE.DoubleSide
+    });
+    mat.toneMapped = false;
+    const m = new THREE.Mesh(puddleGeo, mat);
+    m.position.set(wx, wy, wz);
+    m.renderOrder = 3;
+    scene3d.add(m);
+    puddleRings.push({ m, mat, t0: performance.now() });
+    if (puddleRings.length > 24) {
+        const old2 = puddleRings.shift();
+        scene3d.remove(old2.m);
+        old2.mat.dispose();
+    }
+}
+function updatePuddleRings3D() {
+    const now = performance.now();
+    for (let i = puddleRings.length - 1; i >= 0; i--) {
+        const r = puddleRings[i];
+        const k = (now - r.t0) / 650;
+        if (k >= 1) {
+            scene3d.remove(r.m);
+            r.mat.dispose();
+            puddleRings.splice(i, 1);
+            continue;
+        }
+        const sc = 1 + k * 3.2;
+        r.m.scale.set(sc, 1, sc);
+        r.mat.opacity = 0.65 * (1 - k);
+    }
+}
+
 function updateRain3D(dt) {
+    updatePuddleRings3D(); // live rings finish fading even as rain stops
     const t = windClock.value;
     const w = Math.sin(t * 0.011) + Math.sin(t * 0.0073);
     const target = w > 1.15 ? 1 : 0;
@@ -4519,6 +4562,17 @@ function updateRain3D(dt) {
     }
     if (!rainInst) return;
     rainInst.visible = true;
+    // Impact rings pop on the ground near the view while it pours
+    if (rainEnvNow > 0.4 && Math.random() < rainEnvNow * 0.6
+        && typeof cam3dPivotX !== 'undefined') {
+        const px4 = cam3dPivotX + (Math.random() - 0.5) * 460;
+        const pz4 = cam3dPivotZ + (Math.random() - 0.5) * 460;
+        const rr4 = Math.floor(pz4 / CELL), cc4 = Math.floor(px4 / CELL);
+        const hh4 = (terrainHoleRef && terrainHoleRef.heights
+            && terrainHoleRef.heights[rr4])
+            ? (terrainHoleRef.heights[rr4][cc4] || 0) : 0;
+        spawnPuddleRing(px4, hh4 + 0.5, pz4);
+    }
     rainInst.material.opacity = 0.3 * rainEnvNow;
     const px = (typeof cam3dPivotX !== 'undefined') ? cam3dPivotX : 1920;
     const pz = (typeof cam3dPivotZ !== 'undefined') ? cam3dPivotZ : 1280;
