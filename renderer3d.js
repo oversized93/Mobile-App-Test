@@ -2892,6 +2892,23 @@ function updateAmbientNPCs3D(dt, hole) {
             s.age = (s.age || 0) + dt;
             s.hunger = Math.min(100, (s.hunger || 0) + dt * 0.3);
             s.thirst = Math.min(100, (s.thirst || 0) + dt * 0.45);
+            // Close of play: after ~9 PM golfers call it a day and walk
+            // out (quietly — no drama toast). The 6 AM fresh tee sheet
+            // brings everyone back for the new day.
+            if (!s.leaving && typeof resort !== 'undefined' && resort) {
+                const hr9 = (((resort.worldClock || 0) / 60) % 24 + 24) % 24;
+                if (hr9 >= 21 || hr9 < 5.5) {
+                    s.leaving = true;
+                    s.detour = null;
+                    s.returning = false;
+                    const eCol9 = Math.floor(hole.cols / 2);
+                    const eRow9 = hole.rows - (hole.border || 4);
+                    s.leaveX = (eCol9 + 0.5) * CELL;
+                    s.leaveZ = (eRow9 + 0.5) * CELL;
+                    s.walkPath = pathRoute(s.x, s.z, s.leaveX, s.leaveZ);
+                    golferThink(s, 'That\u2019s the day \u2014 heading home', 2);
+                }
+            }
             // Storming out: walkway route to the entrance, then gone
             // (the slot stays parked until the next terrain rebuild
             // reseeds a fresh roster)
