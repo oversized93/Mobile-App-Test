@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt212';
+const BUILD_TAG = 'gt213';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4791,11 +4791,16 @@ function drawOverworld() {
             // Reference-style stat rows: label left, value right, bar fill
             const yds = Math.round(polylineLengthYards(selHole));
             const diff = holeDifficulty(selHole);
+            // Open complaints pinned to this hole flag its difficulty row
+            const cmpN = (worldCourse.complaints || [])
+                .filter(c => c.holeId === selHole.id).length;
             const rows = [
                 ['Par', String(selHole.par), Math.min(1, selHole.par / 5), '#66bb6a'],
                 ['Length', yds + ' yds', Math.min(1, yds / 550), '#42a5f5'],
-                ['Difficulty', '★'.repeat(diff) + '☆'.repeat(5 - diff), diff / 5,
-                 diff <= 2 ? '#66bb6a' : diff <= 3 ? '#f0a860' : '#ef5350']
+                ['Difficulty', '★'.repeat(diff) + '☆'.repeat(5 - diff)
+                    + (cmpN >= 2 ? '  \u{1F4A2}' + cmpN : ''), diff / 5,
+                 cmpN >= 2 ? '#ef5350'
+                     : diff <= 2 ? '#66bb6a' : diff <= 3 ? '#f0a860' : '#ef5350']
             ];
             let ry = hc.y + 44;
             for (const [label, val, frac, col] of rows) {
