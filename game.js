@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt197';
+const BUILD_TAG = 'gt198';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1871,6 +1871,10 @@ function resetBallToLastSafe() {
 }
 
 function onBallStopped() {
+    // Headless sims settle thousands of balls: none of the human-facing
+    // side effects below (shot banner, camera zoom, club/target updates)
+    // may leak into the live game
+    if (simMode) return;
     const ter = terrainAt(ball.x, ball.y);
     if (ter !== T.WATER && ter !== T.OOB) {
         lastSafePos = { x: ball.x, y: ball.y };
