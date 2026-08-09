@@ -2889,6 +2889,11 @@ function updateSprinklers3D(hole) {
         sprinklerPool.push(spr);
     }
     const t = performance.now() / 1000;
+    // Spray drifts downwind — outer droplets carry furthest
+    const wSp2 = (typeof wind !== 'undefined' && wind) ? (wind.speed || 0) : 0;
+    const wAng2 = (typeof wind !== 'undefined' && wind) ? (wind.angle || 0) : 0;
+    const wdx = Math.cos(wAng2) * wSp2 * 0.8;
+    const wdz = Math.sin(wAng2) * wSp2 * 0.8;
     for (let i = 0; i < sprinklerPool.length; i++) {
         const spr = sprinklerPool[i];
         const si = Math.floor(i / SPRK_DROPS);
@@ -2902,9 +2907,9 @@ function updateSprinklers3D(hole) {
         const rad = 3 + kk * 19;
         spr.visible = true;
         spr.position.set(
-            spot.x + Math.cos(az) * rad,
+            spot.x + Math.cos(az) * rad + wdx * kk * kk,
             spot.y + 2 + 30 * kk * (1 - kk),
-            spot.z + Math.sin(az) * rad);
+            spot.z + Math.sin(az) * rad + wdz * kk * kk);
         const sc = 3.6 - kk * 1.5;
         spr.scale.set(sc, sc, 1);
         spr.material.opacity = 0.95 * (1 - kk * 0.45);
