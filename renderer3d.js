@@ -3473,6 +3473,17 @@ function updateAmbientNPCs3D(dt, hole) {
                         x: pinPt.x, z: pinPt.z, t0: performance.now(), amt: paid,
                         stack: feeStack
                     });
+                    // Caddie tip: a round under par leaves a gratuity on
+                    // top of the fee — eagles tip double
+                    if (s.par && s.lastRound && s.lastRound < s.par) {
+                        const tip = (s.par - s.lastRound) >= 2 ? 4 : 2;
+                        window.__golfFees += tip;
+                        window.__feePopups.push({
+                            x: pinPt.x, z: pinPt.z, t0: performance.now(),
+                            amt: tip, tag: '\u{1F4B5} tip',
+                            stack: feeStack + 1
+                        });
+                    }
                     // Score callout vs par — the little dopamine hit that
                     // makes the ambient sim feel like real rounds
                     if (s.par) {
