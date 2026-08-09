@@ -3507,6 +3507,8 @@ function setupPathLamps(hole) {
 // streaks live in scene3d so terrain rebuilds don't kill them, and they
 // respawn around the camera pivot so rain always falls in view.
 let rainInst = null, rainDrops = [], rainEnvNow = 0;
+let rainPrevEnv = 0;
+let rainbowSprite = null, rainbowUntil = 0;
 const RAIN_COUNT = 240;
 
 function updateRain3D(dt) {
@@ -3514,6 +3516,13 @@ function updateRain3D(dt) {
     const w = Math.sin(t * 0.011) + Math.sin(t * 0.0073);
     const target = w > 1.15 ? 1 : 0;
     rainEnvNow += (target - rainEnvNow) * Math.min(1, dt * 0.3);
+    // A clearing shower leaves a rainbow (daytime only)
+    if (rainPrevEnv > 0.3 && rainEnvNow <= 0.3) {
+        const hh = (typeof resort !== 'undefined' && resort)
+            ? ((((resort.worldClock || 0) / 60) % 24) + 24) % 24 : 12;
+        if (hh > 7 && hh < 18) rainbowUntil = performance.now() + 75000;
+    }
+    rainPrevEnv = rainEnvNow;
     if (rainEnvNow < 0.02) {
         if (rainInst) rainInst.visible = false;
         return;
@@ -3629,6 +3638,35 @@ function updateDayNightTint(minutes) {
     if (oceanMatRef) oceanMatRef.color.copy(OCEAN_BASE_COLOR).multiplyScalar(0.35 + 0.65 * dayW);
     // Stars pierce through once the sky is properly dark
     if (starMatRef) starMatRef.opacity = Math.max(0, 1 - dayW * 3) * (1 - rainEnvNow);
+    // Rainbow: spectral arc over the island while the air clears
+    if (!rainbowSprite && typeof scene3d !== 'undefined' && scene3d) {
+        const rc = document.createElement('canvas');
+        rc.width = 256; rc.height = 128;
+        const rg = rc.getContext('2d');
+        const bands = ['#ff5a5a', '#ffb54a', '#ffe95a', '#6ade6a', '#5ab8ff', '#9a6aff'];
+        for (let i = 0; i < bands.length; i++) {
+            rg.strokeStyle = bands[i];
+            rg.globalAlpha = 0.55;
+            rg.lineWidth = 5;
+            rg.beginPath();
+            rg.arc(128, 128, 112 - i * 6, Math.PI, 0);
+            rg.stroke();
+        }
+        const rtex = new THREE.CanvasTexture(rc);
+        const rmat = new THREE.SpriteMaterial({
+            map: rtex, transparent: true, opacity: 0, depthWrite: false
+        });
+        rmat.toneMapped = false;
+        rainbowSprite = new THREE.Sprite(rmat);
+        rainbowSprite.scale.set(2400, 1200, 1);
+        rainbowSprite.position.set(1920, 620, -900);
+        scene3d.add(rainbowSprite);
+    }
+    if (rainbowSprite) {
+        const left = rainbowUntil - performance.now();
+        const rbK = Math.max(0, Math.min(1, left / 15000));
+        rainbowSprite.material.opacity = 0.5 * Math.min(1, rbK) * dayW;
+    }
     // Golden-hour horizon glow where the sun sits at dawn/dusk
     if (!sunGlowSprite && typeof scene3d !== 'undefined' && scene3d) {
         const sc = document.createElement('canvas');
