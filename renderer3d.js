@@ -3301,6 +3301,14 @@ function updateAmbientNPCs3D(dt, hole) {
             // Round-in-progress golfer: walk the hole route, pause to hit,
             // restart at the tee after holing out
             s.age = (s.age || 0) + dt;
+            // Same-hole fatigue gets voiced in stages (once each)
+            if (s.age > 260 && !s.boredStage2) {
+                s.boredStage2 = true;
+                golferThink(s, 'Round and round hole ' + s.holeId + '...', -5);
+            } else if (s.age > 130 && !s.boredStage1) {
+                s.boredStage1 = true;
+                golferThink(s, 'Same hole again \u2014 mix it up?', -3);
+            }
             s.hunger = Math.min(100, (s.hunger || 0) + dt * 0.3);
             s.thirst = Math.min(100, (s.thirst || 0) + dt * 0.45);
             // Close of play: after ~9 PM golfers call it a day and walk
@@ -3646,7 +3654,8 @@ function updateAmbientNPCs3D(dt, hole) {
                     // (also resets the boredom clock)
                     {
                         const ids = Object.keys(npcHoleRoutes);
-                        if (ids.length > 1 && Math.random() < 0.35) {
+                        const moveP = 0.35 + Math.min(0.4, (s.age || 0) * 0.002);
+                        if (ids.length > 1 && Math.random() < moveP) {
                             const others = ids.filter(k => +k !== s.holeId);
                             const pick = npcHoleRoutes[
                                 others[Math.floor(Math.random() * others.length)]];
@@ -3657,6 +3666,8 @@ function updateAmbientNPCs3D(dt, hole) {
                                 s.fee = pick.fee;
                                 s.diff = pick.diff;
                                 s.age = 0;
+                                s.boredStage1 = false;
+                                s.boredStage2 = false;
                                 golferThink(s, 'Let\u2019s try hole '
                                     + pick.holeId + ' next', 4);
                             }
