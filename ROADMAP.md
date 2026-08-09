@@ -146,6 +146,27 @@ hole-card recent-form sparkline (gt316), roster last-score chips
 gt320. One save from a dead-code drift: a duplicate firefly system was
 caught pre-commit in gt317 — fireflies already existed.
 
+### Parity run continued (gt322–gt345)
+Systems-depth sprint: weather, service, and consequence. Weather grew
+teeth — heavy rain thins the field with a 30% per-hole-out quit roll
+(gt327) that shelter amenities argue down to 8% (gt328), quitters
+brolly-dash for the exit (gt329), rain pops puddle rings on the ground
+(gt343), and dawn dew lays a sheen on the turf (gt323). Service became
+theater: snack carts grew spaced queues (gt337), counter-facing +
+a vendor-books regression fix the queue itself caused (gt338), and
+one-at-a-time staged service (gt339). Consequence loops closed:
+complaints follow up with concrete fix suggestions (gt330), boredom
+speaks up and drives hole migration (gt345), caddie tips reward
+under-par design (gt321) and show up separated in the finance panel
+(gt324), and the top bar grew a live daily-net ticker (gt344).
+Broadcast flavor: flyover lower-thirds (gt333) reused as a wizard
+draft preview (gt336), NPC champions get fireworks + counted dynasties
+(gt334-335), badges wear difficulty pips (gt340), the pin flag waves
+(gt325), shuttle passengers ride in view (gt341), spectators track
+flights (gt332), pre-shot crouch ritual (gt342), water's-edge ball
+fishing (gt326). Perf: projection hot paths de-allocated (gt331).
+Full matrix green at gt324, gt328, gt331, gt335, gt339, gt342, gt346.
+
 ### Open thread: Mixamo skinned animations
 `assets/meshy/golfer_for_mixamo.obj` is committed for Mixamo auto-rigging.
 When FBX clips (Idle, Walking, Golf Drive, Golf Putt + celebration;
