@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt264';
+const BUILD_TAG = 'gt265';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5385,9 +5385,11 @@ function drawGolferPanel(s) {
     }
     {
         const car = (worldCourse.golferCareers || {})[s.name];
-        row('Rounds today: ' + (s.rounds || 0)
-            + (s.lastRound ? '  (last ' + s.lastRound + ')' : ''),
-            car ? 'Career: ' + car.rounds + ' rds \u2022 best ' + car.best
+        // Two facts share one row: keep both short enough that they
+        // never collide on the phone-width panel
+        row('Today: ' + (s.rounds || 0)
+            + (s.lastRound ? ' (last ' + s.lastRound + ')' : ''),
+            car ? 'Career ' + car.rounds + ' \u2022 best ' + car.best
                 : 'First round');
     }
     const tierName = s.tier === 'gold' ? 'Gold ★★' : s.tier === 'silver' ? 'Silver ★' : 'Basic';
