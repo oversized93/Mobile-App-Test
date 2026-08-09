@@ -2337,6 +2337,31 @@ let npcPathCells = [];
 let npcPathIdx = null; // "c,r" -> npcPathCells index, built lazily
 let npcHoleRoutes = {}; // holeId -> route data, for hole rotation
 
+// Water-aware walking step: golfers on cross-course strolls skirt
+// pond edges instead of striding over open water. Tries the direct
+// step, then two side-deflections; worst case (surrounded) steps
+// through so nobody deadlocks.
+function walkStepAvoid(hole, s, gx, gz, dt) {
+    const dx = gx - s.x, dz = gz - s.z;
+    const d = Math.sqrt(dx * dx + dz * dz) || 1;
+    const st = Math.min(d, s.speed * dt);
+    const passable = (x, z) => {
+        const row = hole.grid[Math.floor(z / CELL)];
+        const t2 = row && row[Math.floor(x / CELL)];
+        return t2 !== undefined && t2 !== T.WATER;
+    };
+    const nx = s.x + (dx / d) * st, nz = s.z + (dz / d) * st;
+    if (passable(nx, nz)) { s.x = nx; s.z = nz; return; }
+    // Slide along the shoreline: perpendicular deflections
+    const px2 = -dz / d, pz2 = dx / d;
+    for (const side of [1, -1]) {
+        const ax = s.x + ((dx / d) * 0.35 + px2 * side * 0.93) * st;
+        const az = s.z + ((dz / d) * 0.35 + pz2 * side * 0.93) * st;
+        if (passable(ax, az)) { s.x = ax; s.z = az; return; }
+    }
+    s.x = nx; s.z = nz; // boxed in — wade rather than freeze
+}
+
 // Shortest walkway route between two world points (BFS over path cells,
 // 4-connected). Returns world-space waypoints, or null when either end
 // is far from the network or no connected route exists — callers then
@@ -2933,12 +2958,7 @@ function updateAmbientNPCs3D(dt, hole) {
                     s.gone = true;
                     s.name = null; // rosters, taps and sims all ignore them
                 } else {
-                    // Clamp to the remaining distance: big dt steps (4x
-                    // speed on a slow frame) must never overshoot into
-                    // an orbit around the arrival threshold
-                    const st2 = Math.min(dd2, s.speed * dt);
-                    s.x += (dd2x / dd2) * st2;
-                    s.z += (dd2z / dd2) * st2;
+                    walkStepAvoid(hole, s, gx2, gz2, dt);
                 }
             } else
             // Detour to a kiosk/stall: walk over, buy, walk back to the tee
@@ -3014,9 +3034,7 @@ function updateAmbientNPCs3D(dt, hole) {
                 } else if (s.pause > 0) {
                     s.pause -= dt;
                 } else {
-                    const stD = Math.min(dd, s.speed * dt);
-                    s.x += (ddx / dd) * stD;
-                    s.z += (ddz / dd) * stD;
+                    walkStepAvoid(hole, s, gx, gz, dt);
                 }
             } else {
             if (rainEnvNow > 0.4 && !s.rainMood) {
