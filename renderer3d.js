@@ -2889,7 +2889,7 @@ function updateSwingFlashes3D() {
 // The signature living-course visual: every ambient strike launches a
 // real airborne ball toward the next landing spot, shedding vapor.
 let npcFlights = [];
-function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1) {
+function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin) {
     if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
     const dx = x1 - x0, dz = z1 - z0;
     const dist = Math.sqrt(dx * dx + dz * dz);
@@ -2905,6 +2905,7 @@ function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1) {
     scene3d.add(spr);
     npcFlights.push({
         spr, mat, x0, y0, z0, x1, y1, z1,
+        px: pin ? pin.x : null, pz: pin ? pin.z : null,
         apex: Math.min(60, 10 + dist * 0.28),
         t0: performance.now(),
         dur: 700 + dist * 5.5, // longer shots hang longer
@@ -2942,6 +2943,20 @@ function updateNpcFlights3D(hole) {
                 scene3d.remove(f.spr);
                 f.mat.dispose();
                 npcFlights.splice(i, 1);
+                continue;
+            }
+            // Approach shots roll out toward the cup instead of hopping
+            // through: one low trickle that settles beside the pin
+            if (f.px != null && f.bounce == null && typeof T !== 'undefined'
+                && hole && hole.grid && hole.grid[wr]
+                && hole.grid[wr][wc] === T.GREEN) {
+                f.bounce = 2; // final fading phase
+                f.x0 = f.x1; f.z0 = f.z1; f.y0 = f.y1;
+                f.x1 = f.px + Math.random() * 4 - 2;
+                f.z1 = f.pz + Math.random() * 4 - 2;
+                f.apex = 1.4;
+                f.t0 = now;
+                f.dur = 520;
                 continue;
             }
             f.bounce = (f.bounce || 0) + 1;
@@ -3200,7 +3215,10 @@ function updateAmbientNPCs3D(dt, hole) {
                         const nr2 = Math.floor(lz / CELL), nc2 = Math.floor(lx / CELL);
                         const ny2 = (hole.heights && hole.heights[nr2])
                             ? (hole.heights[nr2][nc2] || 0) : 0;
-                        spawnNpcFlight3D(s.x + 3, gy2 + 14, s.z, lx, ny2 + 2, lz);
+                        const toPin = (s.ptIdx + 2 === s.route.length)
+                            ? s.route[s.route.length - 1] : null;
+                        spawnNpcFlight3D(s.x + 3, gy2 + 14, s.z,
+                            lx, ny2 + 2, lz, toPin);
                     }
                 }
             } else {
