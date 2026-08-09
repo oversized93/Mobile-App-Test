@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt209';
+const BUILD_TAG = 'gt210';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -7816,7 +7816,10 @@ function drawNotification(dt) {
     // roster) would be covered by the banner
     const topBusy = state === 'overworld'
         && (owFinancesOpen || owSelectedGolfer || owRosterOpen);
-    const pillY = topBusy ? H() - 44 : 52;
+    // The wizard owns the top (step banner + readout) AND the bottom
+    // (Cancel/Confirm), so toasts slot between them instead
+    const pillY = (state === 'overworld' && holeWizard) ? 126
+        : topBusy ? H() - 44 : 52;
     glossyRect(W() / 2 - tw / 2 - 14, pillY, tw + 28, pillH, pillH / 2, '#2f7d43');
     ctx.fillStyle = '#fff';
     ctx.fillText(notification.text, W() / 2, pillY + 17);
