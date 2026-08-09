@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt210';
+const BUILD_TAG = 'gt211';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4360,7 +4360,31 @@ function drawOverworld() {
         // Roster panel — everyone on the course and how their round is going
         if (owRosterOpen) {
             const rows = onCourse.slice(0, 8);
-            const pw = 258, rowH = 30, headH = 34;
+            // Course report: aggregate every recorded round for a
+            // two-line summary under the header (skipped until data)
+            let crText1 = null, crText2 = null;
+            {
+                let totN = 0, totSum = 0, totPar = 0, busiest = null;
+                for (const [hid, st] of Object.entries(worldCourse.holeStats || {})) {
+                    totN += st.n;
+                    totSum += st.sum;
+                    const rec3 = worldCourse.holes.find(h => h.id === +hid);
+                    totPar += (rec3 ? (rec3.par || 4) : 4) * st.n;
+                    if (!busiest || st.n > busiest.n) busiest = { id: hid, n: st.n };
+                }
+                if (totN > 0) {
+                    const rel = (totSum - totPar) / totN;
+                    crText1 = '\u{1F4CA} ' + totN.toLocaleString() + ' rounds \u2022 avg '
+                        + (rel >= 0 ? '+' : '') + rel.toFixed(1) + ' vs par';
+                    const cmpN = (worldCourse.complaints || []).length;
+                    const bRec = busiest && worldCourse.holes.find(h => h.id === +busiest.id);
+                    crText2 = '\u{1F525} busiest: '
+                        + ((bRec && bRec.name) || ('Hole ' + busiest.id))
+                        + (cmpN ? ' \u2022 \u{1F4A2} ' + cmpN + ' open complaint'
+                            + (cmpN === 1 ? '' : 's') : '');
+                }
+            }
+            const pw = 258, rowH = 30, headH = crText1 ? 64 : 34;
             // Hall of fame: up to 3 recent champions (1 when the roster is
             // long, so the panel always fits a phone screen)
             const champs = (resort.tourneyHistory || (resort.lastTourney ? [resort.lastTourney] : []))
@@ -4381,6 +4405,14 @@ function drawOverworld() {
             const walkers = (typeof npcWalkerCount !== 'undefined') ? npcWalkerCount : 0;
             ctx.fillText('ON THE COURSE \u2014 ' + onCourse.length + ' playing'
                 + (walkers ? ' \u2022 ' + walkers + ' visiting' : ''), px + 14, py + 21);
+            if (crText1) {
+                ctx.fillStyle = '#ffd24a';
+                ctx.font = 'bold 10px -apple-system,sans-serif';
+                ctx.fillText(crText1, px + 14, py + 38);
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.font = '10px -apple-system,sans-serif';
+                ctx.fillText(crText2, px + 14, py + 52);
+            }
             if (!rows.length) {
                 ctx.fillStyle = 'rgba(255,255,255,0.5)';
                 ctx.font = '12px -apple-system,sans-serif';
