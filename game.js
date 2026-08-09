@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt363';
+const BUILD_TAG = 'gt364';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4806,7 +4806,7 @@ function drawOverworld() {
                             + (cmpN === 1 ? '' : 's') : '');
                 }
             }
-            const pw = 258, rowH = 30, headH = crText1 ? 64 : 34;
+            const pw = 292, rowH = 30, headH = crText1 ? 64 : 34;
             // Hall of fame: up to 3 recent champions (1 when the roster is
             // long, so the panel always fits a phone screen)
             const champs = (resort.tourneyHistory || (resort.lastTourney ? [resort.lastTourney] : []))
@@ -4827,8 +4827,14 @@ function drawOverworld() {
             ctx.font = 'bold 11px -apple-system,sans-serif';
             ctx.textAlign = 'left';
             const walkers = (typeof npcWalkerCount !== 'undefined') ? npcWalkerCount : 0;
+            // Tier mix at a glance: how many premium guests are out
+            const nGold = onCourse.filter(g2 => g2.tier === 'gold').length;
+            const nSilv = onCourse.filter(g2 => g2.tier === 'silver').length;
+            const tierTxt = (nGold ? ' \u2022 \u{1F947}' + nGold : '')
+                + (nSilv ? ' \u2022 \u{1F948}' + nSilv : '');
             ctx.fillText('ON THE COURSE \u2014 ' + onCourse.length + ' playing'
-                + (walkers ? ' \u2022 ' + walkers + ' visiting' : ''), px + 14, py + 21);
+                + (walkers ? ' \u2022 ' + walkers + ' visiting' : '')
+                + tierTxt, px + 14, py + 21);
             if (crText1) {
                 ctx.fillStyle = '#ffd24a';
                 ctx.font = 'bold 10px -apple-system,sans-serif';
