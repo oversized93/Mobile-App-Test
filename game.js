@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt233';
+const BUILD_TAG = 'gt234';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1309,12 +1309,12 @@ const SCORE_NAMES = {
 const YDS_TO_WORLD = 16;
 
 const CLUBS = [
-    { name: 'Driver',  maxPower: 500, launch: 780, airMin: 0.15, maxYds: 230 },
-    { name: '3 Wood',  maxPower: 420, launch: 680, airMin: 0.18, maxYds: 195 },
-    { name: '5 Iron',  maxPower: 340, launch: 500, airMin: 0.20, maxYds: 160 },
-    { name: '7 Iron',  maxPower: 260, launch: 420, airMin: 0.22, maxYds: 120 },
-    { name: 'P Wedge', maxPower: 180, launch: 560, airMin: 0.15, maxYds: 80  },
-    { name: 'Putter',  maxPower: 120, launch: 0,   airMin: 999,  maxYds: 40  }
+    { name: 'Driver',  short: 'Driver', maxPower: 500, launch: 780, airMin: 0.15, maxYds: 230 },
+    { name: '3 Wood',  short: '3W',     maxPower: 420, launch: 680, airMin: 0.18, maxYds: 195 },
+    { name: '5 Iron',  short: '5i',     maxPower: 340, launch: 500, airMin: 0.20, maxYds: 160 },
+    { name: '7 Iron',  short: '7i',     maxPower: 260, launch: 420, airMin: 0.22, maxYds: 120 },
+    { name: 'P Wedge', short: 'Wedge',  maxPower: 180, launch: 560, airMin: 0.15, maxYds: 80  },
+    { name: 'Putter',  short: 'Putter', maxPower: 120, launch: 0,   airMin: 999,  maxYds: 40  }
 ];
 let selectedClub = 0;
 
@@ -7142,7 +7142,7 @@ function drawPlaying() {
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 15px -apple-system,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(club.name.split(' ')[0], cardX + cardW / 2, TRAY_Y + 49);
+        ctx.fillText(club.short || club.name, cardX + cardW / 2, TRAY_Y + 49);
         ctx.fillStyle = 'rgba(255,255,255,0.55)';
         ctx.font = '10px -apple-system,sans-serif';
         ctx.fillText(club.maxYds + 'y', cardX + cardW / 2, TRAY_Y + 63);
