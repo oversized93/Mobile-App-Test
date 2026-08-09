@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt282';
+const BUILD_TAG = 'gt283';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3683,11 +3683,16 @@ function manageTouchStart(sx, sy) {
             notify('Design some holes in your resort first!');
             return;
         }
+        if (!worldCourse.holes.some(h => h.open !== false)) {
+            notify('Every hole is closed \u2014 open one to host an exhibition');
+            return;
+        }
         const res = simulateRound(worldCourse);
         awardCoins(res.coins);
         const diff = res.totalStrokes - res.totalPar;
         const label = (diff === 0 ? 'E' : (diff > 0 ? '+' + diff : String(diff)));
-        notify(worldCourse.name + ' simulated: ' + res.totalStrokes + ' (' + label + ') \u2022 +' + res.coins + ' coins');
+        notify('\u26F3 Exhibition at ' + worldCourse.name + ': '
+            + res.totalStrokes + ' (' + label + ') \u2022 +' + res.coins + ' coins');
         return;
     }
 
