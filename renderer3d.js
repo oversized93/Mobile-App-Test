@@ -2804,8 +2804,13 @@ function updateAmbientNPCs3D(dt, hole) {
                     const paid = Math.round((s.fee || 5) * tierMult);
                     window.__golfFees = (window.__golfFees || 0) + paid;
                     const pinPt = s.route[s.route.length - 1];
-                    (window.__feePopups = window.__feePopups || []).push({
-                        x: pinPt.x, z: pinPt.z, t0: performance.now(), amt: paid
+                    window.__feePopups = window.__feePopups || [];
+                    const feeStack = window.__feePopups.filter(q =>
+                        Math.abs(q.x - pinPt.x) < 30 && Math.abs(q.z - pinPt.z) < 30
+                        && performance.now() - q.t0 < 1500).length;
+                    window.__feePopups.push({
+                        x: pinPt.x, z: pinPt.z, t0: performance.now(), amt: paid,
+                        stack: feeStack
                     });
                     // Score callout vs par — the little dopamine hit that
                     // makes the ambient sim feel like real rounds
