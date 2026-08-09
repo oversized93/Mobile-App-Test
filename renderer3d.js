@@ -2765,8 +2765,31 @@ function updateTrailPuffs3D() {
             continue;
         }
         p.mat.opacity = 0.85 * (1 - k);
-        const sc = 7 * (1 - k * 0.5);
+        const sc = (p.bs || 7) * (1 - k * 0.5);
         p.spr.scale.set(sc, sc, 1);
+    }
+}
+
+// ---- Sand puff: a ball plugging into a bunker kicks up grit ----
+function spawnSandPuff3D(wx, wy, wz) {
+    if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
+    for (let i = 0; i < 6; i++) {
+        const mat = new THREE.SpriteMaterial({
+            map: trailPuffTex, color: 0xc9a05e, transparent: true,
+            opacity: 0.9, depthWrite: false
+        });
+        mat.toneMapped = false;
+        const spr = new THREE.Sprite(mat);
+        spr.position.set(wx + Math.random() * 8 - 4, wy + Math.random() * 3,
+            wz + Math.random() * 8 - 4);
+        scene3d.add(spr);
+        trailPuffs.push({ spr, mat, t0: performance.now(),
+            bs: 4 + Math.random() * 3 });
+    }
+    while (trailPuffs.length > 48) {
+        const old2 = trailPuffs.shift();
+        scene3d.remove(old2.spr);
+        old2.mat.dispose();
     }
 }
 
@@ -2906,6 +2929,16 @@ function updateNpcFlights3D(hole) {
                 && hole.grid[wr][wc] === T.WATER;
             if (wet) {
                 spawnSplash3D(f.x1, f.z1);
+                scene3d.remove(f.spr);
+                f.mat.dispose();
+                npcFlights.splice(i, 1);
+                continue;
+            }
+            const sandy = f.bounce == null && typeof T !== 'undefined'
+                && hole && hole.grid && hole.grid[wr]
+                && hole.grid[wr][wc] === T.SAND;
+            if (sandy) {
+                spawnSandPuff3D(f.x1, f.y1, f.z1); // plugged lie: no hops
                 scene3d.remove(f.spr);
                 f.mat.dispose();
                 npcFlights.splice(i, 1);
