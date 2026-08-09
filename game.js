@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt277';
+const BUILD_TAG = 'gt278';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -8872,6 +8872,19 @@ function scheduleChirp() {
     }, 1800 + Math.random() * 4200);
 }
 document.addEventListener('touchstart', initAmbientAudio, { once: true });
+// iOS suspends the AudioContext when the app backgrounds and does NOT
+// resume it by itself — without these, all sound dies permanently after
+// the first app switch until a full reload
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+    }
+});
+document.addEventListener('touchstart', () => {
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+    }
+});
 document.addEventListener('mousedown', initAmbientAudio, { once: true });
 
 // ---- Start! ----
