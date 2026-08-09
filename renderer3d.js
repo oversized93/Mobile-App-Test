@@ -2422,6 +2422,7 @@ function pathRoute(fromX, fromZ, toX, toZ) {
 }
 let npcSocialSpots = [];
 let npcVendorSpots = [];  // kiosks/stalls that sell food & drink
+let npcStandSpots = [];   // grandstands: tournament galleries fill them
 let npcModelInsts = null;   // instanced GLB golfer parts (capsules hidden)
 let golferModelScale = 1;
 let npcWalkerCount = 0;
@@ -2531,6 +2532,7 @@ function setupAmbientNPCs(hole) {
     // Social rest spots: placed benches and gazebos attract walkers
     npcSocialSpots = [];
     npcVendorSpots = [];
+    npcStandSpots = [];
     if (hole.decor) {
         for (const d of hole.decor) {
             if (d.t === 'bench' || d.t === 'gazebo'
@@ -2539,6 +2541,9 @@ function setupAmbientNPCs(hole) {
             }
             if (d.t === 'kiosk' || d.t === 'stall') {
                 npcVendorSpots.push({ x: d.x * CELL, z: d.y * CELL, t: d.t });
+            }
+            if (d.t === 'grandstand') {
+                npcStandSpots.push({ x: d.x * CELL, z: d.y * CELL });
             }
         }
     }
@@ -3324,14 +3329,22 @@ function updateAmbientNPCs3D(dt, hole) {
                     s.arriveSit = true;
                 } else if (window.__tourney && hole.holes && hole.holes.length
                     && (i % 3) !== 0) {
-                    // Tournament gallery: most strollers ring a pin to watch
-                    // the action, lingering like spectators
+                    // Tournament gallery: grandstands fill first (half the
+                    // crowd packs the stands when any are built), the rest
+                    // ring a pin like walking spectators
+                    if (npcStandSpots.length && i % 2 === 0) {
+                        const st3 = npcStandSpots[(i * 7 + (h >> 5)) % npcStandSpots.length];
+                        s.tx = st3.x + ((i * 13) % 5 - 2) * 6;
+                        s.tz = st3.z + 10 + ((i * 7) % 3) * 5;
+                        s.arriveSit = true;
+                    } else {
                     const rec = hole.holes[(i * 13 + (h >> 4)) % hole.holes.length];
                     const ang = i * 2.4 + (h % 8) * 0.35;
                     const rad = CELL * (1.6 + (i % 4) * 0.45);
                     s.tx = (rec.pin.x + 0.5) * CELL + Math.cos(ang) * rad;
                     s.tz = (rec.pin.y + 0.5) * CELL + Math.sin(ang) * rad;
                     s.arriveSit = true;
+                    }
                 } else {
                     // Pick a new stroll target on the path network
                     const next = npcPathCells[h % npcPathCells.length];
