@@ -167,6 +167,25 @@ flights (gt332), pre-shot crouch ritual (gt342), water's-edge ball
 fishing (gt326). Perf: projection hot paths de-allocated (gt331).
 Full matrix green at gt324, gt328, gt331, gt335, gt339, gt342, gt346.
 
+### Parity run continued (gt346–gt365)
+Two coherent arcs. The wind became one atmosphere (gt349–358): flights
+draw crosswind drift, the weather chip reads direction+mph, the breeze
+random-walks on the world clock, storms gust it upward, the playtest
+flag turned wind sock, leaves/sprinkler spray/rain all ride the same
+vector, and gulls fly downwind-stretched eggs. Then the membership
+tier ladder got teeth (gt361–365): gold/silver/basic bags via
+instance colors on exclusive geometry (VAO-safe), premium cart
+pricing on the fee ladder, clubhouse tiers actually minting premium
+members (Grand upsells half the basics, Lodge half the silvers —
+verified 32/32/32 → 16/22/58), roster header medal counts, and a
+gold-share purse bonus up to +30%. Around them: zoom-decrescendo UI
+(nameplates gt347, popups gt348 — complaint pins tried and rejected,
+camera default sits at 2600), difficulty pips on badges (gt340
+lineage), fee shown on the hole card (gt360), onboarding refreshed
+with both pillars (gt359), pacing re-audited healthy (parcel two
+mid-day-two). gt350 milestone ran the full battery green; matrix
+checkpoints gt354, gt358, gt362, gt366.
+
 ### Open thread: Mixamo skinned animations
 `assets/meshy/golfer_for_mixamo.obj` is committed for Mixamo auto-rigging.
 When FBX clips (Idle, Walking, Golf Drive, Golf Putt + celebration;
