@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt285';
+const BUILD_TAG = 'gt286';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3502,6 +3502,7 @@ function drawManage() {
         const lock = !owned && a.requires && !resort.amenities[a.requires];
         ctx.fillText('+' + a.memberBoost + ' members'
             + (a.feeBoost ? '  \u2022  fees +' + Math.round(a.feeBoost * 100) + '%' : '')
+            + (a.upkeep ? '  \u2022  $' + a.upkeep + '/day' : '')
             + (cmp && lock ? '  \u2022  \u{1F512} locked' : ''),
             L.contentX + 76, y + (cmp ? 48 : 66));
         if (!cmp && lock) {
