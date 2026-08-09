@@ -3000,7 +3000,7 @@ function updateSwingFlashes3D() {
 // The signature living-course visual: every ambient strike launches a
 // real airborne ball toward the next landing spot, shedding vapor.
 let npcFlights = [];
-function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin, skill) {
+function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin, skill, drama) {
     if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
     const dx = x1 - x0, dz = z1 - z0;
     const dist = Math.sqrt(dx * dx + dz * dz);
@@ -3022,7 +3022,7 @@ function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin, skill) {
         : (Math.random() * 2 - 1) * Math.min(10, dist * 0.10) * (1.25 - sk * 0.22);
     npcFlights.push({
         spr, mat, x0, y0: putt ? y1 + 1.5 : y0, z0, x1, y1, z1, putt,
-        bend, perpX: -dz / dist, perpZ: dx / dist,
+        bend, perpX: -dz / dist, perpZ: dx / dist, drama: !!drama,
         px: pin ? pin.x : null, pz: pin ? pin.z : null,
         apex: putt ? 0.7 : Math.min(60, 10 + dist * 0.28),
         t0: performance.now(),
@@ -3040,6 +3040,7 @@ function updateNpcFlights3D(hole) {
     for (let i = npcFlights.length - 1; i >= 0; i--) {
         const f = npcFlights[i];
         const k = (now - f.t0) / f.dur;
+        if (k < 0) continue; // hanging on the lip: wait out the beat
         if (k >= 1) {
             if (f.putt) { // a roll just stops where it stops
                 scene3d.remove(f.spr);
@@ -3074,6 +3075,35 @@ function updateNpcFlights3D(hole) {
             if (f.px != null && f.bounce == null && typeof T !== 'undefined'
                 && hole && hole.grid && hole.grid[wr]
                 && hole.grid[wr][wc] === T.GREEN) {
+                if (f.lip === 1) {
+                    // The miss sits for a beat, then the tap-in drops
+                    f.lip = 2;
+                    f.x0 = f.x1; f.z0 = f.z1; f.y0 = f.y1;
+                    f.x1 = f.px; f.z1 = f.pz;
+                    f.apex = 0.7;
+                    f.t0 = now + 480; // the groan-and-reset beat
+                    f.dur = 460;
+                    continue;
+                }
+                if (f.lip === 2) { // tap-in falls: done
+                    scene3d.remove(f.spr);
+                    f.mat.dispose();
+                    npcFlights.splice(i, 1);
+                    continue;
+                }
+                if (f.drama && !f.lip) {
+                    // Lip-out: race to the cup, curl around it, slide past
+                    f.lip = 1;
+                    const dx3 = f.px - f.x1, dz3 = f.pz - f.z1;
+                    const dd3 = Math.hypot(dx3, dz3) || 1;
+                    f.x0 = f.x1; f.z0 = f.z1; f.y0 = f.y1;
+                    f.x1 = f.px + (dx3 / dd3) * 3.6 - (dz3 / dd3) * 1.6;
+                    f.z1 = f.pz + (dz3 / dd3) * 3.6 + (dx3 / dd3) * 1.6;
+                    f.apex = 1.1;
+                    f.t0 = now;
+                    f.dur = 620;
+                    continue;
+                }
                 // Stiff one: an approach dropped inside ~4.5 units of the
                 // cup draws an appreciative murmur over the pin
                 if (Math.hypot(f.x1 - f.px, f.z1 - f.pz) < 4.5) {
@@ -3361,8 +3391,11 @@ function updateAmbientNPCs3D(dt, hole) {
                             ? (hole.heights[nr2][nc2] || 0) : 0;
                         const toPin = (s.ptIdx + 2 === s.route.length)
                             ? s.route[s.route.length - 1] : null;
+                        const badRound = s.simResult && s.par
+                            && s.simResult.strokes > s.par;
                         spawnNpcFlight3D(s.x + 3, gy2 + 14, s.z,
-                            lx, ny2 + 2, lz, toPin, s.driverSkill);
+                            lx, ny2 + 2, lz, toPin, s.driverSkill,
+                            toPin && badRound && Math.random() < 0.5);
                         const ddx = lx - s.x, ddz = lz - s.z;
                         const dd = Math.hypot(ddx, ddz) || 1;
                         if (dd >= 20) {
