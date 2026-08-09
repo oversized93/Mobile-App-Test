@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt358';
+const BUILD_TAG = 'gt359';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5459,7 +5459,8 @@ function drawOverworld() {
         const lines = [
             '\u270B  Drag to move \u2022 pinch to zoom \u2022 twist to rotate',
             '\u{1F528}  Tap the hammer to open build tools and paint terrain',
-            '\u26F3  HOLES designs new holes \u2022 tap a marker to inspect or play'
+            '\u26F3  HOLES designs new holes \u2014 golfers arrive and pay to play them',
+            '\u{1F3CC}\uFE0F  Tap a hole marker, then Test Play to play it yourself'
         ];
         for (let i = 0; i < lines.length; i++) {
             ctx.fillText(lines[i], W() / 2, H() * 0.4 + i * 30);
