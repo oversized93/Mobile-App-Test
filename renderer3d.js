@@ -2878,6 +2878,32 @@ function spawnSandPuff3D(wx, wy, wz) {
     }
 }
 
+// ---- Turf divot: flecks kicked forward when a full swing strikes ----
+function spawnDivot3D(wx, wy, wz, ux, uz) {
+    if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
+    for (let i = 0; i < 5; i++) {
+        const mat = new THREE.SpriteMaterial({
+            map: trailPuffTex, color: i % 2 ? 0x5d8a34 : 0x6b4d2a,
+            transparent: true, opacity: 0.9, depthWrite: false
+        });
+        mat.toneMapped = false;
+        const spr = new THREE.Sprite(mat);
+        const along = 2 + Math.random() * 6;
+        spr.position.set(
+            wx + ux * along + (Math.random() * 3 - 1.5),
+            wy + 1 + Math.random() * 3,
+            wz + uz * along + (Math.random() * 3 - 1.5));
+        scene3d.add(spr);
+        trailPuffs.push({ spr, mat, t0: performance.now(),
+            bs: 2.5 + Math.random() * 1.5 });
+    }
+    while (trailPuffs.length > 48) {
+        const old2 = trailPuffs.shift();
+        scene3d.remove(old2.spr);
+        old2.mat.dispose();
+    }
+}
+
 // ---- Fireworks: bursts for the resort's biggest moments ----
 let fwParticles = [];
 function spawnFirework3D(wx, wz, colHex) {
@@ -3313,6 +3339,12 @@ function updateAmbientNPCs3D(dt, hole) {
                             ? s.route[s.route.length - 1] : null;
                         spawnNpcFlight3D(s.x + 3, gy2 + 14, s.z,
                             lx, ny2 + 2, lz, toPin);
+                        const ddx = lx - s.x, ddz = lz - s.z;
+                        const dd = Math.hypot(ddx, ddz) || 1;
+                        if (dd >= 20) {
+                            spawnDivot3D(s.x + 3, gy2 + 1.5, s.z,
+                                ddx / dd, ddz / dd);
+                        }
                     }
                 }
             } else {
