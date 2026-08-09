@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt202';
+const BUILD_TAG = 'gt203';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -452,6 +452,7 @@ let owRosterChip = null;  // screen rect of the roster chip (set each draw)
 let owComplaintChip = null; // screen rect of the top-bar complaint badge
 let owSelectedFacility = null; // decor index of the inspected kiosk/stall
 let owFacilityCardRect = null;
+let manageBiomeRects = []; // biome chips on the Manage screen
 let owFlyout = null;      // parent id whose sub-options are showing
 let owCategory = 'surface'; // retained for save-compat; no longer drives UI
 
@@ -2972,6 +2973,8 @@ function manageLayout() {
     const statsH = 108;
     const playerY = statsY + statsH + 10;
     const playerH = 72;
+    const biomeY = playerY + playerH + 10;
+    const biomeH = 62;
 
     // Content area: amenity list + bottom actions row (3 buttons side-by-side)
     const amenityLabelY = contentY + 4;
@@ -2994,7 +2997,7 @@ function manageLayout() {
         pad, topBarH,
         sidebarX, sidebarY, sidebarW, sidebarH,
         contentX, contentY, contentW, contentH,
-        moneyY, moneyH, statsY, statsH, playerY, playerH,
+        moneyY, moneyH, statsY, statsH, playerY, playerH, biomeY, biomeH,
         amenityLabelY, amenityStartY, amenityH, amenityGap,
         actionsY, actionsRowH, actionBw, resortX, simX, playX,
         closeSize, closeX, closeY
@@ -3126,6 +3129,42 @@ function drawManage() {
         }
         if (tourneyWins) sub += ' \u2022 \u{1F3C6}\u00D7' + tourneyWins;
         ctx.fillText(sub, L.sidebarX + 72, L.playerY + 52);
+    }
+
+    // ---- Island biome switcher: restyle the resort without regenerating ----
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    roundRect(L.sidebarX, L.biomeY, L.sidebarW, L.biomeH, 14); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    roundRect(L.sidebarX, L.biomeY, L.sidebarW, L.biomeH, 14); ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '10px -apple-system,sans-serif';
+    ctx.fillText('ISLAND BIOME', L.sidebarX + 14, L.biomeY + 18);
+    manageBiomeRects = [];
+    {
+        const bws = (L.sidebarW - 28 - 12) / 3;
+        const cur = worldCourse.biome || 'meadows';
+        for (let i = 0; i < ISLAND_BIOMES.length; i++) {
+            const bid = ISLAND_BIOMES[i][0];
+            const blab = bid.charAt(0).toUpperCase() + bid.slice(1);
+            const bx = L.sidebarX + 14 + i * (bws + 6);
+            const by = L.biomeY + 26;
+            const active = cur === bid;
+            ctx.fillStyle = active ? 'rgba(58,219,232,0.28)'
+                : 'rgba(255,255,255,0.10)';
+            roundRect(bx, by, bws, 24, 12); ctx.fill();
+            if (active) {
+                ctx.strokeStyle = 'rgba(58,219,232,0.9)';
+                ctx.lineWidth = 1.5;
+                roundRect(bx, by, bws, 24, 12); ctx.stroke();
+            }
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(blab, bx + bws / 2, by + 16);
+            manageBiomeRects.push({ id: bid, x: bx, y: by, w: bws, h: 24 });
+        }
     }
 
     // ---- RIGHT CONTENT ----
@@ -3337,6 +3376,21 @@ function manageTouchStart(sx, sy) {
         return;
     }
 
+    // Biome chips: restyle in place (terrain rebuilds live + on return)
+    for (const bc of manageBiomeRects) {
+        if (hitBtn(sx, sy, bc.x, bc.y, bc.w, bc.h)) {
+            if ((worldCourse.biome || 'meadows') !== bc.id) {
+                worldCourse.biome = bc.id;
+                saveWorldCourse();
+                if (scene3dReady) {
+                    buildTerrain3D(worldCourse, { distantScenery: false });
+                }
+                notify('\u{1F3DD} Island restyled \u2014 '
+                    + bc.id.charAt(0).toUpperCase() + bc.id.slice(1));
+            }
+            return;
+        }
+    }
     // New Island / Share / Load (buttons left of the close X)
     if (hitBtn(sx, sy, L.closeX - 312, L.closeY, 104, L.closeSize)) {
         startIslandCreator();
