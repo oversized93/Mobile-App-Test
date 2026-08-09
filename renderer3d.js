@@ -4614,6 +4614,14 @@ function updateRain3D(dt) {
     const px = (typeof cam3dPivotX !== 'undefined') ? cam3dPivotX : 1920;
     const pz = (typeof cam3dPivotZ !== 'undefined') ? cam3dPivotZ : 1280;
     const dummy = sharedDummy3D;
+    // Wind-slanted fall: drops drift along the wind vector as they drop,
+    // and the streaks lean to match the actual fall direction
+    const wSp3 = (typeof wind !== 'undefined' && wind) ? (wind.speed || 0) : 0;
+    const wAng3 = (typeof wind !== 'undefined' && wind) ? (wind.angle || 0) : 0;
+    const driftX = Math.cos(wAng3) * wSp3 * 9;
+    const driftZ = Math.sin(wAng3) * wSp3 * 9;
+    const leanX = Math.atan2(driftZ, 400);   // pitch from z-drift
+    const leanZ = -Math.atan2(driftX, 400);  // roll from x-drift
     for (let i = 0; i < RAIN_COUNT; i++) {
         const d = rainDrops[i];
         if (!d.live) {
@@ -4622,13 +4630,15 @@ function updateRain3D(dt) {
             d.live = true;
         }
         d.y -= d.spd * dt;
+        d.x += driftX * dt;
+        d.z += driftZ * dt;
         if (d.y < 0) {
             d.y += 240;
             d.x = px + ((i * 131 + Math.floor(t * 13)) % 1400) - 700;
             d.z = pz + ((i * 211 + Math.floor(t * 7)) % 1400) - 700;
         }
         dummy.position.set(d.x, d.y, d.z);
-        dummy.rotation.set(0, 0, 0.06);
+        dummy.rotation.set(leanX, 0, 0.06 + leanZ);
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         rainInst.setMatrixAt(i, dummy.matrix);
