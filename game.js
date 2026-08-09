@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt252';
+const BUILD_TAG = 'gt253';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4330,8 +4330,15 @@ function drawOverworld() {
     owNameRect = { x: L.pad + 2, y: 8, w: nameW + 12, h: 28 };
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '11px -apple-system,sans-serif';
-    let subtitle = worldCourse.holes.length + ' holes \u2022 '
-        + worldCourse.facilities.length + ' facilities \u2022 build ' + BUILD_TAG;
+    // Facilities are the working buildings in decor, not the dead
+    // legacy array (which always read 0)
+    const facN = (worldCourse.decor || []).filter(d =>
+        d.t === 'kiosk' || d.t === 'stall' || d.t === 'clubhouse'
+        || d.t === 'gazebo' || d.t === 'grandstand').length;
+    const hN = worldCourse.holes.length;
+    let subtitle = hN + (hN === 1 ? ' hole' : ' holes') + ' \u2022 '
+        + facN + (facN === 1 ? ' facility' : ' facilities')
+        + ' \u2022 build ' + BUILD_TAG;
     if (location.search.indexOf('fps=1') >= 0) {
         subtitle += ' \u2022 ' + Math.round(window.__fps || 0) + ' fps';
     }
