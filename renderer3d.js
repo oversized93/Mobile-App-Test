@@ -3245,6 +3245,11 @@ function updateAmbientNPCs3D(dt, hole) {
         const still = s.idle || s.pause > 0;
         let bob = still ? Math.sin(t * 2.2 + s.phase) * 0.3
                         : Math.sin(t * 9 + s.phase) * 0.7;
+        // Tournament crowd wave: settled spectators do the wave — a
+        // crest travels through the gallery by spatial phase
+        if (window.__tourney && !s.route && !s.idle && s.pause > 0) {
+            bob = Math.max(0, Math.sin(t * 2.4 - (s.x + s.z) * 0.015)) * 3.4;
+        }
         // Holed out: celebratory hops at the pin before the walk back
         if (s.route && s.pause > 0 && s.ptIdx === s.route.length - 1) {
             bob = Math.abs(Math.sin(t * 8 + s.phase)) * 4;
