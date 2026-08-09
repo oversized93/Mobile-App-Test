@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt224';
+const BUILD_TAG = 'gt225';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4662,12 +4662,13 @@ function drawOverworld() {
                     ctx.fill();
                 }
             }
+            const cmPulse = 1.8 + Math.abs(Math.sin(Date.now() / 320)) * 1.3;
             for (const cm2 of (worldCourse.complaints || [])) {
                 ctx.fillStyle = cm2.kind === 'freakout' ? '#ff5252' : '#ffb74d';
                 ctx.beginPath();
                 ctx.arc(mx + (cm2.x + 0.5) / worldCourse.cols * mw,
                         my + (cm2.y + 0.5) / worldCourse.rows * mh,
-                        2.2, 0, Math.PI * 2);
+                        cmPulse, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.strokeStyle = 'rgba(255,255,255,0.8)';
                 ctx.lineWidth = 0.8;
@@ -5932,6 +5933,13 @@ function overworldTouchStart(sx, sy) {
         if (owRosterChip && owRosterChip.rows) {
             for (const rr of owRosterChip.rows) {
                 if (hitBtn(sx, sy, rr.x, rr.y, rr.w, rr.h)) {
+                    // Champions from past days may no longer be on the
+                    // course — selecting a ghost would leave an invisible
+                    // panel hit-zone floating over the map
+                    if (!npcStates.some(n => n.name === rr.name)) {
+                        notify(rr.name + ' isn\u2019t on the course right now');
+                        return;
+                    }
                     owSelectedGolfer = rr.name;
                     owRosterOpen = false;
                     owSelectedHole = null;
