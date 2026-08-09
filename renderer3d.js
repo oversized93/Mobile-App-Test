@@ -574,7 +574,9 @@ function prepMat(mat, species) {
         // phase — trunks stay planted, foliage breathes
         m.onBeforeCompile = (shader) => {
             shader.uniforms.uWind = windClock;
-            shader.vertexShader = 'uniform float uWind;\n' + shader.vertexShader.replace(
+            shader.uniforms.uWindAmp = windAmp;
+            shader.vertexShader = 'uniform float uWind;\nuniform float uWindAmp;\n'
+                + shader.vertexShader.replace(
                 '#include <begin_vertex>',
                 [
                     '#include <begin_vertex>',
@@ -583,8 +585,8 @@ function prepMat(mat, species) {
                     '#else',
                     '    float windPhase = 0.0;',
                     '#endif',
-                    'transformed.x += sin(uWind * 1.5 + windPhase) * position.y * 0.04;',
-                    'transformed.z += cos(uWind * 1.15 + windPhase) * position.y * 0.028;'
+                    'transformed.x += sin(uWind * 1.5 + windPhase) * position.y * 0.04 * uWindAmp;',
+                    'transformed.z += cos(uWind * 1.15 + windPhase) * position.y * 0.028 * uWindAmp;'
                 ].join('\n')
             );
         };
@@ -705,6 +707,8 @@ function placeAssetInstances(hole, cells, speciesKey, opts) {
 // ============================================================
 // One shared clock drives water ripples and canopy sway
 const windClock = { value: 0 };
+// Biome wind gain: links islands blow harder (set per terrain build)
+const windAmp = { value: 1 };
 
 let waterMesh = null;
 let waterMat = null;
@@ -3436,16 +3440,21 @@ let leafInst = null, leafStates = [];
 function setupLeaves(hole) {
     leafInst = null;
     leafStates = [];
+    // Biome ambience knobs (this runs on every terrain build):
+    // links blows nearly twice as hard; autumn sheds leaves everywhere
+    const biomeL = biomeOf(hole);
+    windAmp.value = biomeL === 'links' ? 1.9 : 1;
+    const leafMod = biomeL === 'autumn' ? 7 : 83;
     const spots = [];
     for (let r = 2; r < hole.rows - 2; r++) {
         for (let c = 2; c < hole.cols - 2; c++) {
             if (hole.grid[r][c] === T.TREE
-                && ((((c * 40503) ^ (r * 88651)) >>> 0) % 83) === 0) {
+                && ((((c * 40503) ^ (r * 88651)) >>> 0) % leafMod) === 0) {
                 spots.push({ c: c, r: r });
             }
         }
     }
-    const n = Math.min(16, spots.length);
+    const n = Math.min(biomeL === 'autumn' ? 44 : 16, spots.length);
     if (!n) return;
     const geo = new THREE.PlaneGeometry(2.4, 1.7);
     const mat = new THREE.MeshBasicMaterial({
@@ -4003,7 +4012,9 @@ function setupCritters(hole) {
     }
     const gullAnchors = fountainSpots.concat(beachSpots);
     if (gullAnchors.length) {
-        const nG = Math.min(13, gullAnchors.length * 2 + 1);
+        const seaside = biomeOf(hole) === 'links';
+        const nG = Math.min(seaside ? 26 : 13,
+            gullAnchors.length * (seaside ? 4 : 2) + 1);
         const geo = new THREE.PlaneGeometry(6.5, 1.8);
         geo.rotateX(-Math.PI / 2);
         const mat = new THREE.MeshBasicMaterial({ color: 0xf5f7f9, side: THREE.DoubleSide });
