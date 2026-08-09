@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt186';
+const BUILD_TAG = 'gt187';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4448,6 +4448,14 @@ function drawGolferPanel(s) {
         : s.pause > 0 && s.ptIdx >= s.route.length - 1 ? 'Celebrating'
         : s.pause > 0 ? 'Hitting' : 'Walking to ball';
     row('Hole ' + s.holeId + '  •  Stroke ' + ((s.strokes || 0) + 1), task);
+    // Slim tee-to-pin progress bar under the first row
+    if (s.route && s.route.length > 1) {
+        const prog = Math.min(1, s.ptIdx / (s.route.length - 1));
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        roundRect(lx, y - 12, gp.w - 26, 3, 1.5); ctx.fill();
+        ctx.fillStyle = '#3adbe8';
+        roundRect(lx, y - 12, (gp.w - 26) * prog, 3, 1.5); ctx.fill();
+    }
     {
         const car = (worldCourse.golferCareers || {})[s.name];
         row('Rounds today: ' + (s.rounds || 0)
