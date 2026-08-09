@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt232';
+const BUILD_TAG = 'gt233';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -7707,7 +7707,8 @@ function drawHoleDone() {
     ctx.fillText('Round', W() / 2, cy + 160);
     ctx.fillStyle = roundDiff < 0 ? '#4caf50' : roundDiff === 0 ? '#ffeb3b' : '#ff5252';
     ctx.font = 'bold 20px -apple-system,sans-serif';
-    ctx.fillText(totalStrokes + ' (' + (roundDiff >= 0 ? '+' : '') + roundDiff + ')', W() / 2, cy + 185);
+    ctx.fillText(totalStrokes + ' (' + (roundDiff === 0 ? 'E'
+        : (roundDiff > 0 ? '+' : '') + roundDiff) + ')', W() / 2, cy + 185);
 
     // Next button — gradient
     const isLast = currentHoleIdx >= currentCourse.holes.length - 1;
@@ -8005,6 +8006,9 @@ function checkPlayingUI(sx, sy) {
 function drawNotification(dt) {
     if (notification.timer <= 0) return;
     notification.timer -= dt;
+    // The hole-done card says it bigger — a duplicate toast peeking out
+    // from behind the card is just noise
+    if (state === 'holeDone') return;
     const alpha = Math.min(1, notification.timer / 0.5);
 
     ctx.globalAlpha = alpha;
