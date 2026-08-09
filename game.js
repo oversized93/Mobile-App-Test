@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt207';
+const BUILD_TAG = 'gt208';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -458,6 +458,7 @@ let manageBiomeRects = []; // biome chips on the Manage screen
 let owMinimapOn = loadData('minimapOn', false);
 let owMiniCanvas = null, owMiniKey = null;
 let owMiniRect = null, owMiniBtnRect = null;
+let owMuteBtnRect = null;
 
 // The grid renders to an offscreen canvas at 2px/cell, rebuilt only
 // when terrain edits (terrainRev) or the biome change — never per frame
@@ -4469,6 +4470,15 @@ function drawOverworld() {
         ctx.textAlign = 'center';
         ctx.fillText('\u{1F5FA}', bx2 + bs2 / 2, by2 + bs2 / 2 + 6);
         owMiniBtnRect = { x: bx2, y: by2, w: bs2, h: bs2 };
+        // Mute chip: every synth routes through audioMaster, one switch
+        const mx3 = bx2 + bs2 + 8;
+        glossyRect(mx3, by2, bs2, bs2, 10, audioMuted ? '#7a3b30' : '#2c3a42');
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.font = '15px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(audioMuted ? '\u{1F507}' : '\u{1F50A}',
+            mx3 + bs2 / 2, by2 + bs2 / 2 + 6);
+        owMuteBtnRect = { x: mx3, y: by2, w: bs2, h: bs2 };
         if (owMinimapOn && !owRailOpen) {
             ensureMiniCanvas();
             const mw = Math.min(190, Math.floor(W() * 0.22));
@@ -5588,6 +5598,8 @@ function overworldHUDHit(sx, sy) {
         owComplaintChip.w, owComplaintChip.h)) return 'complaints';
     if (owMiniBtnRect && hitBtn(sx, sy, owMiniBtnRect.x, owMiniBtnRect.y,
         owMiniBtnRect.w, owMiniBtnRect.h)) return 'mini:toggle';
+    if (owMuteBtnRect && hitBtn(sx, sy, owMuteBtnRect.x, owMuteBtnRect.y,
+        owMuteBtnRect.w, owMuteBtnRect.h)) return 'mute:toggle';
     if (owMiniRect && hitBtn(sx, sy, owMiniRect.x, owMiniRect.y,
         owMiniRect.w, owMiniRect.h)) return 'mini:go';
     if (owRosterOpen && owRosterChip && owRosterChip.panel
@@ -5700,6 +5712,10 @@ function overworldTouchStart(sx, sy) {
         return;
     }
     if (hit === 'roster') { owRosterOpen = !owRosterOpen; return; }
+    if (hit === 'mute:toggle') {
+        setAudioMuted(!audioMuted);
+        return;
+    }
     if (hit === 'mini:toggle') {
         owMinimapOn = !owMinimapOn;
         saveData('minimapOn', owMinimapOn);
@@ -8012,13 +8028,23 @@ function gameLoop(time) {
 // Created lazily on the first touch (iOS blocks AudioContext until a
 // user gesture). Everything is generated — no audio assets to load.
 let audioCtx = null, audioMaster = null;
+let audioMuted = loadData('muted', false);
+
+function setAudioMuted(m) {
+    audioMuted = m;
+    saveData('muted', m);
+    if (audioCtx && audioMaster) {
+        audioMaster.gain.linearRampToValueAtTime(
+            m ? 0 : 0.13, audioCtx.currentTime + 0.15);
+    }
+}
 
 function initAmbientAudio() {
     if (audioCtx) return;
     try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         audioMaster = audioCtx.createGain();
-        audioMaster.gain.value = 0.13;
+        audioMaster.gain.value = audioMuted ? 0 : 0.13;
         audioMaster.connect(audioCtx.destination);
         // Wind bed: looped pink-ish noise through a slowly-swept lowpass
         const len = audioCtx.sampleRate * 2;
