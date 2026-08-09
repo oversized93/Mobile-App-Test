@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt193';
+const BUILD_TAG = 'gt194';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1530,7 +1530,7 @@ function simulateShot(fromX, fromY, dirX, dirY, powerPct, clubIdx) {
 // Club by distance, waypoint-then-pin aim with skill-based scatter,
 // water/OOB re-hit penalties, statistical putt-out inside 12 yds.
 // Returns { strokes, holed }. Dormant until NPC rounds adopt it.
-function simulateHoleRound(rec, skill, clubScale) {
+function simulateHoleRound(rec, skill, clubScale, trace) {
     const sk = skill == null ? 2.5 : skill;
     // World scale: island holes measure 40-150 yds, so NPC "clubs" swing
     // shorter than the player's full bag (default 45% reach) to make
@@ -1571,6 +1571,8 @@ function simulateHoleRound(rec, skill, clubScale) {
         if (layup > 0) { powerPct *= 0.62; layup--; } // club down after water
         const r = simulateShot(px, py, adx, ady, powerPct, clubIdx);
         used++;
+        if (trace) trace.push({ x: r.x, y: r.y, n: used, holed: r.holed,
+            splash: r.terrain === T.WATER || r.terrain === T.OOB });
         if (r.holed) { holed = true; break; }
         if (r.terrain === T.WATER || r.terrain === T.OOB) {
             used++; // penalty; replay from the same lie
@@ -1592,7 +1594,7 @@ function simulateHoleRound(rec, skill, clubScale) {
 
 // World-context binding: the physics reads currentHole, so ambient sims
 // temporarily point it at the resort grid + this hole's tee/pin
-function simulateWorldHoleRound(rec, skill) {
+function simulateWorldHoleRound(rec, skill, trace) {
     const prev = currentHole;
     if (!worldCourse.heights) worldCourse.heights = generateHeights(worldCourse);
     currentHole = {
@@ -1601,7 +1603,7 @@ function simulateWorldHoleRound(rec, skill) {
         tee: rec.tee, hole: rec.pin, par: rec.par || 4
     };
     try {
-        return simulateHoleRound(rec, skill);
+        return simulateHoleRound(rec, skill, null, trace);
     } finally {
         currentHole = prev;
     }
@@ -4982,8 +4984,11 @@ function drawHoleWizardOverlay() {
         const par = parFromYards(yds);
         const diff = holeDifficulty(w);
         const fee = 3 + 2 * diff;
-        const info = yds + ' yds  •  Par ' + par + '  •  '
+        let info = yds + ' yds  •  Par ' + par + '  •  '
             + '★'.repeat(diff) + '☆'.repeat(5 - diff) + '  •  $' + fee + ' fee';
+        if (w.traceRes && w.traceRes.strokes) {
+            info += '  •  sim ' + w.traceRes.strokes;
+        }
         const infoW = Math.min(W() - 20, 340);
         const infoY = bannerY + bannerH + 8;
         ctx.fillStyle = 'rgba(10,26,38,0.85)';
@@ -5044,6 +5049,23 @@ function drawHoleWizardOverlay() {
         const pts = [w.tee, ...w.waypoints, w.pin];
         const screens = pts.map(p => cellCenterScreen(p.x, p.y));
 
+        // Sim shot trace: replay the hole once with real physics whenever
+        // the design changes (throttled to 1/sec; cheap key compare per
+        // frame, the sim itself only runs on edits)
+        const tKey = JSON.stringify([w.tee, w.pin, w.waypoints]);
+        if (tKey !== w.traceKey
+            && performance.now() - (w.traceAt || 0) > 1000) {
+            w.traceKey = tKey;
+            w.traceAt = performance.now();
+            const tr = [];
+            try {
+                w.traceRes = simulateWorldHoleRound({ tee: w.tee, pin: w.pin,
+                    waypoints: w.waypoints,
+                    par: parFromYards(polylineLengthYards(w)) }, 3, tr);
+            } catch (e) { w.traceRes = null; }
+            w.trace = tr;
+        }
+
         // Polyline
         ctx.save();
         ctx.setLineDash([8, 6]);
@@ -5054,6 +5076,41 @@ function drawHoleWizardOverlay() {
         for (let i = 1; i < screens.length; i++) ctx.lineTo(screens[i].x, screens[i].y);
         ctx.stroke();
         ctx.restore();
+
+        // Numbered landing dots from the physics trace
+        if (w.trace && w.trace.length) {
+            ctx.save();
+            ctx.setLineDash([3, 5]);
+            ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            let started = false;
+            const t0 = cellCenterScreen(w.tee.x, w.tee.y);
+            if (!t0.behind) { ctx.moveTo(t0.x, t0.y); started = true; }
+            for (const t of w.trace) {
+                const s = cellCenterScreen(t.x / CELL - 0.5, t.y / CELL - 0.5);
+                if (s.behind) continue;
+                if (started) ctx.lineTo(s.x, s.y);
+                else { ctx.moveTo(s.x, s.y); started = true; }
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+            for (const t of w.trace) {
+                const s = cellCenterScreen(t.x / CELL - 0.5, t.y / CELL - 0.5);
+                if (s.behind) continue;
+                ctx.fillStyle = t.splash ? '#29b6f6'
+                    : t.holed ? '#ffd54f' : '#ff6d00';
+                ctx.beginPath(); ctx.arc(s.x, s.y, 8, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.fillStyle = t.holed ? '#4e2600' : '#fff';
+                ctx.font = 'bold 9px -apple-system,sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(t.splash ? '\u26F2' : String(t.n), s.x, s.y + 3);
+            }
+            ctx.restore();
+        }
 
         // Waypoint handles (draggable circles) + a "-" badge above each
         for (let i = 1; i < screens.length - 1; i++) {

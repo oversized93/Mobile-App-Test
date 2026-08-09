@@ -112,8 +112,10 @@ instancing on low-end devices).
       clamped 3-5; stars from strokes-over-par; replaces length/heuristic)
 - [x] Test-play your own hole with the full shot sim (playtests count in
       records and tournaments)
-- [ ] Visual shot-trace preview overlay while designing (sim exists;
-      drawing the trace in the wizard remains)
+- [x] Visual shot-trace preview overlay while designing (gt194: wizard
+      shape step replays the hole with real physics on every design edit,
+      throttled 1/sec; numbered landing dots + dashed trace + sim score
+      in the readout; splashes marked, holed shot gold)
 - [ ] Per-hole Open/Closed status
 
 ### M2.5 — Economy grounding
