@@ -2516,10 +2516,23 @@ function setupAmbientNPCs(hole) {
         // Putter lips out fewer first putts (same hash as the inspector)
         const sk = (typeof golferSkills === 'function') ? golferSkills(gname) : null;
         gnIdx++;
+        // Tee queue: playing partners wait in a small arc BEHIND the
+        // tee (opposite the first shot direction) instead of stacking
+        const qdx = rg.pts[1].x - rg.pts[0].x, qdz = rg.pts[1].z - rg.pts[0].z;
+        const qd = Math.hypot(qdx, qdz) || 1;
+        const qbx = -qdx / qd, qbz = -qdz / qd;   // unit "behind"
+        const qsx = -qbz, qsz = qbx;              // unit "sideways"
+        const QUEUE = [[0, 0], [13, -8], [17, 0], [13, 8]];
+        const qOff = QUEUE[rg.off % QUEUE.length];
+        const queueOff = {
+            x: qbx * qOff[0] + qsx * qOff[1],
+            z: qbz * qOff[0] + qsz * qOff[1]
+        };
         npcStates.push({
-            x: rg.pts[0].x + rg.off * 6, z: rg.pts[0].z + 4,
+            x: rg.pts[0].x + queueOff.x, z: rg.pts[0].z + queueOff.z,
             tx: rg.pts[1].x, tz: rg.pts[1].z,
             speed: 14 + rg.off * 3, phase: rg.off * 2.1, idle: false,
+            queueOff: queueOff,
             route: rg.pts, ptIdx: 0, pause: 2 + rg.off * 2.5, fee: rg.fee,
             name: gname,
             putterSkill: sk ? sk[2][1] : 2,
@@ -3027,8 +3040,8 @@ function updateAmbientNPCs3D(dt, hole) {
                             diff <= -1 ? 14 : diff === 0 ? 6 : -5);
                     }
                     s.ptIdx = 0;
-                    s.x = s.route[0].x;
-                    s.z = s.route[0].z;
+                    s.x = s.route[0].x + (s.queueOff ? s.queueOff.x : 0);
+                    s.z = s.route[0].z + (s.queueOff ? s.queueOff.z : 0);
                     s.pause = 5;
                     s.pendingSim = true;   // presimulate the next round
                     s.simResult = null;
