@@ -3846,6 +3846,12 @@ function updateAmbientNPCs3D(dt, hole) {
         const still = s.idle || s.pause > 0;
         let bob = still ? Math.sin(t * 2.2 + s.phase) * 0.3
                         : Math.sin(t * 9 + s.phase) * 0.7;
+        // Pre-shot ritual: the golfer settles into the ball with slow
+        // crouch-dips that quicken as the swing approaches
+        if (s.route && s.pause > 0 && s.ptIdx < s.route.length - 1
+            && !s.returning && !s.leaving && !s.detour) {
+            bob = -Math.max(0, Math.sin(s.pause * 2.4)) * 1.9;
+        }
         // Tournament crowd wave: settled spectators do the wave — a
         // crest travels through the gallery by spatial phase
         if (window.__tourney && !s.route && !s.idle && s.pause > 0) {
