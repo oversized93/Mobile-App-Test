@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt225';
+const BUILD_TAG = 'gt226';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1179,6 +1179,7 @@ function tickWorld(dt) {
             const purse = Math.round((40 + 2 * (resort.members || 0))
                 * (0.6 + computeCourseRating() * 0.2) * streakMul);
             resort.coins += purse;
+            resort.purseEarned = (resort.purseEarned || 0) + purse;
             ledgerIncome(purse);
             const relAvg = tb.rel / tb.n;
             const relTxt = (relAvg <= 0 ? '' : '+') + relAvg.toFixed(1);
@@ -4263,7 +4264,8 @@ function drawOverworld() {
         line('Upkeep/day', '$' + up.total + '  (' + worldCourse.holes.length
             + ' holes + decor)', 'rgba(255,255,255,0.8)', fy + 112);
         line('Lifetime', 'fees $' + (resort.feesEarned || 0) + ' \u2022 stalls $'
-            + (resort.stallSales || 0), 'rgba(255,255,255,0.8)', fy + 130);
+            + (resort.stallSales || 0) + ' \u2022 purses $'
+            + (resort.purseEarned || 0), 'rgba(255,255,255,0.8)', fy + 130);
         if (resort.tourneyStreak > 1) {
             const pct = Math.min(10, resort.tourneyStreak - 1) * 8;
             line('\u{1F3C6} Tourney streak', resort.tourneyStreak
