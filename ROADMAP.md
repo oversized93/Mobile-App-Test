@@ -158,7 +158,11 @@ instancing on low-end devices).
       cosmetic, not yet a mechanic with upkeep
 - [x] Map-generation sliders at new-game (Create Your Island)
 - [x] Land expansion purchases (Buy Property parcels)
-- [ ] Biomes beyond the temperate island
+- [x] Biomes beyond the temperate island (gt201: Meadows / Autumn /
+      Links chips in the island creator; the albedo painter tints wild
+      terrain and the foliage system reshapes the canopy per biome —
+      autumn floods with fall color, links thins the forest and doubles
+      the rocks; play surfaces stay identical; veteran saves = Meadows)
 
 ## Deferred / parked decisions
 - Brush vs tile placement granularity (revisit during M2 playtesting)

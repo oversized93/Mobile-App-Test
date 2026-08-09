@@ -850,6 +850,29 @@ const ALBEDO_COLORS = {
     }
 };
 
+// Island biomes tint the wild terrain; play surfaces (fairway, green,
+// sand, water, path) stay identical so course reading never changes.
+// Veteran saves have no biome field and resolve to the meadows look.
+const BIOME_ALBEDO = {
+    autumn: {
+        [T.GRASS]: '#5f682c',
+        [T.ROUGH]: '#5d5a26',
+        [T.TREE]:  '#4a4a20',
+        [T.OOB]:   '#31391a',
+        [T.TEE]:   '#5fa050'
+    },
+    links: {
+        [T.GRASS]: '#5e7442',
+        [T.ROUGH]: '#6b7549',
+        [T.TREE]:  '#42582f',
+        [T.OOB]:   '#3d472b',
+        [T.TEE]:   '#57a45f'
+    }
+};
+function biomeOf(hole) {
+    return (hole && hole.biome) || 'meadows';
+}
+
 // Low-frequency smooth value noise for organic dirt blotches in the
 // rough (reference maps are mottled brown/green, not uniform lawn)
 function dirtNoise(c, r) {
@@ -881,10 +904,12 @@ function albedoCellColor(hole, c, r) {
     // Chamfers ask for corner-neighbor colors that can sit off-grid on
     // classic course maps (the overworld's OOB ring masked this)
     if (r < 0 || r >= hole.rows || c < 0 || c >= hole.cols) {
-        return ALBEDO_COLORS.base[T.OOB];
+        return (BIOME_ALBEDO[biomeOf(hole)] || {})[T.OOB]
+            || ALBEDO_COLORS.base[T.OOB];
     }
     const t = hole.grid[r][c];
-    let col = ALBEDO_COLORS.base[t] || '#3e9e53';
+    let col = (BIOME_ALBEDO[biomeOf(hole)] || {})[t]
+        || ALBEDO_COLORS.base[t] || '#3e9e53';
     if (t === T.FAIRWAY) {
         // Crisp diagonal mow stripes — reads more dynamic than row bands
         if (Math.floor((c + r) / 3) % 2 === 1) col = shadeHex(col, -0.14);
@@ -1428,13 +1453,19 @@ function buildTerrain3D(hole, opts) {
                 }
             return false;
         };
+        // Biome steering: autumn floods the canopy with fall colors;
+        // links thins the forest to scattered wind-swept copses
+        const biomeA = biomeOf(hole);
+        const fallBar = biomeA === 'autumn' ? 4 : 2;
         for (const tc of treeCells) {
+            if (biomeA === 'links' && (tc.c * 7 + tc.r * 11) % 3 !== 0) continue;
             const variant = (tc.c * 31 + tc.r * 17) % 4;
             if (nearSandOrWaterA(tc.c, tc.r) && (tc.c * 5 + tc.r * 3) % 10 < 7) palmCells.push(tc);
             else if (variant === 0) bushCells.push(tc);
-            else if (variant === 1) (((tc.c * 19 + tc.r * 7) % 5) < 3 ? fall : leafy).push(tc);
-            else if (variant === 2) (((tc.c * 11 + tc.r * 23) % 5) < 2 ? fall : pines).push(tc);
-            else (((tc.c * 29 + tc.r * 13) % 5) < 2 ? fall : pines).push(tc);
+            else if (variant === 1) ((biomeA === 'autumn'
+                || ((tc.c * 19 + tc.r * 7) % 5) < 3) ? fall : leafy).push(tc);
+            else if (variant === 2) (((tc.c * 11 + tc.r * 23) % 5) < fallBar ? fall : pines).push(tc);
+            else (((tc.c * 29 + tc.r * 13) % 5) < fallBar ? fall : pines).push(tc);
         }
         placeAssetInstances(hole, pines, 'pine');
         placeAssetInstances(hole, leafy, 'leafy');
@@ -1463,8 +1494,14 @@ function buildTerrain3D(hole, opts) {
         const pines = [], bushes = [], palms = [];
         const oakGroups = {}; // paletteIdx -> cells
         const OAK_PALETTE = [0x267a3a, 0x1e6b35, 0xb0421f, 0xc96a1b, 0xd39a24];
-        // Weighted pick: ~60% greens, ~40% autumn
-        const OAK_PICK = [0, 1, 0, 2, 1, 3, 0, 4, 1, 2];
+        const biome2 = biomeOf(hole);
+        // Weighted pick: meadows ~60/40 green/autumn; autumn nearly all fire
+        const OAK_PICK = biome2 === 'autumn'
+            ? [2, 3, 4, 2, 3, 4, 0, 3, 2, 4]
+            : [0, 1, 0, 2, 1, 3, 0, 4, 1, 2];
+        const cellsF = biome2 === 'links'
+            ? treeCells.filter(tc => (tc.c * 7 + tc.r * 11) % 3 === 0)
+            : treeCells;
         const nearSandOrWater = (c, r) => {
             for (let dy = -3; dy <= 3; dy++) {
                 for (let dx = -3; dx <= 3; dx++) {
@@ -1477,13 +1514,13 @@ function buildTerrain3D(hole, opts) {
             }
             return false;
         };
-        for (const tc of treeCells) {
+        for (const tc of cellsF) {
             const variant = (tc.c * 31 + tc.r * 17) % 4;
             if (nearSandOrWater(tc.c, tc.r) && (tc.c * 5 + tc.r * 3) % 10 < 7) {
                 palms.push(tc);
             } else if (variant === 0) {
                 bushes.push(tc);
-            } else if (variant === 1) {
+            } else if (variant === 1 || (biome2 === 'autumn' && variant === 2)) {
                 const pi = OAK_PICK[(tc.c * 19 + tc.r * 7) % OAK_PICK.length];
                 (oakGroups[pi] = oakGroups[pi] || []).push(tc);
             } else {
@@ -1927,8 +1964,9 @@ function buildTerrain3D(hole, opts) {
         const rockCells = [];
         for (let r = 0; r < hole.rows; r++) {
             for (let c = 0; c < hole.cols; c++) {
-                const rockMod = Math.max(45, Math.round(149
-                    / (0.35 + (hole.rockDensity != null ? hole.rockDensity : 0.5) * 1.6)));
+                const dens0 = (hole.rockDensity != null ? hole.rockDensity : 0.5)
+                    * (biomeOf(hole) === 'links' ? 1.8 : 1);
+                const rockMod = Math.max(28, Math.round(149 / (0.35 + dens0 * 1.6)));
                 if (hole.grid[r][c] === T.ROUGH && (c * 53 + r * 97) % rockMod === 0) {
                     rockCells.push({ c, r });
                 }

@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt200';
+const BUILD_TAG = 'gt201';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3407,10 +3407,16 @@ const ISLAND_SLIDERS = [
     ['water', 'Water'], ['hills', 'Hills'], ['trees', 'Trees'],
     ['rocks', 'Rocks'], ['roundness', 'Roundness'], ['grass', 'Grass']
 ];
+const ISLAND_BIOMES = [
+    ['meadows', '\u{1F33F} Meadows'],
+    ['autumn', '\u{1F342} Autumn'],
+    ['links', '\u{1F33E} Links']
+];
 
 function startIslandCreator() {
     islandDraft = {
-        params: Object.assign({ seed: 1000 + Math.floor(Math.random() * 9000) },
+        params: Object.assign({ seed: 1000 + Math.floor(Math.random() * 9000),
+                                biome: 'meadows' },
                               ISLAND_DEFAULTS),
         confirm: false
     };
@@ -3421,6 +3427,7 @@ function startIslandCreator() {
 function regenIslandDraft() {
     islandDraft.confirm = false;
     islandDraft.course = makeIsland(islandDraft.params);
+    islandDraft.course.biome = islandDraft.params.biome || 'meadows';
     islandDraft.course.heights = generateHeights(islandDraft.course);
     // Island fact sheet: land share, forest share, and pond count (flood
     // fill from the map edge marks the sea; leftover water = ponds)
@@ -3507,7 +3514,7 @@ function drawIslandCreator() {
     islandUIRects = { sliders: {}, buttons: {} };
     const inX = px + 12, inW = pw - 24;
     let y = py + 42;
-    const rowH = Math.max(24, Math.min(30, Math.floor((ph - 46 - 178) / 7)));
+    const rowH = Math.max(22, Math.min(30, Math.floor((ph - 46 - 204) / 7)));
     for (const [key, label] of ISLAND_SLIDERS) {
         const v = islandDraft.params[key];
         const trackH = rowH - 8;
@@ -3546,7 +3553,31 @@ function drawIslandCreator() {
     ctx.font = 'bold 11px -apple-system,sans-serif';
     ctx.fillText(String(islandDraft.params.seed), inX + inW - 9, y + 15);
     islandUIRects.buttons.seed = { x: inX, y: y, w: inW, h: 22 };
-    y += 28;
+    y += 26;
+    // Biome chips — the island's whole palette in one tap
+    islandUIRects.biomes = [];
+    {
+        const bws = (inW - 12) / 3;
+        for (let i = 0; i < ISLAND_BIOMES.length; i++) {
+            const bid = ISLAND_BIOMES[i][0], blab = ISLAND_BIOMES[i][1];
+            const bx3 = inX + i * (bws + 6);
+            const active = (islandDraft.params.biome || 'meadows') === bid;
+            ctx.fillStyle = active ? 'rgba(58,219,232,0.28)'
+                : 'rgba(255,255,255,0.10)';
+            roundRect(bx3, y, bws, 20, 10); ctx.fill();
+            if (active) {
+                ctx.strokeStyle = 'rgba(58,219,232,0.9)';
+                ctx.lineWidth = 1.5;
+                roundRect(bx3, y, bws, 20, 10); ctx.stroke();
+            }
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(blab, bx3 + bws / 2, y + 14);
+            islandUIRects.biomes.push({ id: bid, x: bx3, y: y, w: bws, h: 20 });
+        }
+        y += 26;
+    }
     // Starting property picker: mini parcel map shaded by land coverage;
     // tap a section to put your gate (and first deed) there
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
@@ -3640,6 +3671,17 @@ function islandTouchStart(sx, sy) {
             islandDragSlider = key;
             islandDraft.params[key] = Math.max(0, Math.min(1, (sx - r.x) / r.w));
             return;
+        }
+    }
+    if (islandUIRects.biomes) {
+        for (const bc of islandUIRects.biomes) {
+            if (hitBtn(sx, sy, bc.x, bc.y, bc.w, bc.h)) {
+                if (islandDraft.params.biome !== bc.id) {
+                    islandDraft.params.biome = bc.id;
+                    regenIslandDraft();
+                }
+                return;
+            }
         }
     }
     if (islandUIRects.parcels) {
