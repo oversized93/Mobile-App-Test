@@ -3133,6 +3133,15 @@ function updateAmbientNPCs3D(dt, hole) {
                             : diff === 0 ? ['Par', '#eaf4ff']
                             : diff === 1 ? ['Bogey', '#f0a860']
                             : ['+' + diff, '#e77d6a'];
+                        // The tournament gallery applauds the great ones
+                        // (eagles and better; 10s cooldown so back-to-back
+                        // hole-outs don't stack claps)
+                        if (window.__tourney && diff <= -2
+                            && typeof playApplause === 'function'
+                            && performance.now() - (window.__lastClap || 0) > 10000) {
+                            window.__lastClap = performance.now();
+                            playApplause();
+                        }
                         // Stack callouts that land on the same pin within a
                         // couple seconds (playing partners holing out together)
                         window.__scorePopups = window.__scorePopups || [];
