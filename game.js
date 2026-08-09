@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt281';
+const BUILD_TAG = 'gt282';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1061,6 +1061,16 @@ function tickWorld(dt) {
         const keep = worldCourse.complaints.filter(c => c.t > cut);
         if (keep.length !== worldCourse.complaints.length) {
             worldCourse.complaints = keep;
+        }
+    }
+    // 9 PM: announce the close once per day and teach the night skip
+    {
+        const dayC = Math.floor((resort.worldClock || 0) / 1440);
+        const minC = ((resort.worldClock % 1440) + 1440) % 1440;
+        if (minC >= 21 * 60 && window.__closeNoteDay !== dayC
+            && state === 'overworld') {
+            window.__closeNoteDay = dayC;
+            notify('\u{1F319} Course closed for the night \u2014 the roster panel can skip to morning');
         }
     }
     // 6 AM: fresh tee sheet — golfers who stormed off yesterday come
