@@ -114,6 +114,18 @@ their records, share codes strip play history, dt-clamped movement,
 2D-builder crash armor. Checkpoints gt230/gt246/gt263 + suites all
 green.
 
+### Parity run continued (gt277–gt295)
+Lifecycle + designer-loop hardening: iOS audio resume and instant
+background saves, weather-neutral hole ratings, unique golfer names at
+scale (96 combos), skip-to-morning with its own onboarding toast,
+share-code load confirmation, storage-denial survival, tournament
+grandstand crowds + eagle applause, exhibition guards, in-place hole
+layout editing (wizard reopens preloaded, records preserved), and the
+gt294 staleness fix — non-paint taps (hole confirm/delete, open/closed
+toggle) now rebuild the scene immediately, a latent bug since gt195.
+Post-change full battery (matrix, land flow, NPC movement, edit flow)
+all green at checkpoint gt295.
+
 ### Open thread: Mixamo skinned animations
 `assets/meshy/golfer_for_mixamo.obj` is committed for Mixamo auto-rigging.
 When FBX clips (Idle, Walking, Golf Drive, Golf Putt + celebration;
