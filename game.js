@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt189';
+const BUILD_TAG = 'gt190';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -865,6 +865,26 @@ function dailyUpkeep() {
 
 function tickWorld(dt) {
     resort.worldClock = (resort.worldClock || 0) + dt;
+    // Drain one queued ambient round-sim per half-second (each costs
+    // ~1-2k physics steps; rounds take 45s+, so this never backlogs)
+    if (state === 'overworld' && typeof npcStates !== 'undefined'
+        && performance.now() - (window.__lastSimDrain || 0) > 500) {
+        const q = npcStates.find(n => n.pendingSim && n.name);
+        if (q) {
+            window.__lastSimDrain = performance.now();
+            q.pendingSim = false;
+            const rec2 = worldCourse.holes.find(h => h.id === q.holeId);
+            if (rec2) {
+                const sk2 = ((q.driverSkill || 2) + (q.putterSkill || 2)
+                    + (q.recoverySkill || 2)) / 3;
+                try {
+                    q.simResult = simulateWorldHoleRound(rec2, sk2);
+                } catch (e) {
+                    q.simResult = null;
+                }
+            }
+        }
+    }
     // Green fees: ambient golfers holing out pay per-hole fees scaled by
     // difficulty (the renderer accumulates the dollar amounts)
     if (window.__golfFees) {
@@ -1465,7 +1485,7 @@ function simulateHoleRound(rec, skill, clubScale) {
     let px = (rec.tee.x + 0.5) * CELL, py = (rec.tee.y + 0.5) * CELL;
     const wps = (rec.waypoints || []).map(p =>
         ({ x: (p.x + 0.5) * CELL, y: (p.y + 0.5) * CELL }));
-    let wpIdx = 0, used = 0, holed = false;
+    let wpIdx = 0, used = 0, holed = false, penalties = 0;
     while (used < 9 && !holed) {
         const distYds = Math.hypot(pin.x - px, pin.y - py) / YDS_TO_WORLD;
         if (distYds < 12) {
@@ -1498,6 +1518,7 @@ function simulateHoleRound(rec, skill, clubScale) {
         if (r.holed) { holed = true; break; }
         if (r.terrain === T.WATER || r.terrain === T.OOB) {
             used++; // penalty; replay from the same lie
+            penalties++;
             continue;
         }
         px = r.x; py = r.y;
@@ -1509,7 +1530,24 @@ function simulateHoleRound(rec, skill, clubScale) {
             wpIdx++;
         }
     }
-    return { strokes: used, holed: holed };
+    return { strokes: used, holed: holed, penalties: penalties };
+}
+
+// World-context binding: the physics reads currentHole, so ambient sims
+// temporarily point it at the resort grid + this hole's tee/pin
+function simulateWorldHoleRound(rec, skill) {
+    const prev = currentHole;
+    if (!worldCourse.heights) worldCourse.heights = generateHeights(worldCourse);
+    currentHole = {
+        grid: worldCourse.grid, cols: worldCourse.cols, rows: worldCourse.rows,
+        heights: worldCourse.heights,
+        tee: rec.tee, hole: rec.pin, par: rec.par || 4
+    };
+    try {
+        return simulateHoleRound(rec, skill);
+    } finally {
+        currentHole = prev;
+    }
 }
 
 function updateBall(dt) {

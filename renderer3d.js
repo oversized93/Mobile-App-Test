@@ -2420,6 +2420,7 @@ function setupAmbientNPCs(hole) {
             holeId: rg.holeId, strokes: 0, lastRound: null, par: rg.par,
             diff: rg.diff,
             hunger: 8 + (gnIdx * 11) % 25, thirst: 6 + (gnIdx * 17) % 25,
+            pendingSim: true, simResult: null,
             tier: ['basic', 'silver', 'gold'][(rg.holeId * 7 + rg.off * 3 + gnIdx) % 3]
         });
     }
@@ -2782,11 +2783,24 @@ function updateAmbientNPCs3D(dt, hole) {
                 const nxt = s.route[s.ptIdx + 1];
                 if (!nxt) {
                     // Holed out: bank the green fee, then restart at the tee
-                    s.lastRound = (s.strokes || 0) + 1; // the holing putt
-                    // Hole-in-one: a par-3 tee shot can drop — rare, and big
-                    // drivers make it slightly less rare
-                    if (s.lastRound === 2 && s.strokes === 1
-                        && Math.random() < 0.005 + 0.002 * (s.driverSkill || 2)) {
+                    if (s.simResult && s.simResult.strokes > 0) {
+                        // Real-physics round: the presimulated score IS the
+                        // round (design pillar: one simulator powers all)
+                        s.lastRound = s.simResult.strokes;
+                        if (s.simResult.penalties > 0) {
+                            golferThink(s, 'Found the water out there', -6);
+                        }
+                    } else {
+                        s.lastRound = (s.strokes || 0) + 1; // statistical fallback
+                        // Trickier greens lip out more first putts
+                        if (s.lastRound > 1 && Math.random() < Math.max(0.04,
+                            0.13 + 0.05 * (s.diff || 2) - (s.putterSkill || 2) * 0.022)) s.lastRound++;
+                    }
+                    // Hole-in-one: real physics can drop the tee shot; the
+                    // fallback keeps a rare skill-nudged roll
+                    if (s.lastRound === 1
+                        || (!s.simResult && s.lastRound === 2 && s.strokes === 1
+                            && Math.random() < 0.005 + 0.002 * (s.driverSkill || 2))) {
                         s.lastRound = 1;
                         golferThink(s, 'I ACED IT!!', 20);
                         if (typeof notify === 'function') {
@@ -2795,9 +2809,6 @@ function updateAmbientNPCs3D(dt, hole) {
                         }
                         if (typeof playFanfare === 'function') playFanfare();
                     }
-                    // Trickier greens lip out more first putts
-                    if (s.lastRound > 1 && Math.random() < Math.max(0.04,
-                        0.13 + 0.05 * (s.diff || 2) - (s.putterSkill || 2) * 0.022)) s.lastRound++;
                     s.strokes = 0;
                     const tierMult = s.tier === 'gold' ? 2
                         : s.tier === 'silver' ? 1.5 : 1;
@@ -2849,6 +2860,8 @@ function updateAmbientNPCs3D(dt, hole) {
                     s.x = s.route[0].x;
                     s.z = s.route[0].z;
                     s.pause = 5;
+                    s.pendingSim = true;   // presimulate the next round
+                    s.simResult = null;
                     // Hungry or thirsty? Walk to the nearest kiosk/stall
                     // between rounds (that's the stall owner's income)
                     // Serve the *larger* need so neither starves behind the
