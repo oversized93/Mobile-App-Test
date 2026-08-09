@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt343';
+const BUILD_TAG = 'gt344';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4476,6 +4476,26 @@ function drawOverworld() {
     ctx.font = 'bold 14px -apple-system,sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('$ ' + Math.floor(resort.coins).toLocaleString(), W() / 2, bpY + bpH / 2 + 5);
+    // Daily net ticker rides beside the balance: today's income minus
+    // expenses so the trend reads without opening finances
+    {
+        const led2 = (resort.ledger && resort.ledger.income != null)
+            ? resort.ledger : null;
+        if (led2) {
+            const net = Math.round(led2.income - led2.expenses);
+            const up2 = net >= 0;
+            const netTxt = (up2 ? '\u25B2 +$' : '\u25BC -$') + Math.abs(net);
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            const nw2 = ctx.measureText(netTxt).width + 18;
+            const nx2 = bpX + bpW + 8, ny2 = bpY + 4, nh2 = bpH - 8;
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            roundRect(nx2, ny2, nw2, nh2, nh2 / 2);
+            ctx.fill();
+            ctx.fillStyle = up2 ? '#8be06a' : '#f0907c';
+            ctx.textAlign = 'center';
+            ctx.fillText(netTxt, nx2 + nw2 / 2, ny2 + nh2 / 2 + 4);
+        }
+    }
 
     // Speed strip — pause / play / fast-forward, reference-style
     {
