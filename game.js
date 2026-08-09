@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt239';
+const BUILD_TAG = 'gt240';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -855,7 +855,7 @@ function finalizeHole() {
     }
     if (!holeWizard || !holeWizard.tee || !holeWizard.pin) return;
     const yds = polylineLengthYards(holeWizard);
-    const par = parFromYards(yds);
+    const par = holeWizard.simParEst || parFromYards(yds);
     worldCourse.holes.push({
         id: holeWizard.holeId,
         par,
@@ -5560,7 +5560,7 @@ function drawHoleWizardOverlay() {
     // Live design readout while shaping: length, par, stars, fee
     if (w.step === 'shape' && w.tee && w.pin) {
         const yds = Math.round(polylineLengthYards(w));
-        const par = parFromYards(yds);
+        const par = w.simParEst || parFromYards(yds);
         const diff = holeDifficulty(w);
         const fee = 3 + 2 * diff;
         let info = yds + ' yds  •  Par ' + par + '  •  '
@@ -5656,10 +5656,17 @@ function drawHoleWizardOverlay() {
             w.traceAt = performance.now();
             const tr = [];
             try {
-                w.traceRes = simulateWorldHoleRound({ tee: w.tee, pin: w.pin,
-                    waypoints: w.waypoints,
-                    par: parFromYards(polylineLengthYards(w)) }, 3, tr);
-            } catch (e) { w.traceRes = null; }
+                const recT = { tee: w.tee, pin: w.pin, waypoints: w.waypoints,
+                    par: parFromYards(polylineLengthYards(w)) };
+                w.traceRes = simulateWorldHoleRound(recT, 3, tr);
+                // Par is what golfers actually shoot, not a yardage table:
+                // two extra untraced rounds steady the estimate
+                let totT = w.traceRes.strokes;
+                for (let k = 0; k < 2; k++) {
+                    totT += simulateWorldHoleRound(recT, 3).strokes;
+                }
+                w.simParEst = Math.max(3, Math.min(5, Math.round(totT / 3 - 0.6)));
+            } catch (e) { w.traceRes = null; w.simParEst = null; }
             w.trace = tr;
         }
 
@@ -5760,7 +5767,7 @@ function drawHoleWizardOverlay() {
         ctx.fill();
         ctx.fillStyle = '#fff';
         const yds = Math.round(polylineLengthYards(w));
-        const par = parFromYards(yds);
+        const par = w.simParEst || parFromYards(yds);
         ctx.fillText('\u2714 Par ' + par + ' \u2022 ' + yds + 'y', W() / 2 + 10 + btnW / 2, bY + btnH / 2 + 5);
     } else {
         // For tee / pin steps — show a Cancel pill only
