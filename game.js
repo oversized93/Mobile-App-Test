@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt191';
+const BUILD_TAG = 'gt192';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -563,7 +563,11 @@ function paintBrushAt(cc, cr, size, terrain) {
             }
         }
     }
-    if (changed.length) owNeedsRebuild = true;
+    if (changed.length) {
+        owNeedsRebuild = true;
+        // Invalidate sim-measured difficulty ratings — terrain changed
+        worldCourse.terrainRev = (worldCourse.terrainRev || 0) + 1;
+    }
     return changed;
 }
 
@@ -675,7 +679,49 @@ function computeCourseRating() {
     return Math.max(0, Math.min(5, Math.round(r * 2) / 2));
 }
 
+// Sim-measured stars: a background queue plays each hole ~6 times with
+// an average golfer and rates it by strokes over par. The corridor
+// heuristic answers instantly until a fresh measurement lands (and
+// whenever terrain edits invalidate one). Draw paths never simulate.
+function queueSimRating(rec) {
+    window.__simRateQueue = window.__simRateQueue || [];
+    if (!window.__simRateQueue.includes(rec.id)) window.__simRateQueue.push(rec.id);
+}
+function drainSimRating() {
+    const q = window.__simRateQueue;
+    if (!q || !q.length) return;
+    const id = q.shift();
+    const rec = worldCourse.holes.find(h => h.id === id);
+    if (!rec) return;
+    try {
+        let total = 0;
+        const runs = 6;
+        for (let k = 0; k < runs; k++) {
+            total += simulateWorldHoleRound(rec, 2.5).strokes;
+        }
+        const over = total / runs - (rec.par || 4);
+        rec.simDiff = {
+            rev: worldCourse.terrainRev || 0,
+            stars: Math.max(1, Math.min(5, Math.round(1 + over * 1.4)))
+        };
+        saveWorldCourse();
+    } catch (e) {}
+}
+
 function holeDifficulty(rec) {
+    if (rec.simDiff) {
+        if (rec.simDiff.rev === (worldCourse.terrainRev || 0)) {
+            return rec.simDiff.stars;
+        }
+        queueSimRating(rec); // stale — remeasure in the background
+    } else if (rec.id != null && worldCourse.holes
+        && worldCourse.holes.some(h => h.id === rec.id)) {
+        queueSimRating(rec);
+    }
+    return holeDifficultyHeuristic(rec);
+}
+
+function holeDifficultyHeuristic(rec) {
     if (!rec || !rec.tee || !rec.pin) return 1;
     const pts = [rec.tee, ...(rec.waypoints || []), rec.pin];
     let samples = 0, hazard = 0;
@@ -865,6 +911,12 @@ function dailyUpkeep() {
 
 function tickWorld(dt) {
     resort.worldClock = (resort.worldClock || 0) + dt;
+    // Drain one difficulty measurement per second (6 sims each)
+    if (state === 'overworld'
+        && performance.now() - (window.__lastRateDrain || 0) > 1000) {
+        window.__lastRateDrain = performance.now();
+        drainSimRating();
+    }
     // Drain one queued ambient round-sim per half-second (each costs
     // ~1-2k physics steps; rounds take 45s+, so this never backlogs)
     if (state === 'overworld' && typeof npcStates !== 'undefined'
