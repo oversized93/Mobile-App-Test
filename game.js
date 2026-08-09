@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt346';
+const BUILD_TAG = 'gt347';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4398,9 +4398,13 @@ function drawOverworld() {
 
     // ---- Floating name labels over golfers (reference-style). Gated by
     // zoom so a pulled-back view stays clean ----
+    // Nameplates fade with zoom: crisp up close, gone at a wide view
+    // (the selected golfer keeps their label at any distance)
+    const nameA = (typeof cam3dDistance !== 'undefined')
+        ? Math.max(0, Math.min(1, (1400 - cam3dDistance) / 700)) : 1;
     if (scene3dReady && typeof npcStates !== 'undefined'
         && typeof worldToScreen3D === 'function'
-        && typeof cam3dDistance !== 'undefined' && cam3dDistance < 1700) {
+        && (nameA > 0.03 || owSelectedGolfer)) {
         ctx.font = 'bold 10px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         const champName = resort.lastTourney && resort.lastTourney.winner;
@@ -4419,12 +4423,16 @@ function drawOverworld() {
                 ly -= 13;
             }
             placed.push({ x: p.x, y: ly });
+            const la = s.name === owSelectedGolfer ? 1 : nameA;
+            if (la < 0.03) continue;
+            ctx.globalAlpha = la;
             const label = (s.name === champName ? '\u{1F451} ' : '') + s.name;
             ctx.strokeStyle = 'rgba(0,0,0,0.7)';
             ctx.lineWidth = 3;
             ctx.strokeText(label, p.x, ly);
             ctx.fillStyle = s.name === champName ? '#ffd24a' : 'rgba(255,255,255,0.92)';
             ctx.fillText(label, p.x, ly);
+            ctx.globalAlpha = 1;
         }
     }
 
