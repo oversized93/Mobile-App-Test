@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt319';
+const BUILD_TAG = 'gt320';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4808,9 +4808,29 @@ function drawOverworld() {
                     : s.returning ? 'walking in'
                     : (s.strokes ? s.strokes + ' str' : 'tee');
                 const prog = 'H' + s.holeId + ' • ' + act
-                    + (car2 && car2.best != null ? ' • best ' + car2.best
-                        : s.lastRound ? ' • last ' + s.lastRound : '');
-                ctx.fillText(prog, px + pw - 14, ry + 19);
+                    + (car2 && car2.best != null
+                        ? ' • best ' + car2.best : '');
+                let progRight = px + pw - 14;
+                // Last-round chip: score vs par in sparkline colors
+                if (s.lastRel != null) {
+                    const relTxt = s.lastRel === 0 ? 'E'
+                        : s.lastRel > 0 ? '+' + s.lastRel : '' + s.lastRel;
+                    const cw = 26;
+                    const col = s.lastRel < 0 ? '#3f7a3a'
+                        : s.lastRel === 0 ? '#5b6c80'
+                        : s.lastRel === 1 ? '#8a6a30' : '#8e3f30';
+                    glossyRect(px + pw - 14 - cw, ry + 5, cw, 18, 9, col);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 10px -apple-system,sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(relTxt, px + pw - 14 - cw / 2, ry + 18);
+                    progRight = px + pw - 20 - cw;
+                    ctx.fillStyle = (s.mood != null && s.mood < 35)
+                        ? 'rgba(240,140,120,0.85)' : 'rgba(255,255,255,0.55)';
+                    ctx.font = '11px -apple-system,sans-serif';
+                    ctx.textAlign = 'right';
+                }
+                ctx.fillText(prog, progRight, ry + 19);
             }
             if (onCourse.length > rows.length) {
                 ctx.fillStyle = 'rgba(255,255,255,0.4)';

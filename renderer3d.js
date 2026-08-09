@@ -3509,6 +3509,7 @@ function updateAmbientNPCs3D(dt, hole) {
                             name: s.name || ''
                         });
                         s.celeb = diff; // drives green-side body language
+                        s.lastRel = diff; // roster chip: last round vs par
                         if (s.lipDrama && diff > 0) {
                             // The horseshoe still stings on the walk off
                             s.freakout = 2.2;
