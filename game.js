@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt315';
+const BUILD_TAG = 'gt316';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1250,6 +1250,9 @@ function tickWorld(dt) {
             st.n++;
             st.sum += ho.score;
             if (ho.score < ho.par) st.sub++; // rounds under par
+            st.recent = st.recent || [];
+            st.recent.push(ho.score - ho.par); // sparkline history
+            if (st.recent.length > 12) st.recent.shift();
             if (ho.name && (st.best == null || ho.score < st.best)) {
                 const hadRecord = st.best != null && st.n >= 5;
                 const prevBy = st.bestBy;
@@ -5254,6 +5257,20 @@ function drawOverworld() {
                     } else {
                         owRecordLineRect = null;
                     }
+                    // Sparkline: last dozen rounds, one bar each — green
+                    // under par, white par, amber bogey, red worse; taller
+                    // means further from par
+                    if (st.recent && st.recent.length) {
+                        const base = ry + 28;
+                        for (let si = 0; si < st.recent.length; si++) {
+                            const rel = st.recent[si];
+                            const bh = 4 + Math.min(3, Math.abs(rel)) * 2.5;
+                            ctx.fillStyle = rel < 0 ? '#8be06a'
+                                : rel === 0 ? 'rgba(255,255,255,0.7)'
+                                : rel === 1 ? '#f0a860' : '#e77d6a';
+                            ctx.fillRect(hc.x + 14 + si * 8, base - bh, 6, bh);
+                        }
+                    }
                 } else {
                     ctx.fillStyle = 'rgba(255,255,255,0.35)';
                     ctx.fillText('No rounds played yet', hc.x + 14, ry);
@@ -5613,7 +5630,9 @@ function drawGolferPanel(s) {
 function holeCardLayout() {
     // One extra stat row when the sim has measured this hole
     const sel = worldCourse.holes.find(h2 => h2.id === owSelectedHole);
-    const w = 216, h = 278 + ((sel && sel.simAvg != null) ? 26 : 0);
+    const st0 = sel ? (worldCourse.holeStats || {})[sel.id] : null;
+    const w = 216, h = 278 + ((sel && sel.simAvg != null) ? 26 : 0)
+        + ((st0 && st0.recent && st0.recent.length) ? 18 : 0);
     const x = W() - w - 10, y = 58;
     return { x, y, w, h,
              flyX: x + 12, flyY: y + h - 132, flyW: w - 24 - 42, flyH: 34,
