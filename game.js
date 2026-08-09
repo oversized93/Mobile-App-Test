@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt256';
+const BUILD_TAG = 'gt257';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4661,9 +4661,14 @@ function drawOverworld() {
                 ctx.fillText(crText2, px + 14, py + 52);
             }
             if (!rows.length) {
+                const hrR = (((resort.worldClock || 0) / 60) % 24 + 24) % 24;
+                const closed = hrR >= 21 || hrR < 5.5;
                 ctx.fillStyle = 'rgba(255,255,255,0.5)';
                 ctx.font = '12px -apple-system,sans-serif';
-                ctx.fillText('No golfers out — build more holes!', px + 14, py + headH + 18);
+                ctx.fillText(closed
+                    ? '\u{1F319} Course closed \u2014 tee-off at 6 AM'
+                    : 'No golfers out — build more holes!',
+                    px + 14, py + headH + 18);
             }
             owRosterChip.rows = [];
             for (let i = 0; i < rows.length; i++) {

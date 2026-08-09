@@ -4435,6 +4435,13 @@ function updateShuttle3D(dt, hole) {
     if (s.phase === 'hidden') {
         s.timer -= dt;
         if (s.timer <= 0) {
+            // No arrivals while the course sleeps — hold until morning
+            const hrS = (typeof resort !== 'undefined' && resort)
+                ? ((((resort.worldClock || 0) / 60) % 24 + 24) % 24) : 12;
+            if (hrS >= 21 || hrS < 5.5) {
+                s.timer = 20;
+                return;
+            }
             s.phase = 'arrive';
             s.z = s.startZ;
             shuttleGroup.visible = true;
