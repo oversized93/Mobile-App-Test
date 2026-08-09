@@ -3413,6 +3413,10 @@ function updateAmbientNPCs3D(dt, hole) {
                         if (wantDrink) { price += 5; s.thirst = 5; }
                         if (wantFood) { price += 8; s.hunger = 5; }
                         if (!price) { price = 5; s.thirst = 5; }
+                        // Premium members spend premium — same ladder
+                        // their green fees use
+                        price = Math.round(price * (s.tier === 'gold' ? 2
+                            : s.tier === 'silver' ? 1.5 : 1));
                         window.__golfFees = (window.__golfFees || 0) + price;
                         window.__stallSales = (window.__stallSales || 0) + price;
                         // Per-facility books: credit the vendor that served
