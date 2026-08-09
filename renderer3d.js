@@ -1989,6 +1989,27 @@ function buildTerrain3D(hole, opts) {
             g.textAlign = 'center';
             g.textBaseline = 'middle';
             g.fillText(String(rec.id), 64, 68);
+            // Difficulty pips skirt the badge's lower rim: count = stars,
+            // color eases green → amber → red so a glance across the
+            // course shows where the teeth are
+            if (rec.open !== false) {
+                const diffN = (typeof holeDifficulty === 'function')
+                    ? holeDifficulty(rec) : 2;
+                const dCol = diffN <= 2 ? '#9be36a'
+                    : diffN === 3 ? '#ffd24a' : '#ff7a5c';
+                for (let di = 0; di < diffN; di++) {
+                    const ang = Math.PI / 2 + (di - (diffN - 1) / 2) * 0.30;
+                    const px3 = 64 + Math.cos(ang) * 53;
+                    const pz3 = 64 + Math.sin(ang) * 53;
+                    g.fillStyle = dCol;
+                    g.beginPath();
+                    g.arc(px3, pz3, 6, 0, Math.PI * 2);
+                    g.fill();
+                    g.strokeStyle = 'rgba(0,0,0,0.35)';
+                    g.lineWidth = 1.5;
+                    g.stroke();
+                }
+            }
             const tex = new THREE.CanvasTexture(cnv);
             perBuildTextures.push(tex);
             const sprMat = new THREE.SpriteMaterial({
