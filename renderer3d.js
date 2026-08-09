@@ -4262,9 +4262,30 @@ function setupCartDrive(hole) {
 function updateCartDrive3D(dt, hole) {
     if (!cartGroup || !cartState) return;
     const s = cartState;
+    // Courtesy stop: a golfer near the cart gets right of way — the
+    // cart halts ~1.5s with a friendly honk, then a cooldown so it
+    // doesn't stutter through a walking group
+    if (s.coolT > 0) s.coolT -= dt;
+    if (s.stopT > 0) {
+        s.stopT -= dt;
+        if (s.stopT <= 0) s.coolT = 5;
+    } else if (!(s.coolT > 0) && typeof npcStates !== 'undefined') {
+        for (const g of npcStates) {
+            if (!g.name || g.gone) continue;
+            const dgx = g.x - s.x, dgz = g.z - s.z;
+            if (dgx * dgx + dgz * dgz < 26 * 26) {
+                s.stopT = 1.5;
+                if (typeof playHonk === 'function') playHonk();
+                break;
+            }
+        }
+    }
     const dx = s.tx - s.x, dz = s.tz - s.z;
     const d = Math.sqrt(dx * dx + dz * dz);
-    if (d < 2) {
+    if (s.stopT > 0) {
+        // Holding for the crossing golfer — position/rotation writes
+        // below still run so the cart sits planted, not frozen mid-lerp
+    } else if (d < 2) {
         // At a cell center: mostly keep heading, turn at junctions/corners
         const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
         const opts = [];
