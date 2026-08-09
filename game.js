@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt287';
+const BUILD_TAG = 'gt288';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3618,6 +3618,13 @@ function importCourseCode() {
             if (!data || data.cols !== COURSE_COLS || data.rows !== COURSE_ROWS
                 || !Array.isArray(data.grid) || !Array.isArray(data.holes)) {
                 notify('That code is not a valid course');
+                return;
+            }
+            // Loading REPLACES the current design — never silently
+            if (worldCourse && worldCourse.holes && worldCourse.holes.length
+                && !confirm('Load "' + (data.name || 'shared course') + '" ('
+                    + data.holes.length + ' holes)? Your current design will be replaced.')) {
+                notify('Load cancelled');
                 return;
             }
             worldCourse = data;
