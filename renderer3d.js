@@ -3356,10 +3356,12 @@ function updateAmbientNPCs3D(dt, hole) {
                         window.__stallSales = (window.__stallSales || 0) + price;
                         // Per-facility books: credit the vendor that served
                         if (typeof worldCourse !== 'undefined' && worldCourse.decor) {
+                            const vcx = s.detour.vx != null ? s.detour.vx : gx;
+                            const vcz = s.detour.vz != null ? s.detour.vz : gz;
                             const fac = worldCourse.decor.find(d2 =>
                                 (d2.t === 'kiosk' || d2.t === 'stall')
-                                && Math.abs(d2.x * CELL - gx) < 2
-                                && Math.abs(d2.y * CELL - gz) < 2);
+                                && Math.abs(d2.x * CELL - vcx) < 2
+                                && Math.abs(d2.y * CELL - vcz) < 2);
                             if (fac) {
                                 const n = ((wantDrink ? 1 : 0) + (wantFood ? 1 : 0)) || 1;
                                 fac.salesToday = (fac.salesToday || 0) + n;
@@ -3855,6 +3857,11 @@ function updateAmbientNPCs3D(dt, hole) {
             && !s.returning && !s.leaving) {
             const nsp = s.route[s.ptIdx + 1];
             yawT = Math.atan2(nsp.x - s.x, nsp.z - s.z);
+        }
+        // Customers at a cart face the counter, not magnetic north
+        if (s.detour && s.detour.vx != null
+            && Math.hypot(s.tx - s.x, s.tz - s.z) < 6) {
+            yawT = Math.atan2(s.detour.vx - s.x, s.detour.vz - s.z);
         }
         // Settled spectators track the nearest ball in flight — the
         // grandstand turns its heads as one when a drive sails past
