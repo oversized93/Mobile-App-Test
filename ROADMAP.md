@@ -94,6 +94,26 @@ biome-themed tournaments with purse streaks, tee-queue arcs, bad-day
 early departures + 6 AM fresh tee sheet, night ramp landing by 9 PM,
 and two clean checkpoints (gt198 sim-leak fix, gt213 4x-speed audit).
 
+### Parity run continued (gt222–gt276)
+The economy became a real tycoon loop: land pacing measured and tuned
+(\$750 base, 1.7x growth), affordability nudges, purchase celebrations,
+the wizard/decor/waypoint surfaces all enforce ownership, and the
+clubhouse grew into a three-tier ladder (bigger building, fee
+multipliers, star rating, permanent member capacity — capacity now a
+visible stat). Par went fully measured: the wizard plays three real
+rounds per edit for its label ('plays ~N'), the Simulate button plays
+real physics, and hillside golf was made fair (grabby rough, adaptive
+sim golfers). The resort gained a daily rhythm — close of play at 9 PM,
+empty course overnight (fees verified silent, shuttle held), fresh tee
+sheet at 6 AM — and the NPCs became convincing: hole rotation, no
+teleports (instrumented), pond-skirting walks for every class,
+typed vendor runs (stalls sell food, kiosks drinks), grandstand
+galleries, eagle applause, stacked name labels, live roster activity.
+Robustness: idle autosave (offline-clock stamped), deleted holes clean
+their records, share codes strip play history, dt-clamped movement,
+2D-builder crash armor. Checkpoints gt230/gt246/gt263 + suites all
+green.
+
 ### Open thread: Mixamo skinned animations
 `assets/meshy/golfer_for_mixamo.obj` is committed for Mixamo auto-rigging.
 When FBX clips (Idle, Walking, Golf Drive, Golf Putt + celebration;
