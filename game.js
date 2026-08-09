@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt184';
+const BUILD_TAG = 'gt185';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4379,6 +4379,19 @@ function undoLastStroke() {
 }
 
 // Hole inspector card geometry (shared by draw + hit-test)
+// Focus the camera on a golfer chosen from a list (roster, champions,
+// record line) — direct taps already have them on screen
+function focusGolfer(name) {
+    const s = (typeof npcStates !== 'undefined')
+        ? npcStates.find(n => n.name === name) : null;
+    if (!s || typeof setCameraOrbit !== 'function') return;
+    const dist = (typeof cam3dDistance !== 'undefined')
+        ? Math.min(cam3dDistance, 1000) : 900;
+    const pitch = (typeof cam3dPitch !== 'undefined') ? cam3dPitch : Math.PI / 180 * 52;
+    const yaw = (typeof cam3dYaw !== 'undefined') ? cam3dYaw : 0;
+    setCameraOrbit(s.x, s.z + 30, dist, pitch, yaw);
+}
+
 // ---- Golfer inspector (reference-style right panel) ----
 function golferPanelLayout() {
     const w = 232, h = 312;
@@ -5025,6 +5038,7 @@ function overworldTouchStart(sx, sy) {
                     owRosterOpen = false;
                     owSelectedHole = null;
                     window.__greetGolfer = rr.name;
+                    focusGolfer(rr.name);
                     return;
                 }
             }
@@ -5126,6 +5140,7 @@ function overworldTouchStart(sx, sy) {
                     owSelectedGolfer = holder.name;
                     owSelectedHole = null;
                     window.__greetGolfer = holder.name;
+                    focusGolfer(holder.name);
                 }
                 return;
             }
