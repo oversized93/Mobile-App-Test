@@ -2518,6 +2518,21 @@ function setupAmbientNPCs(hole) {
         ? Math.min(24, 4 + Math.floor(resort.members / 3)) : NPC_COUNT;
     const walkerCount = npcPathCells.length >= 4 ? memberCrowd : 0;
     npcWalkerCount = walkerCount;
+    // Dawn sprinklers: spaced across the fairways, rebuilt with the terrain
+    sprinklerSpots = [];
+    for (let r = 0; r < hole.rows && sprinklerSpots.length < 14; r++) {
+        for (let c = 0; c < hole.cols; c++) {
+            if (r % 6 === 2 && c % 6 === 4 && hole.grid[r][c] === T.FAIRWAY) {
+                const hy = (hole.heights && hole.heights[r])
+                    ? (hole.heights[r][c] || 0) : 0;
+                sprinklerSpots.push({
+                    x: (c + 0.5) * CELL, z: (r + 0.5) * CELL, y: hy,
+                    phase: (r * 7 + c) % 10
+                });
+                if (sprinklerSpots.length >= 14) break;
+            }
+        }
+    }
     const total = walkerCount + golfers.length + routeGolfers.length;
     if (total === 0) return;
 
@@ -2767,6 +2782,66 @@ function updateTrailPuffs3D() {
         p.mat.opacity = 0.85 * (1 - k);
         const sc = (p.bs || 7) * (1 - k * 0.5);
         p.spr.scale.set(sc, sc, 1);
+    }
+}
+
+// ---- Dawn sprinklers: rotating water jets over the fairways ----
+let sprinklerSpots = [];
+let sprinklerPool = [];
+let sprinklerTex = null;
+const SPRK_DROPS = 9;
+function updateSprinklers3D(hole) {
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    const hr = (typeof resort !== 'undefined' && resort)
+        ? ((((resort.worldClock || 0) / 60) % 24) + 24) % 24 : 12;
+    const on = hr >= 5.5 && hr < 7.5 && sprinklerSpots.length > 0;
+    if (!on) {
+        for (const d of sprinklerPool) d.visible = false;
+        return;
+    }
+    if (!sprinklerTex) {
+        const c = document.createElement('canvas');
+        c.width = c.height = 16;
+        const g = c.getContext('2d');
+        const grad = g.createRadialGradient(8, 8, 1, 8, 8, 7);
+        grad.addColorStop(0, 'rgba(235,250,255,0.95)');
+        grad.addColorStop(0.6, 'rgba(160,215,245,0.5)');
+        grad.addColorStop(1, 'rgba(140,200,240,0)');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 16, 16);
+        sprinklerTex = new THREE.CanvasTexture(c);
+    }
+    const need = sprinklerSpots.length * SPRK_DROPS;
+    while (sprinklerPool.length < need) {
+        const mat = new THREE.SpriteMaterial({
+            map: sprinklerTex, transparent: true, opacity: 0.8,
+            depthWrite: false
+        });
+        mat.toneMapped = false;
+        const spr = new THREE.Sprite(mat);
+        scene3d.add(spr);
+        sprinklerPool.push(spr);
+    }
+    const t = performance.now() / 1000;
+    for (let i = 0; i < sprinklerPool.length; i++) {
+        const spr = sprinklerPool[i];
+        const si = Math.floor(i / SPRK_DROPS);
+        if (si >= sprinklerSpots.length) { spr.visible = false; continue; }
+        const spot = sprinklerSpots[si];
+        const j = i % SPRK_DROPS;
+        // Two opposing arms per head (classic impact sprinkler)
+        const arm = j % 2;
+        const kk = (Math.floor(j / 2) + 0.5) / (SPRK_DROPS / 2);
+        const az = t * 1.3 + spot.phase + arm * Math.PI;
+        const rad = 3 + kk * 19;
+        spr.visible = true;
+        spr.position.set(
+            spot.x + Math.cos(az) * rad,
+            spot.y + 2 + 30 * kk * (1 - kk),
+            spot.z + Math.sin(az) * rad);
+        const sc = 3.6 - kk * 1.5;
+        spr.scale.set(sc, sc, 1);
+        spr.material.opacity = 0.95 * (1 - kk * 0.45);
     }
 }
 
@@ -3029,6 +3104,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateTrailPuffs3D();
     updateSwingFlashes3D();
     updateNpcFlights3D(hole);
+    updateSprinklers3D(hole);
     updateFireworks3D();
     // A freshly inspected golfer greets the camera (set by the game UI)
     if (window.__greetGolfer && npcStates.length) {
