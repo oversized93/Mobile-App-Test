@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt262';
+const BUILD_TAG = 'gt263';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6207,6 +6207,11 @@ function overworldTouchStart(sx, sy) {
         const pts = [w.tee, ...w.waypoints, w.pin];
         const a = pts[i], b = pts[i + 1];
         const mid = { x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) };
+        // Same ownership rule as every other wizard placement
+        if (!parcelOwned(mid.x, mid.y)) {
+            offerParcel(mid.x, mid.y);
+            return;
+        }
         w.waypoints.splice(i, 0, mid);
         return;
     }
