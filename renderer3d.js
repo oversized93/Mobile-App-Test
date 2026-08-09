@@ -2280,6 +2280,7 @@ const _tmpVecA = new THREE.Vector3();
 const _tmpVecB = new THREE.Vector3();
 const _upVec = new THREE.Vector3(0, 1, 0);
 const _tmpVec2 = new THREE.Vector2();
+const _bagCol = new THREE.Color();
 
 function screenToWorld3D(sx, sy) {
     if (!camera3d) return { x: 0, y: 0 };
@@ -2703,8 +2704,9 @@ function setupAmbientNPCs(hole) {
     terrainGroup.add(npcHeadInst);
     // Leather golf bag: stands beside a player who's waiting to hit
     const bagGeo = new THREE.CylinderGeometry(1.7, 1.9, 11, 7);
+    // White base: per-instance colors carry the real tint (tier-coded)
     const bagMat = new THREE.MeshStandardMaterial({
-        color: linC(0x8a5a30), roughness: 0.85 });
+        color: 0xffffff, roughness: 0.85 });
     npcBagInst = new THREE.InstancedMesh(bagGeo, bagMat, total);
     npcBagInst.castShadow = true;
     npcBagInst.frustumCulled = false;
@@ -3990,6 +3992,14 @@ function updateAmbientNPCs3D(dt, hole) {
                     gy + 5.2, s.z - Math.sin(yaw + 2.2) * 7);
                 dummy.rotation.set(0.22, yaw, 0);
                 dummy.scale.set(1, 1, 1);
+                // Gold members carry gold, silver carry silver — the
+                // tier ladder reads right off the tee box
+                if (npcBagInst.setColorAt) {
+                    _bagCol.setHex(s.tier === 'gold' ? 0xe8b93c
+                        : s.tier === 'silver' ? 0xc4d0d8
+                        : 0x8a5a30).convertSRGBToLinear();
+                    npcBagInst.setColorAt(i, _bagCol);
+                }
             } else {
                 dummy.position.set(0, -500, 0);
                 dummy.rotation.set(0, 0, 0);
@@ -4049,7 +4059,10 @@ function updateAmbientNPCs3D(dt, hole) {
         if (npcClubInst) npcClubInst.visible = false; // model holds its own club
     }
     if (npcClubInst) npcClubInst.instanceMatrix.needsUpdate = true;
-    if (npcBagInst) npcBagInst.instanceMatrix.needsUpdate = true;
+    if (npcBagInst) {
+        npcBagInst.instanceMatrix.needsUpdate = true;
+        if (npcBagInst.instanceColor) npcBagInst.instanceColor.needsUpdate = true;
+    }
     if (npcUmbrellaInst) npcUmbrellaInst.instanceMatrix.needsUpdate = true;
     if (npcHatInst) npcHatInst.instanceMatrix.needsUpdate = true;
 }
