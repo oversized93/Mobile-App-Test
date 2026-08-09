@@ -2304,6 +2304,66 @@ let npcBodyInst = null, npcHeadInst = null, npcClubInst = null, npcUmbrellaInst 
 let npcHatInst = null;
 let npcStates = [];
 let npcPathCells = [];
+let npcPathIdx = null; // "c,r" -> npcPathCells index, built lazily
+
+// Shortest walkway route between two world points (BFS over path cells,
+// 4-connected). Returns world-space waypoints, or null when either end
+// is far from the network or no connected route exists — callers then
+// beeline like before. One small array per call; calls happen only when
+// a golfer starts a detour, never per frame.
+function pathRoute(fromX, fromZ, toX, toZ) {
+    const cells = npcPathCells;
+    if (!cells || cells.length < 2) return null;
+    if (!npcPathIdx) {
+        npcPathIdx = new Map();
+        for (let i = 0; i < cells.length; i++) {
+            npcPathIdx.set(cells[i].c + ',' + cells[i].r, i);
+        }
+    }
+    const near = (x, z) => {
+        let bi = -1, bd = Infinity;
+        for (let i = 0; i < cells.length; i++) {
+            const dx = (cells[i].c + 0.5) * CELL - x;
+            const dz = (cells[i].r + 0.5) * CELL - z;
+            const d2 = dx * dx + dz * dz;
+            if (d2 < bd) { bd = d2; bi = i; }
+        }
+        return { i: bi, d: bd };
+    };
+    const a = near(fromX, fromZ), b = near(toX, toZ);
+    const reach = (CELL * 14) * (CELL * 14);
+    if (a.i < 0 || b.i < 0 || a.i === b.i || a.d > reach || b.d > reach) return null;
+    const prev = new Int32Array(cells.length).fill(-1);
+    const seen = new Uint8Array(cells.length);
+    const queue = [a.i];
+    seen[a.i] = 1;
+    let qh = 0, found = false;
+    const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    while (qh < queue.length) {
+        const cur = queue[qh++];
+        if (cur === b.i) { found = true; break; }
+        const cc = cells[cur];
+        for (let k = 0; k < 4; k++) {
+            const ni = npcPathIdx.get((cc.c + DIRS[k][0]) + ','
+                + (cc.r + DIRS[k][1]));
+            if (ni != null && !seen[ni]) {
+                seen[ni] = 1;
+                prev[ni] = cur;
+                queue.push(ni);
+            }
+        }
+    }
+    if (!found) return null;
+    const out = [];
+    for (let cur = b.i; cur !== -1; cur = prev[cur]) {
+        out.push({ x: (cells[cur].c + 0.5) * CELL,
+                   z: (cells[cur].r + 0.5) * CELL });
+    }
+    out.reverse();
+    // Every 2nd cell keeps turns smooth and the array half as long
+    const thin = out.filter((p, k) => k % 2 === 0 || k === out.length - 1);
+    return thin.length >= 2 ? thin : null;
+}
 let npcSocialSpots = [];
 let npcVendorSpots = [];  // kiosks/stalls that sell food & drink
 let npcModelInsts = null;   // instanced GLB golfer parts (capsules hidden)
@@ -2315,6 +2375,7 @@ const NPC_COLORS = [0xe5533d, 0x3d7de5, 0xe5b13d, 0x8e44ad,
 
 function setupAmbientNPCs(hole) {
     npcPathCells = [];
+    npcPathIdx = null;
     for (let r = 0; r < hole.rows; r++)
         for (let c = 0; c < hole.cols; c++)
             if (hole.grid[r][c] === T.PATH) npcPathCells.push({ c, r });
@@ -2773,12 +2834,22 @@ function updateAmbientNPCs3D(dt, hole) {
             s.thirst = Math.min(100, (s.thirst || 0) + dt * 0.45);
             // Detour to a kiosk/stall: walk over, buy, walk back to the tee
             if (s.detour || s.returning) {
-                const gx = s.detour ? s.detour.x : s.route[0].x;
-                const gz = s.detour ? s.detour.z : s.route[0].z;
+                const fx = s.detour ? s.detour.x : s.route[0].x;
+                const fz = s.detour ? s.detour.z : s.route[0].z;
+                // Walkway waypoints first, then the short off-path leg
+                const pth = s.walkPath;
+                if (pth && pth.length) {
+                    const wp = pth[0];
+                    if ((wp.x - s.x) * (wp.x - s.x)
+                        + (wp.z - s.z) * (wp.z - s.z) < 42) pth.shift();
+                }
+                const onPath = s.walkPath && s.walkPath.length;
+                const gx = onPath ? s.walkPath[0].x : fx;
+                const gz = onPath ? s.walkPath[0].z : fz;
                 const ddx = gx - s.x, ddz = gz - s.z;
                 const dd = Math.sqrt(ddx * ddx + ddz * ddz);
                 s.tx = gx; s.tz = gz;
-                if (dd < 6) {
+                if (!onPath && dd < 6) {
                     if (s.detour) {
                         // Buy for the triggering need — and top up the other
                         // one too if it's also run high (one stop, two sales)
@@ -2819,9 +2890,12 @@ function updateAmbientNPCs3D(dt, hole) {
                             : 'Cold drink — just what I needed', 9);
                         s.detour = null;
                         s.returning = true;
+                        s.walkPath = pathRoute(s.x, s.z,
+                            s.route[0].x, s.route[0].z);
                         s.pause = 2.5;
                     } else {
                         s.returning = false;
+                        s.walkPath = null;
                         s.ptIdx = 0;
                         s.pause = 2;
                     }
@@ -2966,6 +3040,7 @@ function updateAmbientNPCs3D(dt, hole) {
                             if (dv < vd) { vd = dv; vb = v; }
                         }
                         s.detour = { x: vb.x, z: vb.z, need: need };
+                        s.walkPath = pathRoute(s.x, s.z, vb.x, vb.z);
                         s.pause = 1;
                     } else if (need && !s.grumbled) {
                         s.grumbled = true;

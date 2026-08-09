@@ -134,7 +134,10 @@ instancing on low-end devices).
       entrance drive every few in-game hours — more often as membership
       grows — honks, drops visitors who stroll up the walk, and departs;
       one reused group, zero per-arrival allocations)
-- [ ] Dynamic path-routing (walk paths when available, cut grass when not)
+- [x] Dynamic path-routing (gt202: BFS route helper over the walkway
+      network; vendor detours and the walk back to the tee follow paths
+      when both ends are near the network, beeline otherwise; one small
+      route array per detour, nothing per-frame)
 - [x] Headless-sim-driven NPC rounds (presimulated through the real
       physics via a throttled queue; statistical scoring is fallback only)
 
