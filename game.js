@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt347';
+const BUILD_TAG = 'gt348';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4342,16 +4342,21 @@ function drawOverworld() {
         }
     }
 
+    // World-anchored popups share a zoom fade (slightly longer reach
+    // than nameplates so the last score still reads while pulling out)
+    const popupA = (typeof cam3dDistance !== 'undefined')
+        ? Math.max(0, Math.min(1, (1700 - cam3dDistance) / 700)) : 1;
     // ---- Floating green-fee popups over pins as golfers hole out ----
     if (window.__feePopups && window.__feePopups.length) {
         const now = performance.now();
         window.__feePopups = window.__feePopups.filter(p => now - p.t0 < 1500);
         for (const p of window.__feePopups) {
+            if (popupA <= 0.03) break; // expired above; nothing to draw
             const k = (now - p.t0) / 1500;
             const sp = (scene3dReady && typeof worldToScreen3D === 'function')
                 ? worldToScreen3D(p.x, p.z) : null;
             if (!sp || sp.behind) continue;
-            ctx.globalAlpha = 1 - k;
+            ctx.globalAlpha = (1 - k) * popupA;
             ctx.font = 'bold 15px -apple-system,sans-serif';
             ctx.textAlign = 'center';
             ctx.strokeStyle = 'rgba(0,0,0,0.6)';
@@ -4370,13 +4375,14 @@ function drawOverworld() {
         const now = performance.now();
         window.__scorePopups = window.__scorePopups.filter(p => now - p.t0 < 2200);
         for (const p of window.__scorePopups) {
+            if (popupA <= 0.03) break; // expired above; nothing to draw
             const k = (now - p.t0) / 2200;
             const sp = (scene3dReady && typeof worldToScreen3D === 'function')
                 ? worldToScreen3D(p.x, p.z) : null;
             if (!sp || sp.behind) continue;
             // Pop in (overshoot scale), drift up, fade out at the end
             const pop = k < 0.12 ? 0.6 + (k / 0.12) * 0.55 : 1.15 - Math.min(0.15, (k - 0.12) * 0.5);
-            ctx.globalAlpha = k > 0.75 ? (1 - k) / 0.25 : 1;
+            ctx.globalAlpha = (k > 0.75 ? (1 - k) / 0.25 : 1) * popupA;
             ctx.textAlign = 'center';
             ctx.font = 'bold ' + Math.round(19 * pop) + 'px -apple-system,sans-serif';
             ctx.strokeStyle = 'rgba(0,0,0,0.65)';
