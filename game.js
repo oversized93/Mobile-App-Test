@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt283';
+const BUILD_TAG = 'gt284';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -928,12 +928,21 @@ function clubhouseFeeMul() {
 function saveResort() { saveData('resort', resort); }
 
 function coinsForScore(par, strokes) {
-    // base scales with membership size; great scores reward more, bad scores less
-    const diff = strokes - par;
-    const base = 30 + resort.members * 2;
-    const bonus = Math.max(0, -diff) * 20;
-    const penalty = Math.max(0, diff) * 6;
-    return Math.max(5, Math.round(base + bonus - penalty));
+    // Payouts sit inside the fee economy instead of scaling with
+    // membership — the old base of 30 + 2/member let a big resort's
+    // owner farm ~\$300 per Test Play hole, dwarfing all real income
+    const under = Math.max(0, par - strokes);
+    const over = Math.max(0, strokes - par);
+    if (worldPlaytest) {
+        // Owner testing their own course: pays like the green fee it is
+        const rec = (worldCourse.holes || []).find(h => currentHole
+            && h.tee && currentHole.tee
+            && h.tee.x === currentHole.tee.x && h.tee.y === currentHole.tee.y);
+        const fee = 3 + 2 * (rec ? holeDifficulty(rec) : 2);
+        return fee * 2 + under * 8;
+    }
+    // Away rounds (career/custom): a score-based tour prize
+    return Math.max(6, 18 + under * 14 - over * 4);
 }
 
 function awardCoins(n) {
