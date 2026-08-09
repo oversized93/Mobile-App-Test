@@ -3268,6 +3268,7 @@ function updateAmbientNPCs3D(dt, hole) {
                 } else if (s.pause > 0) {
                     s.pause -= dt;
                 } else {
+                    if (s.celeb != null) s.celeb = null;
                     walkStepAvoid(hole, s, gx, gz, dt);
                 }
             } else {
@@ -3399,6 +3400,7 @@ function updateAmbientNPCs3D(dt, hole) {
                             holeId: s.holeId, score: s.lastRound, par: s.par,
                             name: s.name || ''
                         });
+                        s.celeb = diff; // drives green-side body language
                         s.rounds = (s.rounds || 0) + 1;
                         golferThink(s,
                             diff <= -1 ? 'What a hole — loved it!'
@@ -3620,6 +3622,14 @@ function updateAmbientNPCs3D(dt, hole) {
         // Holed out: celebratory hops at the pin before the walk back
         if (s.route && s.pause > 0 && s.ptIdx === s.route.length - 1) {
             bob = Math.abs(Math.sin(t * 8 + s.phase)) * 4;
+        }
+        // Post-round beat on the green: the score decides the body
+        // language — birdies leap, pars hop politely, doubles just stand
+        // there staring at the card
+        if (s.returning && s.pause > 0 && s.celeb != null) {
+            bob = s.celeb <= -1 ? Math.abs(Math.sin(t * 11 + s.phase)) * 7.5
+                : s.celeb >= 2 ? Math.sin(t * 1.2 + s.phase) * 0.15
+                : Math.abs(Math.sin(t * 7 + s.phase)) * 2.5;
         }
         // Mid-tantrum: furious stomping hops, twice the celebration rate
         if (s.freakout > 0) {
