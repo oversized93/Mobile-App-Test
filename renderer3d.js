@@ -3405,6 +3405,13 @@ function updateAmbientNPCs3D(dt, hole) {
                             ? (hole.heights[nr2][nc2] || 0) : 0;
                         const toPin = (s.ptIdx + 2 === s.route.length)
                             ? s.route[s.route.length - 1] : null;
+                        const lr3 = Math.floor(lz / CELL);
+                        const lc3 = Math.floor(lx / CELL);
+                        if (typeof T !== 'undefined' && hole.grid
+                            && hole.grid[lr3]
+                            && hole.grid[lr3][lc3] === T.WATER) {
+                            s.fishAt = { x: lx, z: lz }; // stop to look for it
+                        }
                         const badRound = s.simResult && s.par
                             && s.simResult.strokes > s.par;
                         const lipDrama = !!(toPin && badRound
@@ -3542,6 +3549,7 @@ function updateAmbientNPCs3D(dt, hole) {
                             golferThink(s, 'It lipped OUT. Unbelievable.', -6);
                         }
                         s.lipDrama = false;
+                        s.fishAt = null; // next round starts clean
                         s.rounds = (s.rounds || 0) + 1;
                         golferThink(s,
                             diff <= -1 ? 'What a hole — loved it!'
@@ -3634,6 +3642,13 @@ function updateAmbientNPCs3D(dt, hole) {
                         golferThink(s, 'Nowhere to grab a bite out here', -7);
                     }
                 } else {
+                    if (s.fishAt && Math.hypot(s.x - s.fishAt.x,
+                        s.z - s.fishAt.z) < 30) {
+                        // Ball went in here somewhere — peer into the water
+                        s.fishAt = null;
+                        s.pause = 1.8; // expiry re-strikes: the penalty drop
+                        golferThink(s, 'There goes another ball...', -3);
+                    }
                     s.tx = nxt.x;
                     s.tz = nxt.z;
                     const rdx = nxt.x - s.x, rdz = nxt.z - s.z;
