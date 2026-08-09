@@ -4345,7 +4345,12 @@ function updateShuttle3D(dt, hole) {
                 w.tz = s.z - CELL * (5 + k * 2);
                 w.grp.visible = true;
             }
-            if (typeof notify === 'function') {
+            // The honk + the bus itself carry the moment; the toast only
+            // fires for the first visit and every third one after, so the
+            // banner strip isn't permanently occupied by shuttle news
+            s.visits = (s.visits || 0) + 1;
+            if (typeof notify === 'function'
+                && (s.visits === 1 || s.visits % 3 === 0)) {
                 notify('\u{1F68C} New arrivals! Visitors at the gate');
             }
             if (typeof playHonk === 'function') playHonk();
