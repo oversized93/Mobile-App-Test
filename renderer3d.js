@@ -2862,6 +2862,59 @@ function updateSwingFlashes3D() {
     }
 }
 
+// ---- NPC ball flights: white balls arcing down the fairways ----
+// The signature living-course visual: every ambient strike launches a
+// real airborne ball toward the next landing spot, shedding vapor.
+let npcFlights = [];
+function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1) {
+    if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
+    const dx = x1 - x0, dz = z1 - z0;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < 20) return; // tap-ins stay on the turf
+    const mat = new THREE.SpriteMaterial({
+        map: trailPuffTex, color: 0xffffff, transparent: true, opacity: 1,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    mat.toneMapped = false;
+    const spr = new THREE.Sprite(mat);
+    spr.position.set(x0, y0, z0);
+    spr.scale.set(3.4, 3.4, 1);
+    scene3d.add(spr);
+    npcFlights.push({
+        spr, mat, x0, y0, z0, x1, y1, z1,
+        apex: Math.min(60, 10 + dist * 0.28),
+        t0: performance.now(),
+        dur: 700 + dist * 5.5, // longer shots hang longer
+        puffAt: 0
+    });
+    if (npcFlights.length > 20) {
+        const old2 = npcFlights.shift();
+        scene3d.remove(old2.spr);
+        old2.mat.dispose();
+    }
+}
+function updateNpcFlights3D() {
+    const now = performance.now();
+    for (let i = npcFlights.length - 1; i >= 0; i--) {
+        const f = npcFlights[i];
+        const k = (now - f.t0) / f.dur;
+        if (k >= 1) {
+            scene3d.remove(f.spr);
+            f.mat.dispose();
+            npcFlights.splice(i, 1);
+            continue;
+        }
+        const x = f.x0 + (f.x1 - f.x0) * k;
+        const z = f.z0 + (f.z1 - f.z0) * k;
+        const y = f.y0 + (f.y1 - f.y0) * k + f.apex * 4 * k * (1 - k);
+        f.spr.position.set(x, y, z);
+        if (now - f.puffAt > 130 && k < 0.75) {
+            f.puffAt = now;
+            spawnTrailPuff3D(x, y, z);
+        }
+    }
+}
+
 // ---- Ball water splash: expanding foam ring at the entry point ----
 let ballSplashes = [];
 function spawnSplash3D(wx, wz) {
@@ -2902,6 +2955,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateSplashes3D();
     updateTrailPuffs3D();
     updateSwingFlashes3D();
+    updateNpcFlights3D();
     updateFireworks3D();
     // A freshly inspected golfer greets the camera (set by the game UI)
     if (window.__greetGolfer && npcStates.length) {
@@ -3081,6 +3135,15 @@ function updateAmbientNPCs3D(dt, hole) {
                         ? (hole.heights[gr][gc] || 0) : 0;
                     if (!trailPuffTex) spawnTrailPuff3D(-9999, -9999, -9999); // build tex
                     spawnSwingFlash3D(s.x + 3, gy2 + 14, s.z);
+                    const np2 = s.route[s.ptIdx + 1];
+                    if (np2) {
+                        const lx = np2.x + Math.random() * 14 - 7;
+                        const lz = np2.z + Math.random() * 14 - 7;
+                        const nr2 = Math.floor(lz / CELL), nc2 = Math.floor(lx / CELL);
+                        const ny2 = (hole.heights && hole.heights[nr2])
+                            ? (hole.heights[nr2][nc2] || 0) : 0;
+                        spawnNpcFlight3D(s.x + 3, gy2 + 14, s.z, lx, ny2 + 2, lz);
+                    }
                 }
             } else {
                 const nxt = s.route[s.ptIdx + 1];
