@@ -4951,6 +4951,13 @@ function updateCritters3D(hole) {
         bflyInst.instanceMatrix.needsUpdate = true;
     }
     if (gullInst && gullStates.length) {
+        // Gulls work the wind: orbits stretch downwind and pinch into
+        // the breeze, the way soaring birds actually hold a pattern
+        const gwSp = (typeof wind !== 'undefined' && wind)
+            ? (wind.speed || 0) : 0;
+        const gwAng = (typeof wind !== 'undefined' && wind)
+            ? (wind.angle || 0) : 0;
+        const gwx = Math.cos(gwAng), gwz = Math.sin(gwAng);
         for (let i = 0; i < gullStates.length; i++) {
             const s = gullStates[i];
             const a = t * s.spd + s.phase;
@@ -4959,10 +4966,11 @@ function updateCritters3D(hole) {
             // water with a banked dive, then climbing back out
             const dv = Math.max(0, Math.sin(t * 0.13 + s.phase * 3.7));
             const diveK = dv * dv * dv * dv * dv * dv;
-            dummy.position.set(s.x + Math.cos(a) * s.rad,
+            const along = Math.cos(a - gwAng) * gwSp * 1.6;
+            dummy.position.set(s.x + Math.cos(a) * s.rad + gwx * along,
                                s.h + Math.sin(t * 0.7 + s.phase) * 6
                                    - diveK * Math.max(0, s.h - 12),
-                               s.z + Math.sin(a) * s.rad);
+                               s.z + Math.sin(a) * s.rad + gwz * along);
             dummy.rotation.set(diveK * 0.7, -a,
                 Math.sin(t * 3 + s.phase) * 0.25 + diveK * 0.5);
             dummy.scale.set(1, 1, 1);
