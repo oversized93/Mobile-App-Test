@@ -1702,12 +1702,21 @@ function buildTerrain3D(hole, opts) {
         };
         beaconGroups = [];
         beaconMats = [];
+        windowGlowMatRef = null;
         if (hole.decor) {
             for (const d of hole.decor) {
                 const name = DECOR_MODELS[d.t];
                 if (!name) continue;
                 put(name, d.x, d.y, d.rot || 0);
                 if (d.t === 'lighthouse') addLighthouseBeacon(d.x * CELL, hAt(d.x, d.y) + 195, d.y * CELL);
+                // Buildings glow from the inside after dark
+                const WINDOW_GLOWS = { clubhouse: [46, 64], kiosk: [24, 34],
+                    stall: [22, 32], windmill: [40, 40], gazebo: [26, 36] };
+                const wg = WINDOW_GLOWS[d.t];
+                if (wg) {
+                    addWindowGlow(d.x * CELL, hAt(d.x, d.y) + wg[0],
+                        d.y * CELL, wg[1]);
+                }
             }
         }
         // Wooden bridges wherever the walkway crosses water
@@ -3689,6 +3698,38 @@ function updateFireflies3D(hole) {
 
 // ---- Path lamps: warm globes on posts along the walkways ----
 // The head material brightens at night via updateDayNightTint.
+let windowGlowMatRef = null; // building window light, night-driven
+let windowGlowTex = null;
+
+// Warm interior-light sprite hovering at a building's window line —
+// invisible by day, faded in by the night pass alongside the lamps
+function addWindowGlow(wx, wy, wz, scale) {
+    if (!windowGlowTex) {
+        const cv = document.createElement('canvas');
+        cv.width = 64; cv.height = 64;
+        const g = cv.getContext('2d');
+        const rg = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+        rg.addColorStop(0, 'rgba(255,214,140,0.95)');
+        rg.addColorStop(0.45, 'rgba(255,190,100,0.5)');
+        rg.addColorStop(1, 'rgba(255,170,80,0)');
+        g.fillStyle = rg;
+        g.fillRect(0, 0, 64, 64);
+        windowGlowTex = new THREE.CanvasTexture(cv);
+    }
+    if (!windowGlowMatRef) {
+        windowGlowMatRef = new THREE.SpriteMaterial({
+            map: windowGlowTex, transparent: true, opacity: 0,
+            depthWrite: false
+        });
+        windowGlowMatRef.toneMapped = false;
+    }
+    const sp = new THREE.Sprite(windowGlowMatRef);
+    sp.position.set(wx, wy, wz);
+    sp.scale.set(scale, scale * 0.7, 1);
+    sp.renderOrder = 4;
+    terrainGroup.add(sp);
+}
+
 let lampHeadMatRef = null;
 let lampPoolMatRef = null;  // warm light pools under lamps (night only)
 let moonSprite = null;      // crescent riding opposite the sun
@@ -3996,6 +4037,7 @@ function updateDayNightTint(minutes) {
     for (const sm of teeSignMats) sm.opacity = 0.55 + 0.45 * darkK;
     for (const gm of greenGlowMats) gm.opacity = darkK * darkK * 0.5;
     if (lampPoolMatRef) lampPoolMatRef.opacity = darkK * darkK * 0.85;
+    if (windowGlowMatRef) windowGlowMatRef.opacity = darkK * darkK * 0.9;
     // Lamp globes: dull stone by day, warm glow after dark
     if (lampHeadMatRef) {
         const nw = 1 - dayW;
