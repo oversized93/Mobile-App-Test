@@ -126,6 +126,26 @@ toggle) now rebuild the scene immediately, a latent bug since gt195.
 Post-change full battery (matrix, land flow, NPC movement, edit flow)
 all green at checkpoint gt295.
 
+### Parity run continued (gt296–gt321)
+First-impression + living-ball sprint. Load path: procedural island
+icons/splash screen, two-phase heavy-asset swap, and grid-cluster GLB
+decimation (golfer 2.3MB→392KB, grandstand 1.1MB→348KB — whole asset
+set now under 3.5MB). Then the ball became real: every ambient strike
+launches a visible arcing ball with vapor trail (gt305), landings hop
+twice / splash in water / plug in sand with grit (gt306–307), approaches
+trickle to the cup (gt308), putts roll on the ground (gt312), shots draw
+and fade by driver skill (gt315), and bad rounds get a lip-out with a
+green-side tantrum (gt318–319). Around it: dawn sprinklers on a 5:30–
+7:30 window (gt309), pre-shot facing fix — stance, flash, and ball
+departure finally agree (gt310), score-aware celebrations (gt311), golf
+bags beside waiting players (gt313), divot flecks on full swings
+(gt314), stiff-approach gallery murmurs + tournament applause (gt317),
+hole-card recent-form sparkline (gt316), roster last-score chips
+(gt320), and caddie tips on under-par finishes riding the fee pipeline
+(gt321). Full matrix green at checkpoints gt304, gt309, gt313, gt317,
+gt320. One save from a dead-code drift: a duplicate firefly system was
+caught pre-commit in gt317 — fireflies already existed.
+
 ### Open thread: Mixamo skinned animations
 `assets/meshy/golfer_for_mixamo.obj` is committed for Mixamo auto-rigging.
 When FBX clips (Idle, Walking, Golf Drive, Golf Putt + celebration;
