@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt245';
+const BUILD_TAG = 'gt246';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -696,6 +696,7 @@ function endWorldPlaytest() {
 }
 
 function startHoleWizard() {
+    owRosterOpen = false; // the wizard owns the top of the screen
     const nextId = (worldCourse.holes.reduce((m, h) => Math.max(m, h.id || 0), 0) || 0) + 1;
     holeWizard = {
         step: 'tee',
