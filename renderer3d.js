@@ -489,6 +489,57 @@ const ASSET_TARGET_H = {
 let worldAssets = null;
 let worldAssetsLoading = false;
 
+// ---- Rigged golfer: skinned + animated, used for named players ----
+// Authored in-house (headless Blender): 10-bone rig over the shipped
+// decimated mesh with Idle / Walk / Swing clips.
+let riggedGolfer = null;
+let riggedGolferLoading = false;
+function loadRiggedGolfer() {
+    if (riggedGolfer || riggedGolferLoading
+        || typeof THREE.GLTFLoader === 'undefined') return;
+    riggedGolferLoading = true;
+    new THREE.GLTFLoader().load(
+        (window.ASSET_BASE || '') + 'assets/meshy/golfer_rigged.glb',
+        (g) => {
+            g.scene.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(g.scene);
+            const h = Math.max(0.001, box.max.y - box.min.y);
+            g.scene.traverse((o) => {
+                if (o.isMesh) {
+                    o.castShadow = true;
+                    o.frustumCulled = false;
+                    if (o.material && o.material.map) {
+                        o.material.map.encoding = THREE.sRGBEncoding;
+                        o.material.needsUpdate = true;
+                    }
+                }
+            });
+            riggedGolfer = { root: g.scene, clips: g.animations,
+                scale: 34 / h, minY: box.min.y };
+        },
+        undefined,
+        () => { riggedGolferLoading = false; });
+}
+
+// Skinned-mesh aware clone (r128 has no SkeletonUtils in our vendored set)
+function cloneSkinned(source) {
+    const srcList = [], dstList = [];
+    const clone = source.clone(true);
+    source.traverse((n) => srcList.push(n));
+    clone.traverse((n) => dstList.push(n));
+    const map = new Map();
+    for (let i = 0; i < srcList.length; i++) map.set(srcList[i], dstList[i]);
+    clone.traverse((node) => {
+        if (!node.isSkinnedMesh) return;
+        const src = srcList[dstList.indexOf(node)];
+        const bones = src.skeleton.bones.map((b) => map.get(b) || b);
+        node.bind(new THREE.Skeleton(bones, src.skeleton.boneInverses),
+            node.matrixWorld);
+    });
+    return clone;
+}
+let riggedClones = []; // live clones, cleared on NPC rebuild
+
 function loadWorldAssets() {
     if (worldAssets || worldAssetsLoading || typeof THREE.GLTFLoader === 'undefined') return;
     worldAssetsLoading = true;
@@ -2567,6 +2618,13 @@ function setupAmbientNPCs(hole) {
         ? Math.min(24, 4 + Math.floor(resort.members / 3)) : NPC_COUNT;
     const walkerCount = npcPathCells.length >= 4 ? memberCrowd : 0;
     npcWalkerCount = walkerCount;
+    // Rigged hero golfers: drop stale clones (terrain rebuild replaced
+    // the scene contents), kick the lazy load
+    for (const rc of riggedClones) {
+        if (rc.group.parent) rc.group.parent.remove(rc.group);
+    }
+    riggedClones = [];
+    loadRiggedGolfer();
     // Dawn sprinklers: spaced across the fairways, rebuilt with the terrain
     sprinklerSpots = [];
     for (let r = 0; r < hole.rows && sprinklerSpots.length < 14; r++) {
@@ -3492,6 +3550,11 @@ function updateAmbientNPCs3D(dt, hole) {
                         ? (hole.heights[gr][gc] || 0) : 0;
                     if (!trailPuffTex) spawnTrailPuff3D(-9999, -9999, -9999); // build tex
                     spawnSwingFlash3D(s.x + 3, gy2 + 14, s.z);
+                    // Rigged golfers play the real swing at the strike
+                    if (s.__rig) {
+                        s.__rig.cur = null; // force re-enter Swing
+                        s.__rig.swingUntil = performance.now() + 1400;
+                    }
                     const np2 = s.route[s.ptIdx + 1];
                     if (np2) {
                         const lx = np2.x + Math.random() * 14 - 7;
@@ -3990,13 +4053,60 @@ function updateAmbientNPCs3D(dt, hole) {
         dummy.position.y = gy + 18.5 + bob;
         dummy.updateMatrix();
         npcHeadInst.setMatrixAt(i, dummy.matrix);
+        // Named golfers upgrade to the skinned rig when it's loaded:
+        // real Idle / Walk / Swing animation instead of the glide
+        if (s.name && riggedGolfer && !s.gone) {
+            if (!s.__rig) {
+                const grp = cloneSkinned(riggedGolfer.root);
+                terrainGroup.add(grp);
+                const mixer = new THREE.AnimationMixer(grp);
+                const acts = {};
+                for (const c of riggedGolfer.clips) {
+                    acts[c.name] = mixer.clipAction(c);
+                }
+                s.__rig = { group: grp, mixer: mixer, actions: acts,
+                    cur: null, swingUntil: 0 };
+                riggedClones.push(s.__rig);
+            }
+            const rg2 = s.__rig;
+            rg2.group.position.set(s.x,
+                gy - riggedGolfer.minY * riggedGolfer.scale, s.z);
+            rg2.group.rotation.y = yaw;
+            rg2.group.scale.setScalar(riggedGolfer.scale);
+            let want = still ? 'Idle' : 'Walk';
+            if (performance.now() < rg2.swingUntil) want = 'Swing';
+            if (rg2.cur !== want && rg2.actions[want]) {
+                rg2.mixer.stopAllAction();
+                const a2 = rg2.actions[want];
+                a2.reset();
+                if (want === 'Swing') {
+                    a2.setLoop(THREE.LoopOnce);
+                    a2.time = 0.55; // skip straight into the coil
+                } else {
+                    a2.setLoop(THREE.LoopRepeat, Infinity);
+                }
+                a2.play();
+                rg2.cur = want;
+            }
+            rg2.mixer.update(dt);
+        }
         if (npcModelInsts) {
-            dummy.position.set(s.x, gy + bob, s.z);
-            dummy.rotation.set(0, yaw, 0);
-            dummy.scale.set(golferModelScale, golferModelScale, golferModelScale);
-            dummy.updateMatrix();
-            for (const im of npcModelInsts) im.setMatrixAt(i, dummy.matrix);
-            dummy.scale.set(1, 1, 1);
+            if (s.__rig) {
+                // Rig replaces the static instance for this visitor
+                dummy.position.set(0, -900, 0);
+                dummy.rotation.set(0, 0, 0);
+                dummy.scale.set(0.001, 0.001, 0.001);
+                dummy.updateMatrix();
+                for (const im of npcModelInsts) im.setMatrixAt(i, dummy.matrix);
+                dummy.scale.set(1, 1, 1);
+            } else {
+                dummy.position.set(s.x, gy + bob, s.z);
+                dummy.rotation.set(0, yaw, 0);
+                dummy.scale.set(golferModelScale, golferModelScale, golferModelScale);
+                dummy.updateMatrix();
+                for (const im of npcModelInsts) im.setMatrixAt(i, dummy.matrix);
+                dummy.scale.set(1, 1, 1);
+            }
         }
         if (npcHatInst && i < npcWalkerCount) {
             // Every other walker wears a hat; the rest hide theirs

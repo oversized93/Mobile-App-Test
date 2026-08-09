@@ -186,7 +186,18 @@ with both pillars (gt359), pacing re-audited healthy (parcel two
 mid-day-two). gt350 milestone ran the full battery green; matrix
 checkpoints gt354, gt358, gt362, gt366.
 
-### Open thread: Mixamo skinned animations
+### Resolved in-house: skinned golfer animations (gt370)
+The Mixamo wait ended by doing the rigging ourselves: headless Blender
+(pip-installed bpy) builds a 10-bone rig over the shipped decimated
+golfer — manual segment-distance weights with region guards (club tube,
+pinned base slab, shoe exclusions) — and authors Idle / Walk / Swing
+clips, exported as assets/meshy/golfer_rigged.glb (536KB, 3 clips).
+Named route golfers upgrade to skinned clones with AnimationMixer
+states (walkers stay instanced statics); strikes retrigger the Swing
+from mid-coil. Build script preserved at tools/rig_golfer.py. Mixamo
+FBX clips can still replace these later — the mixer wiring is done.
+
+### Open thread: Mixamo skinned animations (superseded by gt370)
 `assets/meshy/golfer_for_mixamo.obj` is committed for Mixamo auto-rigging.
 When FBX clips (Idle, Walking, Golf Drive, Golf Putt + celebration;
 FBX Binary, With Skin, 30fps) land in `assets/mixamo/`, convert via the
