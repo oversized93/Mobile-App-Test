@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt177';
+const BUILD_TAG = 'gt178';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -7273,6 +7273,17 @@ function initAmbientAudio() {
         scheduleChirp();
         scheduleGullCry();
         scheduleFrogCroak();
+        // Thunder rolls once as each shower sets in
+        let prevRainLevel = 0;
+        setInterval(() => {
+            if (!audioCtx) return;
+            const env = (typeof rainEnvNow === 'number') ? rainEnvNow : 0;
+            if (env > 0.5 && prevRainLevel <= 0.5
+                && (state === 'overworld' || state === 'playing' || state === 'menu')) {
+                playThunder();
+            }
+            prevRainLevel = env;
+        }, 1000);
         // Courtesy honk when the cart rolls close past someone (8s cooldown)
         let lastHonk = 0;
         setInterval(() => {
@@ -7366,6 +7377,37 @@ function playFanfare() {
             o.start(t0 + dt);
             o.stop(t0 + dt + 0.32);
         });
+    } catch (e) {}
+}
+
+// Distant thunder: a slow swell of deep filtered noise
+function playThunder() {
+    if (!audioCtx) return;
+    try {
+        const t0 = audioCtx.currentTime;
+        const len = 2.2;
+        const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * len, audioCtx.sampleRate);
+        const d = buf.getChannelData(0);
+        let last = 0;
+        for (let k = 0; k < d.length; k++) {
+            // Brown-ish noise: integrate white noise
+            last = (last + (Math.random() * 2 - 1) * 0.02);
+            last *= 0.998;
+            d[k] = last * 3;
+        }
+        const srcN = audioCtx.createBufferSource();
+        srcN.buffer = buf;
+        const lp = audioCtx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 140;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(0.22, t0 + 0.5);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + len);
+        srcN.connect(lp);
+        lp.connect(g);
+        g.connect(audioMaster);
+        srcN.start(t0);
     } catch (e) {}
 }
 
