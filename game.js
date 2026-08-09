@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt250';
+const BUILD_TAG = 'gt251';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -897,6 +897,17 @@ function finalizeHole() {
     holeWizard = null;
 }
 
+// What the resort "deserves": holes draw players, decor draws
+// hangers-on, amenities hold their boost permanently. Membership
+// drifts toward this — shown on the Manage screen as capacity.
+function memberCapacity() {
+    const amenityMembers = AMENITIES.reduce((sum, a) =>
+        sum + (resort.amenities && resort.amenities[a.id] ? a.memberBoost : 0), 0);
+    return 5 + worldCourse.holes.length * 4 + amenityMembers
+        + Math.floor((worldCourse.decor || []).reduce(
+            (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) / 100);
+}
+
 const AMENITIES = [
     { id: 'clubhouse', name: 'Clubhouse', icon: '\u{1F3DB}\uFE0F', cost: 200, memberBoost: 10,
       desc: 'Somewhere for golfers to relax after a round.' },
@@ -1292,13 +1303,7 @@ function tickWorld(dt) {
     // Membership drifts toward what the resort deserves: holes draw
     // players, decor investment draws hangers-on. One member per game
     // minute so growth feels earned, not instant.
-    // Amenities hold their boost permanently — without counting them
-    // here, the clubhouse's +members would drain right back to target
-    const amenityMembers = AMENITIES.reduce((sum, a) =>
-        sum + (resort.amenities && resort.amenities[a.id] ? a.memberBoost : 0), 0);
-    const memberTarget = 5 + worldCourse.holes.length * 4 + amenityMembers
-        + Math.floor((worldCourse.decor || []).reduce(
-            (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) / 100);
+    const memberTarget = memberCapacity();
     if (resort.__memTick == null) resort.__memTick = resort.worldClock;
     if (resort.worldClock - resort.__memTick > 60) {
         resort.__memTick = resort.worldClock;
@@ -3251,10 +3256,29 @@ function drawManage() {
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '10px -apple-system,sans-serif';
     ctx.fillText('MEMBERS', L.sidebarX + 14, L.statsY + 18);
-    ctx.fillStyle = '#81d4fa';
-    ctx.font = 'bold 22px -apple-system,sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(String(resort.members), L.sidebarX + L.sidebarW - 14, L.statsY + 38);
+    {
+        const cap = memberCapacity();
+        ctx.fillStyle = '#81d4fa';
+        ctx.font = 'bold 22px -apple-system,sans-serif';
+        ctx.textAlign = 'right';
+        const capTxt = ' / ' + cap;
+        ctx.font = '12px -apple-system,sans-serif';
+        const capW = ctx.measureText(capTxt).width;
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.fillText(capTxt, L.sidebarX + L.sidebarW - 14, L.statsY + 38);
+        ctx.fillStyle = '#81d4fa';
+        ctx.font = 'bold 22px -apple-system,sans-serif';
+        ctx.fillText(String(resort.members),
+            L.sidebarX + L.sidebarW - 14 - capW, L.statsY + 38);
+        // Room to grow reads as an invitation, not a bare number
+        if (resort.members >= cap) {
+            ctx.fillStyle = 'rgba(255,210,74,0.7)';
+            ctx.font = '9px -apple-system,sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('at capacity \u2014 holes, decor + clubhouse raise it',
+                L.sidebarX + 14, L.statsY + 50);
+        }
+    }
     // Divider
     ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     ctx.beginPath();
