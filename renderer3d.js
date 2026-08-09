@@ -2893,22 +2893,47 @@ function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1) {
         old2.mat.dispose();
     }
 }
-function updateNpcFlights3D() {
+function updateNpcFlights3D(hole) {
     const now = performance.now();
     for (let i = npcFlights.length - 1; i >= 0; i--) {
         const f = npcFlights[i];
         const k = (now - f.t0) / f.dur;
         if (k >= 1) {
-            scene3d.remove(f.spr);
-            f.mat.dispose();
-            npcFlights.splice(i, 1);
+            // Touchdown: splash out in water, else two dampened hops
+            const wc = Math.floor(f.x1 / CELL), wr = Math.floor(f.z1 / CELL);
+            const wet = f.bounce == null && typeof T !== 'undefined'
+                && hole && hole.grid && hole.grid[wr]
+                && hole.grid[wr][wc] === T.WATER;
+            if (wet) {
+                spawnSplash3D(f.x1, f.z1);
+                scene3d.remove(f.spr);
+                f.mat.dispose();
+                npcFlights.splice(i, 1);
+                continue;
+            }
+            f.bounce = (f.bounce || 0) + 1;
+            if (f.bounce > 2) {
+                scene3d.remove(f.spr);
+                f.mat.dispose();
+                npcFlights.splice(i, 1);
+                continue;
+            }
+            const len = Math.hypot(f.x1 - f.x0, f.z1 - f.z0) || 1;
+            const ux = (f.x1 - f.x0) / len, uz = (f.z1 - f.z0) / len;
+            const hop = f.bounce === 1 ? 8 : 4;
+            f.x0 = f.x1; f.z0 = f.z1; f.y0 = f.y1;
+            f.x1 += ux * hop; f.z1 += uz * hop;
+            f.apex = Math.max(1.2, f.apex * (f.bounce === 1 ? 0.09 : 0.045));
+            f.t0 = now;
+            f.dur = f.bounce === 1 ? 320 : 260;
             continue;
         }
         const x = f.x0 + (f.x1 - f.x0) * k;
         const z = f.z0 + (f.z1 - f.z0) * k;
         const y = f.y0 + (f.y1 - f.y0) * k + f.apex * 4 * k * (1 - k);
         f.spr.position.set(x, y, z);
-        if (now - f.puffAt > 130 && k < 0.75) {
+        if (f.bounce === 2) f.mat.opacity = 1 - k; // roll-out fade
+        if (!f.bounce && now - f.puffAt > 130 && k < 0.75) {
             f.puffAt = now;
             spawnTrailPuff3D(x, y, z);
         }
@@ -2955,7 +2980,7 @@ function updateAmbientNPCs3D(dt, hole) {
     updateSplashes3D();
     updateTrailPuffs3D();
     updateSwingFlashes3D();
-    updateNpcFlights3D();
+    updateNpcFlights3D(hole);
     updateFireworks3D();
     // A freshly inspected golfer greets the camera (set by the game UI)
     if (window.__greetGolfer && npcStates.length) {
