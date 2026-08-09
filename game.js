@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt334';
+const BUILD_TAG = 'gt335';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5530,7 +5530,13 @@ function focusGolfer(name) {
 
 // ---- Golfer inspector (reference-style right panel) ----
 function golferPanelLayout() {
-    const w = 232, h = 312;
+    // Extra rows appear for champions and record holders — size to fit
+    const car = owSelectedGolfer
+        ? (worldCourse.golferCareers || {})[owSelectedGolfer] : null;
+    const hasTitles = !!(car && car.titles);
+    const hasRecord = owSelectedGolfer && Object.values(worldCourse.holeStats || {})
+        .some(st => st.bestBy === owSelectedGolfer);
+    const w = 232, h = 312 + (hasTitles ? 14 : 0) + (hasRecord ? 0 : 0);
     return { x: W() - w - 10, y: 58, w, h };
 }
 
@@ -5603,6 +5609,16 @@ function drawGolferPanel(s) {
     const tierName = s.tier === 'gold' ? 'Gold ★★' : s.tier === 'silver' ? 'Silver ★' : 'Basic';
     row('Membership: ' + tierName, 'Freakouts: ' + (s.freakouts || 0));
     {
+        // Tournament pedigree: career titles won on this course
+        const carT = ((worldCourse.golferCareers || {})[s.name] || {}).titles;
+        if (carT) {
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#ffd24a';
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            ctx.fillText('\u{1F3C6} ' + carT + (carT === 1
+                ? ' tournament title' : ' tournament titles'), lx, y);
+            y += 14;
+        }
         const held = Object.entries(worldCourse.holeStats || {})
             .filter(([, st]) => st.bestBy === s.name)
             .map(([id, st]) => 'H' + id + ' (' + st.best + ')');
