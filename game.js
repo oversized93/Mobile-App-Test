@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt301';
+const BUILD_TAG = 'gt302';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -8419,6 +8419,16 @@ function drawNotification(dt) {
 // ---- Main Game Loop ----
 function gameLoop(time) {
     window.__gameAlive = true; // boot watchdog: the loop is running
+    // First live frame dismisses the boot splash
+    if (!window.__splashGone) {
+        window.__splashGone = true;
+        const sp = document.getElementById('boot-splash');
+        if (sp) {
+            sp.style.transition = 'opacity 0.4s';
+            sp.style.opacity = '0';
+            setTimeout(() => sp.remove(), 450);
+        }
+    }
     requestAnimationFrame(gameLoop);
 
     if (!lastFrameTime) lastFrameTime = time;
