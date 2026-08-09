@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt297';
+const BUILD_TAG = 'gt298';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -3403,7 +3403,9 @@ function drawManage() {
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '10px -apple-system,sans-serif';
-    ctx.fillText('ISLAND BIOME', L.sidebarX + 14, L.biomeY + 18);
+    ctx.fillText('ISLAND BIOME' + (worldCourse.terrainSeed != null
+        ? '  \u2022  SEED ' + worldCourse.terrainSeed : ''),
+        L.sidebarX + 14, L.biomeY + 18);
     manageBiomeRects = [];
     {
         const bws = (L.sidebarW - 28 - 12) / 3;
