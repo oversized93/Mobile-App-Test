@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt335';
+const BUILD_TAG = 'gt336';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5436,7 +5436,9 @@ function drawOverworld() {
                 : 'No rounds on record yet';
             ctx.globalAlpha = al;
             const pw2 = 250, ph2 = 52;
-            const px2 = (W() - pw2) / 2, py2 = H() - ph2 - 24;
+            // In the wizard, ride above the confirm/preview pills
+            const px2 = (W() - pw2) / 2;
+            const py2 = H() - ph2 - 24 - (holeWizard ? 96 : 0);
             glossyRect(px2, py2, pw2, ph2, 12, '#22384f');
             ctx.textAlign = 'center';
             ctx.fillStyle = '#fff';
@@ -6138,6 +6140,22 @@ function drawHoleWizardOverlay() {
 
         // Confirm + Cancel pills at bottom
         const btnW = 120, btnH = 42, bY = H() - btnH - 12;
+        // Flyover preview: see the drafted hole like a broadcast
+        {
+            const pvW = 130, pvH = 30, pvY = bY - pvH - 8;
+            ctx.fillStyle = owFlyover ? 'rgba(25,118,210,0.9)'
+                : 'rgba(10,26,38,0.85)';
+            roundRect((W() - pvW) / 2, pvY, pvW, pvH, pvH / 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(58,219,232,0.5)';
+            ctx.lineWidth = 1.2;
+            roundRect((W() - pvW) / 2, pvY, pvW, pvH, pvH / 2);
+            ctx.stroke();
+            ctx.fillStyle = '#8fe3ec';
+            ctx.font = 'bold 12px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('\u{1F3A5} Preview', W() / 2, pvY + pvH / 2 + 4);
+        }
         // Cancel (left)
         ctx.fillStyle = 'rgba(40,40,40,0.85)';
         roundRect(W() / 2 - btnW - 10, bY, btnW, btnH, btnH / 2);
@@ -6253,6 +6271,8 @@ function overworldHUDHit(sx, sy) {
             const btnW = 120, btnH = 42, bY = H() - btnH - 12;
             if (hitBtn(sx, sy, W() / 2 - btnW - 10, bY, btnW, btnH)) return 'wiz:cancel';
             if (hitBtn(sx, sy, W() / 2 + 10, bY, btnW, btnH)) return 'wiz:confirm';
+            const pvW = 130, pvH = 30, pvY = bY - pvH - 8;
+            if (hitBtn(sx, sy, (W() - pvW) / 2, pvY, pvW, pvH)) return 'wiz:preview';
             // - badges near each waypoint (remove)
             const pts = [w.tee, ...w.waypoints, w.pin];
             const screens = pts.map(p => cellCenterScreen(p.x, p.y));
@@ -6442,6 +6462,19 @@ function overworldTouchStart(sx, sy) {
         return;
     }
     if (hit === 'wiz:cancel') { cancelHoleWizard(); return; }
+    if (hit === 'wiz:preview') {
+        const w = holeWizard;
+        if (w && w.tee && w.pin && !owFlyover) {
+            const yds0 = Math.round(polylineLengthYards(w));
+            startHoleFlyover({
+                id: w.editing != null ? w.editing : '?',
+                name: 'Drafted hole',
+                par: w.simParEst || parFromYards(yds0),
+                tee: w.tee, waypoints: w.waypoints, pin: w.pin
+            });
+        }
+        return;
+    }
     if (hit === 'wiz:confirm') { finalizeHole(); return; }
     if (hit && hit.startsWith('wiz:add:')) {
         const i = parseInt(hit.slice(8), 10);
