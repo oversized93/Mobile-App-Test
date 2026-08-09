@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt248';
+const BUILD_TAG = 'gt249';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -754,6 +754,12 @@ function computeCourseRating() {
         (s, d) => s + (DECOR_COSTS[d.t] || 0), 0);
     r += Math.min(1, decorVal / 1000);
     if ((worldCourse.decor || []).some(d => d.t === 'kiosk' || d.t === 'stall')) r += 0.5;
+    // Clubhouse level lifts the resort's prestige (reference-style):
+    // each upgrade tier is worth a quarter star
+    if (resort.amenities) {
+        if (resort.amenities.clubhouse2) r += 0.25;
+        if (resort.amenities.clubhouse3) r += 0.25;
+    }
     if (typeof npcStates !== 'undefined' && npcStates.length) {
         const moods = npcStates.filter(s => s.mood != null).map(s => s.mood);
         if (moods.length) {
@@ -3370,6 +3376,10 @@ function drawManage() {
             parts.push(['invest in decor', Math.min(1, decorVal / 1000)]);
             parts.push(['add a kiosk or stall',
                 (worldCourse.decor || []).some(d => d.t === 'kiosk' || d.t === 'stall') ? 1 : 0]);
+            parts.push(['upgrade the clubhouse',
+                resort.amenities.clubhouse3 ? 1
+                    : resort.amenities.clubhouse2 ? 0.5
+                    : resort.amenities.clubhouse ? 0.2 : 0]);
             parts.sort((a, b) => a[1] - b[1]);
             ctx.fillStyle = 'rgba(255,210,74,0.75)';
             ctx.font = '10px -apple-system,sans-serif';
