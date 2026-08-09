@@ -148,7 +148,10 @@ instancing on low-end devices).
       amber gripes at the actual splash cell, freakouts pin red where the
       tantrum happened; tap to read + acknowledge, unread pins age out
       after ~3 game hours; cap 12)
-- [ ] Per-facility stats panels
+- [x] Per-facility stats panels (gt200: kiosks/stalls keep daily +
+      lifetime sales books with an hourly histogram; tap one with the
+      hand tool for an inspector card — sales today, lifetime revenue,
+      busiest hour; daily books reset at the midnight ledger rollover)
 
 ### M5 — Atmosphere & expansion (largely shipped by the parity run)
 - [x] Night cycle (signs, glows, lamp pools, moon, stars) — lighting is

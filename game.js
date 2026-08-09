@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt199';
+const BUILD_TAG = 'gt200';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -450,6 +450,8 @@ let gameSpeed = 1;        // 0 = paused, 1 = normal, 4 = fast-forward
 let owSpeedRects = null;  // screen rects of the speed strip (set each draw)
 let owRosterChip = null;  // screen rect of the roster chip (set each draw)
 let owComplaintChip = null; // screen rect of the top-bar complaint badge
+let owSelectedFacility = null; // decor index of the inspected kiosk/stall
+let owFacilityCardRect = null;
 let owFlyout = null;      // parent id whose sub-options are showing
 let owCategory = 'surface'; // retained for save-compat; no longer drives UI
 
@@ -986,6 +988,10 @@ function tickWorld(dt) {
             led.income = 0;
             led.expenses = 0;
             led.day = today;
+            // Vendors start the day with fresh books
+            for (const d of (worldCourse.decor || [])) {
+                if (d.salesToday || d.revToday) { d.salesToday = 0; d.revToday = 0; }
+            }
             const up = dailyUpkeep();
             const charged = Math.min(resort.coins, up.total);
             resort.coins -= charged;
@@ -4433,6 +4439,66 @@ function drawOverworld() {
     }
 
     // ---- Hole inspector card (top right, GolfTopia-style) ----
+    // ---- Facility inspector card: a vendor's daily + lifetime books ----
+    owFacilityCardRect = null;
+    if (owSelectedFacility != null && !holeWizard) {
+        const fd = worldCourse.decor && worldCourse.decor[owSelectedFacility];
+        if (!fd || (fd.t !== 'kiosk' && fd.t !== 'stall')) {
+            owSelectedFacility = null;
+        } else {
+            const w0 = 216, h0 = 148;
+            const x0 = W() - w0 - 10, y0 = 58;
+            ctx.fillStyle = 'rgba(16,28,40,0.95)';
+            roundRect(x0, y0, w0, h0, 14); ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.lineWidth = 1.5;
+            roundRect(x0, y0, w0, h0, 14); ctx.stroke();
+            glossyRect(x0 + 3, y0 + 3, w0 - 6, 26, 11, '#7a5a24');
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px -apple-system,sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(fd.t === 'kiosk' ? '\u{1F964} Drinks Kiosk'
+                : '\u{1F32D} Snack Stall', x0 + 14, y0 + 21);
+            const rows2 = [
+                ['Sales today', (fd.salesToday || 0) + ' \u2022 $' + (fd.revToday || 0)],
+                ['Lifetime', (fd.salesLife || 0) + ' \u2022 $' + (fd.revLife || 0)]
+            ];
+            // Busiest hour from the per-hour sale histogram
+            if (fd.hourHist) {
+                let bh = -1, bn = 0;
+                for (const [h2, n2] of Object.entries(fd.hourHist)) {
+                    if (n2 > bn) { bn = n2; bh = +h2; }
+                }
+                if (bh >= 0) {
+                    const ap2 = bh >= 12 ? 'PM' : 'AM';
+                    rows2.push(['Busiest hour',
+                        (((bh + 11) % 12) + 1) + ' ' + ap2]);
+                }
+            }
+            let ry2 = y0 + 50;
+            for (const [lab, val] of rows2) {
+                ctx.fillStyle = 'rgba(255,255,255,0.55)';
+                ctx.font = '11px -apple-system,sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(lab, x0 + 14, ry2);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 11px -apple-system,sans-serif';
+                ctx.fillText(val, x0 + w0 - 14, ry2);
+                ry2 += 24;
+            }
+            if (!(fd.salesLife > 0)) {
+                ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                ctx.font = '10px -apple-system,sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('No sales yet \u2014 golfers buy between rounds',
+                    x0 + 14, ry2);
+            }
+            owFacilityCardRect = { x: x0, y: y0, w: w0, h: h0 };
+        }
+    }
+
+
     if (owSelectedHole != null && !holeWizard) {
         const selHole = worldCourse.holes.find(h => h.id === owSelectedHole);
         if (!selHole) {
@@ -5596,6 +5662,14 @@ function overworldTouchStart(sx, sy) {
         owSelectedHole = null;
     }
 
+    if (owSelectedFacility != null && !holeWizard) {
+        if (owFacilityCardRect && hitBtn(sx, sy, owFacilityCardRect.x,
+            owFacilityCardRect.y, owFacilityCardRect.w, owFacilityCardRect.h)) {
+            return; // card is read-only; swallow the tap
+        }
+        owSelectedFacility = null;
+    }
+
     // ---- Tap a golfer (navigation mode) — checked before hole markers so
     // a golfer standing on the tee is still selectable. Only route golfers
     // carry a name; ambient walkers are anonymous.
@@ -5626,6 +5700,24 @@ function overworldTouchStart(sx, sy) {
                 owSelectedGolfer = best.name;
                 owSelectedHole = null;
                 window.__greetGolfer = best.name;
+                return;
+            }
+        }
+        // ---- Tap a kiosk/stall to inspect its sales ----
+        if (worldCourse.decor) {
+            let fb = -1, fdd = 24 * 24;
+            for (let i = 0; i < worldCourse.decor.length; i++) {
+                const d = worldCourse.decor[i];
+                if (d.t !== 'kiosk' && d.t !== 'stall') continue;
+                const p = cellCenterScreen(d.x - 0.5, d.y - 0.5);
+                if (!p || p.behind) continue;
+                const dd = (sx - p.x) * (sx - p.x) + (sy - p.y) * (sy - p.y);
+                if (dd < fdd) { fdd = dd; fb = i; }
+            }
+            if (fb >= 0) {
+                owSelectedFacility = fb;
+                owSelectedHole = null;
+                owSelectedGolfer = null;
                 return;
             }
         }

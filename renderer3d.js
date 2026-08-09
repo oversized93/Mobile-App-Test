@@ -2752,6 +2752,24 @@ function updateAmbientNPCs3D(dt, hole) {
                         if (!price) { price = 5; s.thirst = 5; }
                         window.__golfFees = (window.__golfFees || 0) + price;
                         window.__stallSales = (window.__stallSales || 0) + price;
+                        // Per-facility books: credit the vendor that served
+                        if (typeof worldCourse !== 'undefined' && worldCourse.decor) {
+                            const fac = worldCourse.decor.find(d2 =>
+                                (d2.t === 'kiosk' || d2.t === 'stall')
+                                && Math.abs(d2.x * CELL - gx) < 2
+                                && Math.abs(d2.y * CELL - gz) < 2);
+                            if (fac) {
+                                const n = ((wantDrink ? 1 : 0) + (wantFood ? 1 : 0)) || 1;
+                                fac.salesToday = (fac.salesToday || 0) + n;
+                                fac.salesLife = (fac.salesLife || 0) + n;
+                                fac.revToday = (fac.revToday || 0) + price;
+                                fac.revLife = (fac.revLife || 0) + price;
+                                const hr = Math.floor(((typeof resort !== 'undefined'
+                                    && resort) ? (resort.worldClock || 0) : 0) % 1440 / 60);
+                                fac.hourHist = fac.hourHist || {};
+                                fac.hourHist[hr] = (fac.hourHist[hr] || 0) + n;
+                            }
+                        }
                         (window.__feePopups = window.__feePopups || []).push({
                             x: gx, z: gz, t0: performance.now(), amt: price,
                             tag: wantFood && wantDrink ? '\u{1F32D}\u{1F964}'
