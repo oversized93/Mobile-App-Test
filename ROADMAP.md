@@ -105,12 +105,16 @@ instancing on low-end devices).
 - [ ] Three.js version bump off r128 (before M3 NPC/facility investment)
 - [ ] Split game.js along section-comment seams (last, after the above)
 
-### M2 — The closed design loop
-- Shot-trace preview: headless sim of an average golfer along the waypoint
-  line; painted terrain changes recalculate the trace
-- Computed par + design score from simulation (replaces length-derived par)
-- Per-hole Open/Closed status
-- Test-play your own hole with the full shot sim (tap tee → play)
+### M2 — The closed design loop (core delivered by the sim-rounds arc)
+- [x] Headless sim of golfers along the hole (simulateHoleRound over the
+      real physics; terrain edits invalidate + remeasure via terrainRev)
+- [x] Computed par + difficulty from simulation (par = measured mean −0.6
+      clamped 3-5; stars from strokes-over-par; replaces length/heuristic)
+- [x] Test-play your own hole with the full shot sim (playtests count in
+      records and tournaments)
+- [ ] Visual shot-trace preview overlay while designing (sim exists;
+      drawing the trace in the wizard remains)
+- [ ] Per-hole Open/Closed status
 
 ### M2.5 — Economy grounding
 - Build costs per terrain/object; daily upkeep (needs world clock)
@@ -124,8 +128,8 @@ instancing on low-end devices).
 - [x] Route play with skill-based scoring scatter (duff/putt odds by skill)
 - [ ] Shuttle arrivals at the entrance (walkers currently spawn on paths)
 - [ ] Dynamic path-routing (walk paths when available, cut grass when not)
-- [ ] Headless-sim-driven ball flight for NPC rounds (current rounds are
-      route-walk + statistical scoring, not simulated shots)
+- [x] Headless-sim-driven NPC rounds (presimulated through the real
+      physics via a throttled queue; statistical scoring is fallback only)
 
 ### M4 — Feedback & depth (largely shipped by the parity run)
 - [x] Thought logs with mood deltas + timestamps (inspector), freakouts

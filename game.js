@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt192';
+const BUILD_TAG = 'gt193';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -699,7 +699,10 @@ function drainSimRating() {
         for (let k = 0; k < runs; k++) {
             total += simulateWorldHoleRound(rec, 2.5).strokes;
         }
-        const over = total / runs - (rec.par || 4);
+        // Computed par (M2): par is the expert standard, ~0.6 under the
+        // average golfer's measured mean, clamped to the 3-5 range
+        rec.par = Math.max(3, Math.min(5, Math.round(total / runs - 0.6)));
+        const over = total / runs - rec.par;
         rec.simDiff = {
             rev: worldCourse.terrainRev || 0,
             stars: Math.max(1, Math.min(5, Math.round(1 + over * 1.4)))
