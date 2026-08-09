@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt190';
+const BUILD_TAG = 'gt191';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1485,7 +1485,7 @@ function simulateHoleRound(rec, skill, clubScale) {
     let px = (rec.tee.x + 0.5) * CELL, py = (rec.tee.y + 0.5) * CELL;
     const wps = (rec.waypoints || []).map(p =>
         ({ x: (p.x + 0.5) * CELL, y: (p.y + 0.5) * CELL }));
-    let wpIdx = 0, used = 0, holed = false, penalties = 0;
+    let wpIdx = 0, used = 0, holed = false, penalties = 0, layup = 0;
     while (used < 9 && !holed) {
         const distYds = Math.hypot(pin.x - px, pin.y - py) / YDS_TO_WORLD;
         if (distYds < 12) {
@@ -1511,14 +1511,16 @@ function simulateHoleRound(rec, skill, clubScale) {
         const adx = dx * Math.cos(err) - dy * Math.sin(err);
         const ady = dx * Math.sin(err) + dy * Math.cos(err);
         const aimYds = Math.hypot(tx - px, ty - py) / YDS_TO_WORLD;
-        const powerPct = Math.min(1,
+        let powerPct = Math.min(1,
             (aimYds / (CLUBS[clubIdx].maxYds * cs)) * (0.92 + Math.random() * 0.12));
+        if (layup > 0) { powerPct *= 0.62; layup--; } // club down after water
         const r = simulateShot(px, py, adx, ady, powerPct, clubIdx);
         used++;
         if (r.holed) { holed = true; break; }
         if (r.terrain === T.WATER || r.terrain === T.OOB) {
             used++; // penalty; replay from the same lie
             penalties++;
+            layup = 2; // a burned golfer lays up short of the trouble
             continue;
         }
         px = r.x; py = r.y;
