@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt246';
+const BUILD_TAG = 'gt247';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -893,8 +893,20 @@ function finalizeHole() {
 
 const AMENITIES = [
     { id: 'clubhouse', name: 'Clubhouse', icon: '\u{1F3DB}\uFE0F', cost: 200, memberBoost: 10,
-      desc: 'Somewhere for golfers to relax after a round.' }
+      desc: 'Somewhere for golfers to relax after a round.' },
+    { id: 'clubhouse2', name: 'Grand Clubhouse', icon: '\u{1F3E8}', cost: 1500,
+      memberBoost: 20, feeBoost: 0.1, requires: 'clubhouse',
+      desc: 'Upgrade: pro shop + restaurant. Green fees +10%.' },
+    { id: 'clubhouse3', name: 'Resort Lodge', icon: '\u{1F3F0}', cost: 6000,
+      memberBoost: 40, feeBoost: 0.2, requires: 'clubhouse2',
+      desc: 'Upgrade: spa, suites, prestige. Green fees +20% more.' }
 ];
+
+// Clubhouse level lifts every green fee collected (multiplier stacks)
+function clubhouseFeeMul() {
+    return 1 + (resort.amenities.clubhouse2 ? 0.1 : 0)
+             + (resort.amenities.clubhouse3 ? 0.2 : 0);
+}
 
 function saveResort() { saveData('resort', resort); }
 
@@ -944,6 +956,11 @@ function buyAmenity(id) {
     const a = AMENITIES.find(x => x.id === id);
     if (!a) return;
     if (resort.amenities[id]) return;
+    if (a.requires && !resort.amenities[a.requires]) {
+        const req = AMENITIES.find(x => x.id === a.requires);
+        notify('Build the ' + (req ? req.name : 'previous tier') + ' first');
+        return;
+    }
     if (resort.coins < a.cost) { notify('Not enough coins'); return; }
     resort.coins -= a.cost;
     resort.amenities[id] = true;
@@ -1077,9 +1094,11 @@ function tickWorld(dt) {
     // Green fees: ambient golfers holing out pay per-hole fees scaled by
     // difficulty (the renderer accumulates the dollar amounts)
     if (window.__golfFees) {
-        resort.coins += window.__golfFees;
-        resort.feesEarned = (resort.feesEarned || 0) + window.__golfFees;
-        ledgerIncome(window.__golfFees);
+        // Clubhouse tiers lift what the resort collects per fee
+        const feeTake = Math.round(window.__golfFees * clubhouseFeeMul());
+        resort.coins += feeTake;
+        resort.feesEarned = (resort.feesEarned || 0) + feeTake;
+        ledgerIncome(feeTake);
         window.__golfFees = 0;
     }
     // Day rollover: archive today's books, charge the new day's upkeep
@@ -3113,8 +3132,8 @@ function manageLayout() {
     // Content area: amenity list + bottom actions row (3 buttons side-by-side)
     const amenityLabelY = contentY + 4;
     const amenityStartY = contentY + 28;
-    const amenityH = 86;
-    const amenityGap = 10;
+    const amenityH = H() < 430 ? 68 : 86;   // 3 tiers must clear the actions row
+    const amenityGap = H() < 430 ? 6 : 10;
     const actionsRowH = 52;
     const actionsY = contentY + contentH - actionsRowH;
     const actionBw = (contentW - 20) / 3;
@@ -3370,22 +3389,34 @@ function drawManage() {
         roundRect(L.contentX, y, L.contentW, L.amenityH, 14);
         ctx.stroke();
 
-        // Icon
+        // Icon (compact cards on phone shrink and lift everything)
+        const cmp = L.amenityH < 80;
         ctx.textAlign = 'center';
-        ctx.font = '32px -apple-system,sans-serif';
-        ctx.fillText(a.icon, L.contentX + 38, y + 50);
+        ctx.font = (cmp ? '24px' : '32px') + ' -apple-system,sans-serif';
+        ctx.fillText(a.icon, L.contentX + 38, y + (cmp ? 42 : 50));
 
         // Name + desc + boost
         ctx.textAlign = 'left';
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 16px -apple-system,sans-serif';
-        ctx.fillText(a.name, L.contentX + 76, y + 26);
+        ctx.font = 'bold ' + (cmp ? 14 : 16) + 'px -apple-system,sans-serif';
+        ctx.fillText(a.name, L.contentX + 76, y + (cmp ? 20 : 26));
         ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.font = '11px -apple-system,sans-serif';
-        ctx.fillText(a.desc, L.contentX + 76, y + 46);
+        ctx.font = (cmp ? '10px' : '11px') + ' -apple-system,sans-serif';
+        ctx.fillText(a.desc, L.contentX + 76, y + (cmp ? 34 : 46));
         ctx.fillStyle = '#81d4fa';
-        ctx.font = '11px -apple-system,sans-serif';
-        ctx.fillText('+' + a.memberBoost + ' members', L.contentX + 76, y + 66);
+        ctx.font = (cmp ? '10px' : '11px') + ' -apple-system,sans-serif';
+        const lock = !owned && a.requires && !resort.amenities[a.requires];
+        ctx.fillText('+' + a.memberBoost + ' members'
+            + (a.feeBoost ? '  \u2022  fees +' + Math.round(a.feeBoost * 100) + '%' : '')
+            + (cmp && lock ? '  \u2022  \u{1F512} locked' : ''),
+            L.contentX + 76, y + (cmp ? 48 : 66));
+        if (!cmp && lock) {
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            const reqA = AMENITIES.find(x => x.id === a.requires);
+            ctx.fillText('\u{1F512} Requires ' + (reqA ? reqA.name : ''),
+                L.contentX + 76, y + 80);
+        }
 
         // Buy / Owned button on the right
         const btnW = 100, btnH = 36;
