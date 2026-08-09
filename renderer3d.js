@@ -2137,9 +2137,11 @@ function buildTerrain3D(hole, opts) {
         flagGroup.add(pole);
 
         const flagGeo = new THREE.PlaneGeometry(8, 5);
+        flagGeo.translate(4, 0, 0); // pivot at the pole edge so it can wave
         const flagMat = new THREE.MeshStandardMaterial({ color: linC(0xee2222), side: THREE.DoubleSide });
         const flag = new THREE.Mesh(flagGeo, flagMat);
-        flag.position.set(flagX + 4, 25 + flagH, flagZ);
+        flag.position.set(flagX, 25 + flagH, flagZ);
+        flag.userData.pinFlag = true;
         flagGroup.add(flag);
 
         // Position hole (raised to terrain height)
@@ -2329,6 +2331,18 @@ function render3D() {
     if (!renderer3d || !scene3d || !camera3d) return;
     // Shared atmosphere clock: water ripples + canopy sway
     windClock.value = performance.now() / 1000;
+    // Pin flag flutter: swings around the pole and ripples its cloth.
+    // Looked up by tag each frame — terrain rebuilds replace the mesh.
+    if (typeof flagGroup !== 'undefined' && flagGroup) {
+        const t = windClock.value;
+        for (const ch of flagGroup.children) {
+            if (ch.userData && ch.userData.pinFlag) {
+                ch.rotation.y = Math.sin(t * 1.1) * 0.35
+                    + Math.sin(t * 3.3) * 0.12;
+                ch.scale.x = 0.92 + Math.sin(t * 5.1) * 0.08;
+            }
+        }
+    }
     renderer3d.render(scene3d, camera3d);
 }
 
