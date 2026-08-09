@@ -1704,6 +1704,7 @@ function buildTerrain3D(hole, opts) {
         const hAt2 = (p) => (hole.heights && hole.heights[p.y])
             ? (hole.heights[p.y][p.x] || 0) : 0;
         for (const rec of hole.holes) {
+            if (rec.open === false) continue; // closed holes go quiet
             const pts = [rec.tee, ...(rec.waypoints || []), rec.pin];
             for (let i = 0; i < pts.length - 1; i++) {
                 const a = pts[i], b = pts[i + 1];
@@ -1723,8 +1724,9 @@ function buildTerrain3D(hole, opts) {
             }
         }
         setupArcBalls();
-        // Pulsing beacon ring around every pin
+        // Pulsing beacon ring around every pin (open holes only)
         for (const rec of hole.holes) {
+            if (rec.open === false) continue;
             const ringGeo = new THREE.RingGeometry(5.5, 8.5, 20);
             ringGeo.rotateX(-Math.PI / 2);
             const ringMat = new THREE.MeshBasicMaterial({
@@ -2301,6 +2303,7 @@ function setupAmbientNPCs(hole) {
         // builder, so segment indices line up)
         let segBase = 0;
         for (const rec of hole.holes) {
+            if (rec.open === false) continue; // matches the arc builder's skip
             golfers.push({ c: rec.tee.x + 0.9, r: rec.tee.y + 0.4, arcIdx: segBase });
             golfers.push({ c: rec.tee.x - 0.5, r: rec.tee.y + 1.1, arcIdx: null });
             golfers.push({ c: rec.pin.x - 0.8, r: rec.pin.y + 0.7, arcIdx: null });
@@ -2311,6 +2314,7 @@ function setupAmbientNPCs(hole) {
     const routeGolfers = [];
     if (hole.holes) {
         for (const rec of hole.holes) {
+            if (rec.open === false) continue; // closed: no rounds, no fees
             const pts = [rec.tee, ...(rec.waypoints || []), rec.pin]
                 .map(p => ({ x: (p.x + 0.5) * CELL, z: (p.y + 0.5) * CELL }));
             if (pts.length >= 2) {

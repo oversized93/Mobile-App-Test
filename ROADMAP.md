@@ -116,7 +116,9 @@ instancing on low-end devices).
       shape step replays the hole with real physics on every design edit,
       throttled 1/sec; numbered landing dots + dashed trace + sim score
       in the readout; splashes marked, holed shot gold)
-- [ ] Per-hole Open/Closed status
+- [x] Per-hole Open/Closed status (gt195: chip toggle on the hole card;
+      closed holes lose their shot arcs, pin beacon, stationed golfers,
+      playing groups and green fees, and draw a CLOSED badge on the map)
 
 ### M2.5 — Economy grounding
 - Build costs per terrain/object; daily upkeep (needs world clock)

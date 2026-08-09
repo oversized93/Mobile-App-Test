@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt194';
+const BUILD_TAG = 'gt195';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4373,12 +4373,26 @@ function drawOverworld() {
             roundRect(hc.x, hc.y, hc.w, hc.h, 14);
             ctx.stroke();
             // Colored glossy header strip (reference-style panel)
-            glossyRect(hc.x + 3, hc.y + 3, hc.w - 6, 26, 11, '#2e7d32');
+            const isOpen = selHole.open !== false;
+            glossyRect(hc.x + 3, hc.y + 3, hc.w - 6, 26, 11,
+                isOpen ? '#2e7d32' : '#78542a');
             ctx.textAlign = 'left';
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 14px -apple-system,sans-serif';
             ctx.fillText((selHole.name || ('Hole ' + selHole.id)) + '  \u270E',
                 hc.x + 14, hc.y + 21);
+            // Tappable status chip toggles the hole open/closed
+            ctx.fillStyle = isOpen ? 'rgba(27,94,32,0.95)' : 'rgba(183,28,28,0.95)';
+            roundRect(hc.x + hc.w - 68, hc.y + 6, 58, 20, 10);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+            ctx.lineWidth = 1;
+            roundRect(hc.x + hc.w - 68, hc.y + 6, 58, 20, 10);
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(isOpen ? 'OPEN' : 'CLOSED', hc.x + hc.w - 39, hc.y + 20);
             // Reference-style stat rows: label left, value right, bar fill
             const yds = Math.round(polylineLengthYards(selHole));
             const diff = holeDifficulty(selHole);
@@ -4870,9 +4884,11 @@ function drawPlacedHole(hole, selected) {
     if (screens.some(s => s.behind)) return;
 
     // Dotted polyline (white, drop-shadowed; amber + thicker when selected)
+    const closed = hole.open === false;
     ctx.save();
     ctx.setLineDash([6, 6]);
-    ctx.strokeStyle = selected ? 'rgba(255,190,60,0.95)' : 'rgba(255,255,255,0.85)';
+    ctx.strokeStyle = closed ? 'rgba(160,160,160,0.55)'
+        : selected ? 'rgba(255,190,60,0.95)' : 'rgba(255,255,255,0.85)';
     ctx.lineWidth = selected ? 4 : 3;
     ctx.beginPath();
     ctx.moveTo(screens[0].x, screens[0].y);
@@ -4896,6 +4912,15 @@ function drawPlacedHole(hole, selected) {
     ctx.restore();
     // (Number badge moved into the 3D scene as a floating sprite; the 2D
     // layer keeps the pulsing pad ring + selection highlight only)
+    if (closed) {
+        ctx.fillStyle = 'rgba(183,28,28,0.92)';
+        roundRect(t.x - 26, t.y - 34, 52, 16, 8);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 9px -apple-system,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('CLOSED', t.x, t.y - 22);
+    }
     if (selected) {
         ctx.save();
         ctx.shadowColor = accent;
@@ -5443,6 +5468,15 @@ function overworldTouchStart(sx, sy) {
                     window.__greetGolfer = holder.name;
                     focusGolfer(holder.name);
                 }
+                return;
+            }
+            if (hitBtn(sx, sy, hc.x + hc.w - 72, hc.y + 3, 66, 26)) {
+                selHole.open = selHole.open === false; // toggle
+                saveWorldCourse();
+                owNeedsRebuild = true; // golfers + arcs respawn without it
+                notify(selHole.open === false
+                    ? '\u26D4 Hole ' + selHole.id + ' closed \u2014 no rounds, no fees'
+                    : '\u26F3 Hole ' + selHole.id + ' is open for play');
                 return;
             }
             if (hitBtn(sx, sy, hc.x + 3, hc.y + 3, hc.w - 6, 26)) {
