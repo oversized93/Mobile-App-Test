@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt269';
+const BUILD_TAG = 'gt270';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4315,16 +4315,27 @@ function drawOverworld() {
         ctx.font = 'bold 10px -apple-system,sans-serif';
         ctx.textAlign = 'center';
         const champName = resort.lastTourney && resort.lastTourney.winner;
+        // Queued foursomes stack labels on top of each other — nudge
+        // colliding labels up a line instead (up to three tiers)
+        const placed = [];
         for (const s of npcStates) {
             if (!s.name) continue;
             const p = worldToScreen3D(s.x, s.z);
             if (!p || p.behind) continue;
+            let ly = p.y - 26;
+            for (let tier = 0; tier < 3; tier++) {
+                const clash = placed.some(q =>
+                    Math.abs(q.x - p.x) < 58 && Math.abs(q.y - ly) < 12);
+                if (!clash) break;
+                ly -= 13;
+            }
+            placed.push({ x: p.x, y: ly });
             const label = (s.name === champName ? '\u{1F451} ' : '') + s.name;
             ctx.strokeStyle = 'rgba(0,0,0,0.7)';
             ctx.lineWidth = 3;
-            ctx.strokeText(label, p.x, p.y - 26);
+            ctx.strokeText(label, p.x, ly);
             ctx.fillStyle = s.name === champName ? '#ffd24a' : 'rgba(255,255,255,0.92)';
-            ctx.fillText(label, p.x, p.y - 26);
+            ctx.fillText(label, p.x, ly);
         }
     }
 
