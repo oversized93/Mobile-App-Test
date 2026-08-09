@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt333';
+const BUILD_TAG = 'gt334';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1355,10 +1355,23 @@ function tickWorld(dt) {
             if (name === 'You') celebrateFireworks();
             // The champion celebrates on the spot — hop, glow, and a
             // proud thought for the record
+            // Titles go on the permanent record, human or NPC
+            if (name !== 'You') {
+                worldCourse.golferCareers = worldCourse.golferCareers || {};
+                const car3 = worldCourse.golferCareers[name]
+                    || (worldCourse.golferCareers[name] = { rounds: 0, best: null });
+                car3.titles = (car3.titles || 0) + 1;
+            }
             if (typeof npcStates !== 'undefined') {
                 const champ = npcStates.find(n => n.name === name);
                 if (champ) {
                     champ.greet = 3;
+                    // The sky celebrates NPC champions too
+                    if (typeof spawnFirework3D === 'function') {
+                        spawnFirework3D(champ.x - 50, champ.z - 30, 0xffd24a);
+                        spawnFirework3D(champ.x + 45, champ.z + 25, 0x3adbe8);
+                        spawnFirework3D(champ.x, champ.z - 60, 0xff6a5a);
+                    }
                     if (typeof golferThink === 'function') {
                         golferThink(champ, "I'm the champion!", 18);
                     }
@@ -4859,9 +4872,12 @@ function drawOverworld() {
                 champs.forEach((lt, ci) => {
                     ctx.fillStyle = ci === 0 ? '#ffd24a' : 'rgba(255,210,74,0.6)';
                     ctx.font = (ci === 0 ? 'bold ' : '') + '10px -apple-system,sans-serif';
+                    const carT = ((worldCourse.golferCareers || {})[lt.winner]
+                        || {}).titles || 0;
                     ctx.fillText((ci === 0 ? '\u{1F451}' : '\u{1F3C6}') + ' Day '
                         + lt.day + '  ' + lt.winner + '  (' + lt.rel + ')'
-                        + (lt.title ? ' \u2022 ' + lt.title : ''), px + 14, fy);
+                        + (carT > 1 ? ' \u2022 ' + carT + ' titles'
+                            : lt.title ? ' \u2022 ' + lt.title : ''), px + 14, fy);
                     owRosterChip.rows.push({ name: lt.winner, x: px, y: fy - 12,
                         w: pw, h: 16 });
                     fy += 16;
