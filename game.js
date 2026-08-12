@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt383';
+const BUILD_TAG = 'gt384';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4710,6 +4710,14 @@ function drawOverworld() {
             + (resort.stallSales || 0) + ' \u2022 purses $'
             + (resort.purseEarned || 0), 'rgba(255,255,255,0.8)', fy + 130);
         let extraY = fy + 148;
+        if (resort.bestRound) {
+            const br = resort.bestRound;
+            line('\u{1F3C5} Best round', br.strokes + ' over ' + br.holes
+                + ' holes (' + (br.rel === 0 ? 'E'
+                    : (br.rel > 0 ? '+' : '') + br.rel) + ') \u2022 day '
+                + br.day, '#ffd24a', extraY);
+            extraY += 18;
+        }
         if (hasClubMul) {
             line('\u{1F3E8} Clubhouse bonus', 'fees collect at '
                 + Math.round(clubhouseFeeMul() * 100) + '%', '#81d4fa', extraY);
@@ -8634,9 +8642,29 @@ function holeDoneTouchStart(sx, sy) {
             const tot = wr.scores.reduce((a, b) => a + b, 0);
             const tp = wr.pars.reduce((a, b) => a + b, 0);
             const rd = tot - tp;
+            const relTxt = rd === 0 ? 'E' : (rd > 0 ? '+' : '') + rd;
             notify('\u{1F3CC}\uFE0F Round: ' + tot + ' over '
-                + wr.scores.length + ' holes ('
-                + (rd === 0 ? 'E' : (rd > 0 ? '+' : '') + rd) + ')');
+                + wr.scores.length + ' holes (' + relTxt + ')');
+            // Personal best: only full rounds over the whole open course
+            // compare fairly (rel to par survives course growth)
+            const openN = worldCourse.holes.filter(h => h.open !== false).length;
+            if (wr.scores.length >= openN) {
+                const pb = resort.bestRound;
+                if (!pb || rd < pb.rel) {
+                    resort.bestRound = { rel: rd, strokes: tot,
+                        holes: wr.scores.length,
+                        day: Math.floor((resort.worldClock || 0) / 1440) + 1 };
+                    saveResort();
+                    setTimeout(() => {
+                        notify('\u{1F3C5} NEW PERSONAL BEST ROUND: '
+                            + tot + ' (' + relTxt + ')');
+                        if (typeof playFanfare === 'function') playFanfare();
+                        if (typeof celebrateFireworks === 'function') {
+                            celebrateFireworks();
+                        }
+                    }, 2600);
+                }
+            }
         }
         window.__worldRound = null;
         endWorldPlaytest();
