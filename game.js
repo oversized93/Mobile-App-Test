@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt379';
+const BUILD_TAG = 'gt380';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -944,6 +944,15 @@ function finalizeHole() {
             if (!parcelOwned(pt.x, pt.y)) {
                 notify('\u{1F512} That land is not yours yet \u2014 buy the property first');
                 offerParcel(pt.x, pt.y);
+                return;
+            }
+        }
+        // Tee and cup must sit on dry ground (waypoints may cross water —
+        // that's what hazards are for)
+        for (const pt of [w.tee, w.pin].filter(Boolean)) {
+            const tG = worldCourse.grid[pt.y] && worldCourse.grid[pt.y][pt.x];
+            if (tG === T.WATER || tG === T.OOB) {
+                notify('\u{1F4A7} Tee and cup need dry land \u2014 move them off the water');
                 return;
             }
         }
@@ -7108,6 +7117,12 @@ function overworldTouchEnd() {
                 offerParcel(owLastGhostCell.c, owLastGhostCell.r);
                 return;
             }
+            // ...and tee boxes need dry ground
+            const tT = worldCourse.grid[owLastGhostCell.r][owLastGhostCell.c];
+            if (tT === T.WATER || tT === T.OOB) {
+                notify('\u{1F4A7} A tee needs dry land \u2014 pick another spot');
+                return;
+            }
             holeWizard.tee = { x: owLastGhostCell.c, y: owLastGhostCell.r };
             holeWizard.step = 'pin';
         }
@@ -7119,6 +7134,11 @@ function overworldTouchEnd() {
         if (g && !(holeWizard.tee && holeWizard.tee.x === g.c && holeWizard.tee.y === g.r)) {
             if (!parcelOwned(g.c, g.r)) {
                 offerParcel(g.c, g.r);
+                return;
+            }
+            const pT = worldCourse.grid[g.r][g.c];
+            if (pT === T.WATER || pT === T.OOB) {
+                notify('\u{1F4A7} The cup needs dry land \u2014 pick another spot');
                 return;
             }
             holeWizard.pin = { x: g.c, y: g.r };
