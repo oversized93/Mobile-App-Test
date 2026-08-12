@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt387';
+const BUILD_TAG = 'gt388';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4908,13 +4908,24 @@ function drawOverworld() {
     {
         const openHoles = worldCourse.holes.filter(h => h.open !== false);
         if (openHoles.length && !holeWizard && !owRosterOpen) {
+            // During a live tournament the chip turns gold and breathes:
+            // your round goes straight onto the leaderboard
+            const live = !!window.__tourney;
             ctx.font = 'bold 11px -apple-system,sans-serif';
-            const prTxt = '\u26F3 Play Round'
+            const prTxt = (live ? '\u{1F3C6} ' : '\u26F3 ') + 'Play Round'
                 + (openHoles.length > 1 ? ' (' + openHoles.length + ')' : '');
             const prW = ctx.measureText(prTxt).width + 24;
             const prX = W() - L.pad - (30 * 3 + 6 * 2) - 10 - prW;
             const prY = L.topBarH + 42 + 34; // under the tee-off slot
-            glossyRect(prX, prY, prW, 30, 15, '#2e6b34');
+            if (live) {
+                const pulse2 = 0.75 + 0.25
+                    * Math.abs(Math.sin(performance.now() / 420));
+                ctx.globalAlpha = pulse2;
+                glossyRect(prX, prY, prW, 30, 15, '#a8821f');
+                ctx.globalAlpha = 1;
+            } else {
+                glossyRect(prX, prY, prW, 30, 15, '#2e6b34');
+            }
             ctx.fillStyle = '#fff';
             ctx.textAlign = 'center';
             ctx.fillText(prTxt, prX + prW / 2, prY + 19);
