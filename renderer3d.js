@@ -2887,24 +2887,26 @@ function golferThink(s, text, v) {
 // ---- Glowing shot trail: golden puffs shed by the ball in flight ----
 let trailPuffs = [];
 let trailPuffTex = null;
+function ensureTrailPuffTex() {
+    if (trailPuffTex) return;
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(16, 16, 2, 16, 16, 15);
+    grad.addColorStop(0, 'rgba(255,235,150,0.9)');
+    grad.addColorStop(0.5, 'rgba(255,205,90,0.4)');
+    grad.addColorStop(1, 'rgba(255,190,60,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 32, 32);
+    trailPuffTex = new THREE.CanvasTexture(c);
+}
 let trailLastX = 0, trailLastY = 0, trailLastZ = 0;
 function spawnTrailPuff3D(wx, wy, wz) {
     if (typeof scene3d === 'undefined' || !scene3d) return;
     const dx = wx - trailLastX, dy = wy - trailLastY, dz = wz - trailLastZ;
     if (dx * dx + dy * dy + dz * dz < 64) return; // throttle by distance
     trailLastX = wx; trailLastY = wy; trailLastZ = wz;
-    if (!trailPuffTex) {
-        const c = document.createElement('canvas');
-        c.width = c.height = 32;
-        const g = c.getContext('2d');
-        const grad = g.createRadialGradient(16, 16, 2, 16, 16, 15);
-        grad.addColorStop(0, 'rgba(255,235,150,0.9)');
-        grad.addColorStop(0.5, 'rgba(255,205,90,0.4)');
-        grad.addColorStop(1, 'rgba(255,190,60,0)');
-        g.fillStyle = grad;
-        g.fillRect(0, 0, 32, 32);
-        trailPuffTex = new THREE.CanvasTexture(c);
-    }
+    ensureTrailPuffTex();
     const mat = new THREE.SpriteMaterial({
         map: trailPuffTex, transparent: true, opacity: 0.85,
         blending: THREE.AdditiveBlending, depthWrite: false
@@ -3005,7 +3007,8 @@ function updateSprinklers3D(hole) {
 
 // ---- Sand puff: a ball plugging into a bunker kicks up grit ----
 function spawnSandPuff3D(wx, wy, wz) {
-    if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    ensureTrailPuffTex();
     for (let i = 0; i < 6; i++) {
         const mat = new THREE.SpriteMaterial({
             map: trailPuffTex, color: 0xc9a05e, transparent: true,
@@ -3028,7 +3031,8 @@ function spawnSandPuff3D(wx, wy, wz) {
 
 // ---- Turf divot: flecks kicked forward when a full swing strikes ----
 function spawnDivot3D(wx, wy, wz, ux, uz) {
-    if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    ensureTrailPuffTex();
     for (let i = 0; i < 5; i++) {
         const mat = new THREE.SpriteMaterial({
             map: trailPuffTex, color: i % 2 ? 0x5d8a34 : 0x6b4d2a,
@@ -3056,8 +3060,7 @@ function spawnDivot3D(wx, wy, wz, ux, uz) {
 let fwParticles = [];
 function spawnFirework3D(wx, wz, colHex) {
     if (typeof scene3d === 'undefined' || !scene3d) return;
-    if (!trailPuffTex) spawnTrailPuff3D(-99999, -99999, -99999);
-    if (!trailPuffTex) return;
+    ensureTrailPuffTex();
     const h = 130 + Math.random() * 60;
     for (let i = 0; i < 16; i++) {
         const mat = new THREE.SpriteMaterial({
@@ -3110,7 +3113,8 @@ function updateFireworks3D() {
 // ---- Swing flash: a quick white glint when an ambient golfer strikes ----
 let swingFlashes = [];
 function spawnSwingFlash3D(wx, wy, wz) {
-    if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    ensureTrailPuffTex();
     const mat = new THREE.SpriteMaterial({
         map: trailPuffTex, color: 0xffffff, transparent: true, opacity: 1,
         blending: THREE.AdditiveBlending, depthWrite: false
@@ -3148,8 +3152,17 @@ function updateSwingFlashes3D() {
 // The signature living-course visual: every ambient strike launches a
 // real airborne ball toward the next landing spot, shedding vapor.
 let npcFlights = [];
+function freeNpcFlight(f) {
+    scene3d.remove(f.spr);
+    f.mat.dispose();
+    if (f.shSpr) {
+        scene3d.remove(f.shSpr);
+        f.shMat.dispose();
+    }
+}
 function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin, skill, drama) {
-    if (typeof scene3d === 'undefined' || !scene3d || !trailPuffTex) return;
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    ensureTrailPuffTex();
     const dx = x1 - x0, dz = z1 - z0;
     const dist = Math.sqrt(dx * dx + dz * dz);
     if (dist < 3) return;
@@ -3163,6 +3176,20 @@ function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin, skill, drama) {
     spr.position.set(x0, putt ? y1 + 1.5 : y0, z0);
     spr.scale.set(putt ? 2.4 : 3.4, putt ? 2.4 : 3.4, 1);
     scene3d.add(spr);
+    // Ground shadow under airborne shots: the dark dot is what lets the
+    // eye read how high the ball is (putts hug the turf — no shadow)
+    let shSpr = null, shMat = null;
+    if (!putt) {
+        shMat = new THREE.SpriteMaterial({
+            map: trailPuffTex, color: 0x000000, transparent: true,
+            opacity: 0.3, depthWrite: false
+        });
+        shMat.toneMapped = false;
+        shSpr = new THREE.Sprite(shMat);
+        shSpr.position.set(x0, y0, z0);
+        shSpr.scale.set(2.6, 1.7, 1);
+        scene3d.add(shSpr);
+    }
     // Shot shape: everyone curves the ball a little; weaker drivers
     // curve it a lot. Sign picks draw vs fade per swing — and the
     // world's crosswind adds a consistent drift on top, so all the
@@ -3179,7 +3206,8 @@ function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin, skill, drama) {
             (Math.random() * 2 - 1) * Math.min(10, dist * 0.10)
                 * (1.25 - sk * 0.22) + wBend));
     npcFlights.push({
-        spr, mat, x0, y0: putt ? y1 + 1.5 : y0, z0, x1, y1, z1, putt,
+        spr, mat, shSpr, shMat,
+        x0, y0: putt ? y1 + 1.5 : y0, z0, x1, y1, z1, putt,
         bend, perpX: -dz / dist, perpZ: dx / dist, drama: !!drama,
         px: pin ? pin.x : null, pz: pin ? pin.z : null,
         apex: putt ? 0.7 : Math.min(60, 10 + dist * 0.28),
@@ -3189,8 +3217,7 @@ function spawnNpcFlight3D(x0, y0, z0, x1, y1, z1, pin, skill, drama) {
     });
     if (npcFlights.length > 20) {
         const old2 = npcFlights.shift();
-        scene3d.remove(old2.spr);
-        old2.mat.dispose();
+        freeNpcFlight(old2);
     }
 }
 function updateNpcFlights3D(hole) {
@@ -3201,8 +3228,7 @@ function updateNpcFlights3D(hole) {
         if (k < 0) continue; // hanging on the lip: wait out the beat
         if (k >= 1) {
             if (f.putt) { // a roll just stops where it stops
-                scene3d.remove(f.spr);
-                f.mat.dispose();
+                freeNpcFlight(f);
                 npcFlights.splice(i, 1);
                 continue;
             }
@@ -3213,8 +3239,7 @@ function updateNpcFlights3D(hole) {
                 && hole.grid[wr][wc] === T.WATER;
             if (wet) {
                 spawnSplash3D(f.x1, f.z1);
-                scene3d.remove(f.spr);
-                f.mat.dispose();
+                freeNpcFlight(f);
                 npcFlights.splice(i, 1);
                 continue;
             }
@@ -3223,8 +3248,7 @@ function updateNpcFlights3D(hole) {
                 && hole.grid[wr][wc] === T.SAND;
             if (sandy) {
                 spawnSandPuff3D(f.x1, f.y1, f.z1); // plugged lie: no hops
-                scene3d.remove(f.spr);
-                f.mat.dispose();
+                freeNpcFlight(f);
                 npcFlights.splice(i, 1);
                 continue;
             }
@@ -3244,8 +3268,7 @@ function updateNpcFlights3D(hole) {
                     continue;
                 }
                 if (f.lip === 2) { // tap-in falls: done
-                    scene3d.remove(f.spr);
-                    f.mat.dispose();
+                    freeNpcFlight(f);
                     npcFlights.splice(i, 1);
                     continue;
                 }
@@ -3286,8 +3309,7 @@ function updateNpcFlights3D(hole) {
             }
             f.bounce = (f.bounce || 0) + 1;
             if (f.bounce > 2) {
-                scene3d.remove(f.spr);
-                f.mat.dispose();
+                freeNpcFlight(f);
                 npcFlights.splice(i, 1);
                 continue;
             }
@@ -3310,6 +3332,16 @@ function updateNpcFlights3D(hole) {
             z += f.perpZ * sway;
         }
         f.spr.position.set(x, y, z);
+        if (f.shSpr) {
+            const gr = Math.floor(z / CELL), gc = Math.floor(x / CELL);
+            const gy = (hole && hole.heights && hole.heights[gr])
+                ? (hole.heights[gr][gc] || 0) : 0;
+            const alt = Math.max(0, y - gy);
+            f.shSpr.position.set(x, gy + 0.9, z);
+            const ss = 2.6 * (1 - Math.min(0.55, alt / 110));
+            f.shSpr.scale.set(ss, ss * 0.62, 1);
+            f.shMat.opacity = 0.3 * Math.max(0.25, 1 - alt / 150);
+        }
         if (f.bounce === 2) f.mat.opacity = 1 - k; // roll-out fade
         if (!f.bounce && !f.putt && now - f.puffAt > 130 && k < 0.75) {
             f.puffAt = now;
@@ -3563,7 +3595,6 @@ function updateAmbientNPCs3D(dt, hole) {
                     const gr = Math.floor(s.z / CELL), gc = Math.floor(s.x / CELL);
                     const gy2 = (hole.heights && hole.heights[gr])
                         ? (hole.heights[gr][gc] || 0) : 0;
-                    if (!trailPuffTex) spawnTrailPuff3D(-9999, -9999, -9999); // build tex
                     spawnSwingFlash3D(s.x + 3, gy2 + 14, s.z);
                     // Nearby ambient strikes make a soft distant tock —
                     // gain falls with distance from the camera pivot,
