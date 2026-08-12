@@ -3005,6 +3005,32 @@ function updateSprinklers3D(hole) {
     }
 }
 
+// ---- Cup sparkle: a wink of light over the hole when a ball drops ----
+function spawnCupSparkle3D(wx, wy, wz) {
+    if (typeof scene3d === 'undefined' || !scene3d) return;
+    ensureTrailPuffTex();
+    for (let i = 0; i < 4; i++) {
+        const mat = new THREE.SpriteMaterial({
+            map: trailPuffTex, color: 0xfff6d0, transparent: true,
+            opacity: 0.95, blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        mat.toneMapped = false;
+        const spr = new THREE.Sprite(mat);
+        spr.position.set(wx + Math.random() * 4 - 2,
+            wy + 1.5 + Math.random() * 2.5,
+            wz + Math.random() * 4 - 2);
+        scene3d.add(spr);
+        trailPuffs.push({ spr, mat, t0: performance.now(),
+            bs: 1.6 + Math.random() });
+    }
+    while (trailPuffs.length > 48) {
+        const old2 = trailPuffs.shift();
+        scene3d.remove(old2.spr);
+        old2.mat.dispose();
+    }
+}
+
 // ---- Sand puff: a ball plugging into a bunker kicks up grit ----
 function spawnSandPuff3D(wx, wy, wz) {
     if (typeof scene3d === 'undefined' || !scene3d) return;
@@ -3702,6 +3728,28 @@ function updateAmbientNPCs3D(dt, hole) {
                     const paid = Math.round((s.fee || 5) * tierMult);
                     window.__golfFees = (window.__golfFees || 0) + paid;
                     const pinPt = s.route[s.route.length - 1];
+                    // The drop itself: a wink over the cup, and a soft
+                    // double-rattle if the camera is close enough to hear
+                    {
+                        const pr2 = Math.floor(pinPt.z / CELL);
+                        const pc2 = Math.floor(pinPt.x / CELL);
+                        const pgy = (hole.heights && hole.heights[pr2])
+                            ? (hole.heights[pr2][pc2] || 0) : 0;
+                        spawnCupSparkle3D(pinPt.x, pgy, pinPt.z);
+                        if (typeof playStrikeTock === 'function'
+                            && typeof cam3dPivotX !== 'undefined') {
+                            const cd = Math.hypot(pinPt.x - cam3dPivotX,
+                                pinPt.z - cam3dPivotZ);
+                            if (cd < 420 && performance.now()
+                                - (window.__lastCupRattle || 0) > 2500) {
+                                window.__lastCupRattle = performance.now();
+                                const cg = 0.05 * (1 - cd / 420);
+                                playStrikeTock(cg);
+                                setTimeout(() => playStrikeTock(cg * 0.55),
+                                    110);
+                            }
+                        }
+                    }
                     window.__feePopups = window.__feePopups || [];
                     const feeStack = window.__feePopups.filter(q =>
                         Math.abs(q.x - pinPt.x) < 30 && Math.abs(q.z - pinPt.z) < 30
