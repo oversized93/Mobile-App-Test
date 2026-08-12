@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt382';
+const BUILD_TAG = 'gt383';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -571,6 +571,7 @@ let owRecordLineRect = null; // hole-card record line (tap -> holder)
 let owNameRect = null;     // resort name rect in the top bar (tap to rename)
 let owDecorDrag = null;    // { i, moved } while repositioning a decor item
 let owBuyRect = null;  // screen rect of the buy chip
+let owPlayRoundRect = null; // Play Round chip (starts the hole chain)
 let owParcelTagRects = []; // tappable lock/price tags on locked parcels
 let owBuyOffer = null; // { parcel, t0 } — buy chip shown after a blocked tap
 function offerParcel(c, r) {
@@ -4819,6 +4820,25 @@ function drawOverworld() {
         }
     }
 
+    // Play Round chip: one tap starts the full-course chain at hole 1
+    owPlayRoundRect = null;
+    {
+        const openHoles = worldCourse.holes.filter(h => h.open !== false);
+        if (openHoles.length && !holeWizard && !owRosterOpen) {
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            const prTxt = '\u26F3 Play Round'
+                + (openHoles.length > 1 ? ' (' + openHoles.length + ')' : '');
+            const prW = ctx.measureText(prTxt).width + 24;
+            const prX = W() - L.pad - (30 * 3 + 6 * 2) - 10 - prW;
+            const prY = L.topBarH + 42 + 34; // under the tee-off slot
+            glossyRect(prX, prY, prW, 30, 15, '#2e6b34');
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.fillText(prTxt, prX + prW / 2, prY + 19);
+            owPlayRoundRect = { x: prX, y: prY, w: prW, h: 30 };
+        }
+    }
+
     // Paused banner, center-top like the reference
     if (gameSpeed === 0) {
         ctx.font = 'bold 13px -apple-system,sans-serif';
@@ -6474,6 +6494,8 @@ function overworldHUDHit(sx, sy) {
     for (const tg of owParcelTagRects) {
         if (hitBtn(sx, sy, tg.x, tg.y, tg.w, tg.h)) return 'parceltag:' + tg.pi;
     }
+    if (owPlayRoundRect && hitBtn(sx, sy, owPlayRoundRect.x, owPlayRoundRect.y,
+        owPlayRoundRect.w, owPlayRoundRect.h)) return 'playround';
     if (owBuyOffer && owBuyRect
         && hitBtn(sx, sy, owBuyRect.x, owBuyRect.y, owBuyRect.w, owBuyRect.h)) {
         return 'buyparcel';
@@ -6597,6 +6619,13 @@ function overworldTouchStart(sx, sy) {
     if (hit === 'close') { exitOverworld(); return; }
     if (hit === 'undo') { undoLastStroke(); return; }
     if (hit === 'buyparcel') { buyOfferedParcel(); return; }
+    if (hit === 'playround') {
+        const openHoles = worldCourse.holes.filter(h => h.open !== false);
+        if (openHoles.length) {
+            startWorldHolePlaytest(openHoles[0]);
+        }
+        return;
+    }
     if (hit && hit.indexOf('parceltag:') === 0) {
         // Tapping a price tag opens the buy offer for that parcel
         owBuyOffer = { parcel: +hit.slice(10), t0: performance.now() };
