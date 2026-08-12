@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt385';
+const BUILD_TAG = 'gt386';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4577,6 +4577,60 @@ function drawOverworld() {
         }
     }
 
+    // ---- Round scorecard: shown once after finishing a chained round ----
+    if (window.__roundSummary && !holeWizard) {
+        const rs = window.__roundSummary;
+        const perRow = Math.min(8, rs.scores.length);
+        const chipW = 34, chipH = 40, gap2 = 6;
+        const rowsN = Math.ceil(rs.scores.length / perRow);
+        const cw = Math.max(240, perRow * (chipW + gap2) - gap2 + 40);
+        const chh = 118 + rowsN * (chipH + gap2);
+        const cx0 = (W() - cw) / 2, cy0 = (H() - chh) / 2 - 20;
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(0, 0, W(), H());
+        ctx.fillStyle = 'rgba(14,32,20,0.96)';
+        roundRect(cx0, cy0, cw, chh, 16);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = 1.5;
+        roundRect(cx0, cy0, cw, chh, 16);
+        ctx.stroke();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
+        ctx.font = '800 17px -apple-system,sans-serif';
+        ctx.fillText(rs.pb ? '\u{1F3C5} PERSONAL BEST!' : 'Round Complete',
+            W() / 2, cy0 + 28);
+        // Per-hole chips: number on top, score under, colored vs par
+        const best = Math.min(...rs.scores.map((sc, i) => sc - rs.pars[i]));
+        for (let i = 0; i < rs.scores.length; i++) {
+            const rel2 = rs.scores[i] - rs.pars[i];
+            const col2 = rel2 < 0 ? '#3f7a3a' : rel2 === 0 ? '#42525e'
+                : rel2 === 1 ? '#8a6a30' : '#8e3f30';
+            const gx2 = cx0 + 20 + (i % perRow) * (chipW + gap2);
+            const gy2 = cy0 + 44 + Math.floor(i / perRow) * (chipH + gap2);
+            glossyRect(gx2, gy2, chipW, chipH, 8, col2);
+            ctx.fillStyle = 'rgba(255,255,255,0.65)';
+            ctx.font = 'bold 10px -apple-system,sans-serif';
+            ctx.fillText('H' + (rs.ids[i] != null ? rs.ids[i] : i + 1),
+                gx2 + chipW / 2, gy2 + 14);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 15px -apple-system,sans-serif';
+            ctx.fillText(String(rs.scores[i]), gx2 + chipW / 2, gy2 + 32);
+            if (rel2 === best && rel2 < 0) {
+                ctx.font = '10px -apple-system,sans-serif';
+                ctx.fillText('\u2B50', gx2 + chipW - 7, gy2 + 9);
+            }
+        }
+        const relT = rs.rd === 0 ? 'E' : (rs.rd > 0 ? '+' : '') + rs.rd;
+        ctx.fillStyle = rs.rd <= 0 ? '#8be06a' : '#f0a860';
+        ctx.font = 'bold 20px -apple-system,sans-serif';
+        ctx.fillText(rs.tot + ' strokes  \u2022  ' + relT,
+            W() / 2, cy0 + chh - 40);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '12px -apple-system,sans-serif';
+        ctx.fillText('Tap to close', W() / 2, cy0 + chh - 16);
+    }
+
     // ---- Active hole wizard overlay (if any) ----
     if (holeWizard) drawHoleWizardOverlay();
 
@@ -6623,6 +6677,10 @@ function overworldTouchStart(sx, sy) {
     }
     // Any touch cancels a running flyover, leaving the camera where it is
     if (owFlyover) owFlyover = null;
+    if (window.__roundSummary) {
+        window.__roundSummary = null;
+        return;
+    }
     const hit = overworldHUDHit(sx, sy);
     if (hit === 'close') { exitOverworld(); return; }
     if (hit === 'undo') { undoLastStroke(); return; }
@@ -8629,6 +8687,8 @@ function holeDoneTouchStart(sx, sy) {
             if (window.__worldRound) {
                 window.__worldRound.scores.push(strokes);
                 window.__worldRound.pars.push(currentHole.par || 4);
+                (window.__worldRound.ids = window.__worldRound.ids || [])
+                    .push(currentHole.worldHoleId);
             }
             if (window.__tourney) {
                 notify('\u{1F3C6} Your ' + strokes
@@ -8643,8 +8703,11 @@ function holeDoneTouchStart(sx, sy) {
             const tp = wr.pars.reduce((a, b) => a + b, 0);
             const rd = tot - tp;
             const relTxt = rd === 0 ? 'E' : (rd > 0 ? '+' : '') + rd;
-            notify('\u{1F3CC}\uFE0F Round: ' + tot + ' over '
-                + wr.scores.length + ' holes (' + relTxt + ')');
+            // The overworld shows a proper scorecard card on return
+            window.__roundSummary = {
+                scores: wr.scores.slice(), pars: wr.pars.slice(),
+                ids: (wr.ids || []).slice(), tot: tot, rd: rd, pb: false
+            };
             // Personal best: only full rounds over the whole open course
             // compare fairly (rel to par survives course growth)
             const openN = worldCourse.holes.filter(h => h.open !== false).length;
@@ -8654,6 +8717,7 @@ function holeDoneTouchStart(sx, sy) {
                     resort.bestRound = { rel: rd, strokes: tot,
                         holes: wr.scores.length,
                         day: Math.floor((resort.worldClock || 0) / 1440) + 1 };
+                    if (window.__roundSummary) window.__roundSummary.pb = true;
                     saveResort();
                     setTimeout(() => {
                         notify('\u{1F3C5} NEW PERSONAL BEST ROUND: '
