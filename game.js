@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt374';
+const BUILD_TAG = 'gt375';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5054,6 +5054,26 @@ function drawOverworld() {
             roundRect(mx, my, mw, mh, 7);
             ctx.clip();
             ctx.drawImage(owMiniCanvas, mx, my, mw, mh);
+            // Territory layer: unowned parcels dim, owned edged in teal —
+            // on the sixteen-chunk island your holdings read at a glance
+            if (worldCourse.parcels && ensureParcels().owned.length
+                < PARCEL_COLS * PARCEL_ROWS) {
+                const pn3 = worldCourse.parcels;
+                const pw0 = mw / PARCEL_COLS, ph0 = mh / PARCEL_ROWS;
+                for (let pi = 0; pi < PARCEL_COLS * PARCEL_ROWS; pi++) {
+                    if (pn3.owned.includes(pi)) continue;
+                    ctx.fillStyle = 'rgba(8,14,20,0.42)';
+                    ctx.fillRect(mx + (pi % PARCEL_COLS) * pw0,
+                        my + Math.floor(pi / PARCEL_COLS) * ph0, pw0, ph0);
+                }
+                ctx.strokeStyle = 'rgba(58,219,232,0.75)';
+                ctx.lineWidth = 1;
+                for (const pi of pn3.owned) {
+                    ctx.strokeRect(mx + (pi % PARCEL_COLS) * pw0 + 0.5,
+                        my + Math.floor(pi / PARCEL_COLS) * ph0 + 0.5,
+                        pw0 - 1, ph0 - 1);
+                }
+            }
             // Hole pins as dots
             for (const hrec of worldCourse.holes) {
                 ctx.fillStyle = hrec.open === false ? '#9e9e9e' : '#ff5252';
