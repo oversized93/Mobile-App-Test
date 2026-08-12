@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt388';
+const BUILD_TAG = 'gt389';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -9410,7 +9410,7 @@ function initAmbientAudio() {
     } catch (e) { audioCtx = null; }
 }
 
-function playStrikeTock() {
+function playStrikeTock(gain) {
     try {
         const t0 = audioCtx.currentTime;
         const o = audioCtx.createOscillator();
@@ -9418,7 +9418,7 @@ function playStrikeTock() {
         o.type = 'sine';
         o.frequency.setValueAtTime(950, t0);
         o.frequency.exponentialRampToValueAtTime(320, t0 + 0.05);
-        g.gain.setValueAtTime(0.18, t0);
+        g.gain.setValueAtTime(gain || 0.18, t0);
         g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.07);
         o.connect(g);
         g.connect(audioMaster);

@@ -3565,6 +3565,17 @@ function updateAmbientNPCs3D(dt, hole) {
                         ? (hole.heights[gr][gc] || 0) : 0;
                     if (!trailPuffTex) spawnTrailPuff3D(-9999, -9999, -9999); // build tex
                     spawnSwingFlash3D(s.x + 3, gy2 + 14, s.z);
+                    // Nearby ambient strikes make a soft distant tock —
+                    // gain falls with distance from the camera pivot,
+                    // silent beyond ~700 units
+                    if (typeof playStrikeTock === 'function'
+                        && typeof cam3dPivotX !== 'undefined') {
+                        const sd2 = Math.hypot(s.x - cam3dPivotX,
+                            s.z - cam3dPivotZ);
+                        if (sd2 < 700) {
+                            playStrikeTock(0.07 * (1 - sd2 / 700));
+                        }
+                    }
                     // Rigged golfers play the real swing at the strike
                     if (s.__rig) {
                         s.__rig.cur = null; // force re-enter Swing
