@@ -186,6 +186,22 @@ with both pillars (gt359), pacing re-audited healthy (parcel two
 mid-day-two). gt350 milestone ran the full battery green; matrix
 checkpoints gt354, gt358, gt362, gt366.
 
+### Parity run continued (gt377–gt384)
+The blank island became a playground. The wizard now carves what it
+promises: confirming a new hole paints its tee pad, five-wide fairway
+ribbon, and green disc over wild ground only (gt378), paves a two-wide
+path stub from the walkway network to the tee (gt379), refuses wet
+tees and cups with clear messages (gt380), and previews the whole
+carve as a translucent ghost ribbon while shaping (gt381). Then the
+second pillar landed: playing your course as a REAL round — Next Hole
+chains world playtests with a running scorecard and summary toast
+(gt382), a Play Round chip tees off the whole course in one tap
+(gt383), and full rounds compete against a persisted personal best
+with a celebration and a finance-panel line (gt384). Also: property
+price tags became tap-to-buy buttons and the minimap grew a territory
+layer (documented in the prior block's follow-ups). Matrix green at
+gt379, gt382-cycle, gt385.
+
 ### Parity run continued (gt366–gt376)
 Two user-driven milestones. First, in-house rigging (gt370): pip-
 installed headless Blender rigs the shipped golfer with a 10-bone
