@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt371';
+const BUILD_TAG = 'gt372';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5161,6 +5161,26 @@ function drawOverworld() {
         ctx.font = Math.round(L.railBtn * 0.42) + 'px -apple-system,sans-serif';
         ctx.fillText(owRailOpen ? '\u2715' : '\u{1F528}',
                      L.railX + L.railBtn / 2, L.railY + L.railBtn * 0.64);
+        // Blank island: a fresh canvas has no income until the first
+        // hole exists — bounce a pointer at the build rail until then
+        if (!worldCourse.holes.length && !owRailOpen) {
+            const bnc = Math.abs(Math.sin(performance.now() / 350)) * 6;
+            const hx = L.railX + L.railBtn + 12 + bnc;
+            const hy = L.railY + L.railBtn / 2;
+            ctx.font = 'bold 13px -apple-system,sans-serif';
+            ctx.textAlign = 'left';
+            const hintTxt = '\u26F3 Design your first hole!';
+            const hw = ctx.measureText(hintTxt).width + 22;
+            ctx.fillStyle = 'rgba(10,26,38,0.9)';
+            roundRect(hx, hy - 14, hw, 28, 14);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,109,0,0.7)';
+            ctx.lineWidth = 1.5;
+            roundRect(hx, hy - 14, hw, 28, 14);
+            ctx.stroke();
+            ctx.fillStyle = '#ffb74d';
+            ctx.fillText(hintTxt, hx + 11, hy + 5);
+        }
 
         if (owRailOpen) {
             for (let i = 0; i < OW_RAIL.length; i++) {
