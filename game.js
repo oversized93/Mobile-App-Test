@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt378';
+const BUILD_TAG = 'gt379';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -898,6 +898,30 @@ function carveHoleCorridor(rec) {
     // tee and green before it keeps them from being claimed as fairway
     disc(rec.tee.x, rec.tee.y, 2.2, T.TEE);
     disc(rec.pin.x, rec.pin.y, 2.8, T.GREEN);
+    // Connect the tee to the walkway network: a two-wide L-shaped path
+    // stub from the nearest existing path cell, so golfers arrive on
+    // pavement instead of bushwhacking (wild cells only — never cuts
+    // through the new pads or existing surfaces)
+    {
+        let best = null, bd = 1e9;
+        for (let r = 0; r < worldCourse.rows; r++)
+            for (let c = 0; c < worldCourse.cols; c++)
+                if (grid[r][c] === T.PATH) {
+                    const d = (c - rec.tee.x) ** 2 + (r - rec.tee.y) ** 2;
+                    if (d < bd) { bd = d; best = { c: c, r: r }; }
+                }
+        if (best && bd > 9) {
+            let c = best.c, r = best.r;
+            while (c !== rec.tee.x) {
+                c += Math.sign(rec.tee.x - c);
+                put(c, r, T.PATH); put(c, r + 1, T.PATH);
+            }
+            while (r !== rec.tee.y) {
+                r += Math.sign(rec.tee.y - r);
+                put(c, r, T.PATH); put(c + 1, r, T.PATH);
+            }
+        }
+    }
     // Fairway ribbon segment by segment
     for (let i = 0; i < pts.length - 1; i++) {
         const a = pts[i], b = pts[i + 1];
