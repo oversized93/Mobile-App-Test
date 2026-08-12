@@ -186,6 +186,27 @@ with both pillars (gt359), pacing re-audited healthy (parcel two
 mid-day-two). gt350 milestone ran the full battery green; matrix
 checkpoints gt354, gt358, gt362, gt366.
 
+### Parity run continued (gt385–gt394)
+The world started reacting to play. Bystanders hop and comment when
+the player's ball lands near them (gt387), distant NPC strikes are
+audible as distance-faded tocks (gt389), and the gt390 milestone ran
+the full six-suite battery green (matrix desk/phone/veteran,
+noteleport, editflow, landflow, round, 4x4 buy). Flight theater
+deepened: every airborne NPC shot casts a tracking ground shadow, and
+a latent bug died — the shared puff texture was lazily built by the
+player trail, so NPC flights/divots/sand were invisible until the
+player took a shot (ensureTrailPuffTex, gt391). Hole-outs got their
+moment: a sparkle wink over the cup plus a soft double rattle within
+earshot, cooldown-guarded (gt392). GolfTopia's automation fantasy
+arrived as hovering maintenance drones — saucer + rotor ring + teal
+underglow that brightens into a night headlight, fleet scaling with
+holes, patrolling smoothstepped legs between fairway stops (gt393).
+And the first real pricing lever: Budget/Standard/Premium green-fee
+pills in the finances panel — ×0.7/×1/×1.4 fees against ∓ member
+draw, persisted, with golfers griping at premium rates and praising
+budget ones (gt394; also fixed the finances card height overflow).
+Matrix green at gt390 and gt394 checkpoints.
+
 ### Parity run continued (gt377–gt384)
 The blank island became a playground. The wizard now carves what it
 promises: confirming a new hole paints its tee pad, five-wide fairway

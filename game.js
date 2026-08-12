@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt394';
+const BUILD_TAG = 'gt395';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4694,13 +4694,22 @@ function drawOverworld() {
         d.t === 'kiosk' || d.t === 'stall' || d.t === 'clubhouse'
         || d.t === 'gazebo' || d.t === 'grandstand').length;
     const hN = worldCourse.holes.length;
-    let subtitle = hN + (hN === 1 ? ' hole' : ' holes') + ' \u2022 '
+    // Star rating always on display \u2014 the scoreboard of the whole game
+    const owRating = Math.round(computeCourseRating() * 2) / 2;
+    const owStars = '\u2605'.repeat(Math.floor(owRating))
+        + (owRating % 1 >= 0.5 ? '\u00bd' : '')
+        + '\u2606'.repeat(5 - Math.ceil(owRating));
+    ctx.fillStyle = '#ffd24a';
+    ctx.fillText(owStars, L.pad + 6 + nameW + 12, 28);
+    const starsW = ctx.measureText(owStars).width;
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    let subtitle = '\u2022 ' + hN + (hN === 1 ? ' hole' : ' holes') + ' \u2022 '
         + facN + (facN === 1 ? ' facility' : ' facilities')
         + ' \u2022 build ' + BUILD_TAG;
     if (location.search.indexOf('fps=1') >= 0) {
         subtitle += ' \u2022 ' + Math.round(window.__fps || 0) + ' fps';
     }
-    ctx.fillText(subtitle, L.pad + 6 + nameW + 12, 28);
+    ctx.fillText(subtitle, L.pad + 6 + nameW + 12 + starsW + 6, 28);
 
     // Balance chip (top center) — gold glossy; tap for the finances panel
     const bpW = 124, bpH = 30;
