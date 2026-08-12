@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt372';
+const BUILD_TAG = 'gt373';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -4296,7 +4296,11 @@ function drawOverworld() {
     // ---- Property lines: dashed parcel grid while any build tool is
     // armed; unowned sections carry a lock and price at their center ----
     const buildingNow = (owTool && owTool !== 'hand') || holeWizard;
-    if (buildingNow
+    // Property lines also surface when land is within reach or a buy
+    // offer is live — the nudge points at them, so they must be visible
+    // without arming a tool first
+    const landInReach = resort.coins >= parcelPrice() || owBuyOffer;
+    if ((buildingNow || landInReach)
         && ensureParcels().owned.length < PARCEL_COLS * PARCEL_ROWS) {
         ctx.strokeStyle = 'rgba(255,255,255,0.45)';
         ctx.lineWidth = 1.5;
