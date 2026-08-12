@@ -186,6 +186,25 @@ with both pillars (gt359), pacing re-audited healthy (parcel two
 mid-day-two). gt350 milestone ran the full battery green; matrix
 checkpoints gt354, gt358, gt362, gt366.
 
+### Parity run continued (gt366–gt376)
+Two user-driven milestones. First, in-house rigging (gt370): pip-
+installed headless Blender rigs the shipped golfer with a 10-bone
+skeleton, computed weights, and authored Idle/Walk/Swing clips; named
+golfers run skinned AnimationMixer clones (crowd stays instanced), and
+gt376 synced stride rate to live glide speed. Second, the big blank
+island (gt371): generated islands went 192x128 with an elliptical
+coast, a 4x4 property grid, ONE owned parcel, and zero pre-built holes
+— plus the supporting cast: first-hole nudge (gt372), property lines
+and price tags surfacing when land is affordable (gt373), tags as tap-
+to-buy buttons (gt374), and a minimap territory layer (gt375). Two
+engine bugs fixed en route: sea z-fighting through low terrain (camera
+near 1→4 + post-terrace land floor) and the one-quad water sheet
+subdivided. Also: minimap tier dots (gt367), heater streaks with
+roster flames (gt368-369), premium-tier flywheel completion (gt361-365
+documented prior). Perf audit (gt377 cycle): the 2.5x island renders
+at IDENTICAL budget to the old one — foliage instancing is globally
+capped (108 calls / 430k tris / 2572 instances at phone viewport).
+
 ### Resolved in-house: skinned golfer animations (gt370)
 The Mixamo wait ended by doing the rigging ourselves: headless Blender
 (pip-installed bpy) builds a 10-bone rig over the shipped decimated
