@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt377';
+const BUILD_TAG = 'gt378';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -876,6 +876,42 @@ function parFromYards(yds) {
     return 5;
 }
 
+// Convert wild ground under a drafted hole into playable surfaces:
+// 3x3 tee pad, width-5 fairway ribbon tracing the line, radius-3 green.
+// Touches only ROUGH and TREE cells so hazards and paths persist.
+function carveHoleCorridor(rec) {
+    const grid = worldCourse.grid;
+    const wild = (c, r) => {
+        if (r < 0 || r >= worldCourse.rows || c < 0 || c >= worldCourse.cols)
+            return false;
+        const t = grid[r][c];
+        return t === T.ROUGH || t === T.TREE;
+    };
+    const put = (c, r, t) => { if (wild(c, r)) grid[r][c] = t; };
+    const disc = (cx, cy, rad, t) => {
+        for (let r = Math.floor(cy - rad); r <= Math.ceil(cy + rad); r++)
+            for (let c = Math.floor(cx - rad); c <= Math.ceil(cx + rad); c++)
+                if ((c - cx) ** 2 + (r - cy) ** 2 <= rad * rad) put(c, r, t);
+    };
+    const pts = [rec.tee, ...(rec.waypoints || []), rec.pin];
+    // Pads first — the ribbon only converts wild ground, so painting
+    // tee and green before it keeps them from being claimed as fairway
+    disc(rec.tee.x, rec.tee.y, 2.2, T.TEE);
+    disc(rec.pin.x, rec.pin.y, 2.8, T.GREEN);
+    // Fairway ribbon segment by segment
+    for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const len = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+        const steps = Math.ceil(len * 1.6);
+        for (let k = 0; k <= steps; k++) {
+            const cx = a.x + (b.x - a.x) * (k / steps);
+            const cy = a.y + (b.y - a.y) * (k / steps);
+            disc(cx, cy, 2.6, T.FAIRWAY);
+        }
+    }
+    refreshWorldHeights();
+}
+
 function finalizeHole() {
     {
         const w = holeWizard;
@@ -910,6 +946,11 @@ function finalizeHole() {
         }
     } else {
         worldCourse.holes.push(recNew);
+        // Auto-carve the play corridor (reference-style): tee pad,
+        // fairway ribbon along the drafted line, crowned green pad.
+        // Only wild ground converts — water, sand, and paths survive as
+        // designed hazards, and edits never repaint player work.
+        carveHoleCorridor(recNew);
     }
     saveWorldCourse();
     // The confirm tap's touch-end consumes this: arcs, tee signs, and
