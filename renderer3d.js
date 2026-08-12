@@ -4104,6 +4104,12 @@ function updateAmbientNPCs3D(dt, hole) {
                 a2.play();
                 rg2.cur = want;
             }
+            // Stride rate follows actual glide speed (dashing quitters
+            // hustle, slow strollers amble) — set live so speed changes
+            // mid-walk take effect
+            if (want === 'Walk' && rg2.actions.Walk) {
+                rg2.actions.Walk.timeScale = (s.speed || 13) / 14;
+            }
             rg2.mixer.update(dt);
         }
         if (npcModelInsts) {
