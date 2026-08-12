@@ -3421,9 +3421,9 @@ function droneLandSpot(hole) {
     for (let t = 0; t < 40; t++) {
         const c = 2 + Math.floor(Math.random() * (hole.cols - 4));
         const r = 2 + Math.floor(Math.random() * (hole.rows - 4));
-        const tt = hole.grid && hole.grid[r] && hole.grid[r][c];
-        if (tt === T.FAIRWAY || tt === T.GREEN || tt === T.ROUGH
-            || tt === T.PATH) {
+        const tt = hole.grid && hole.grid[r] ? hole.grid[r][c] : undefined;
+        if (tt === T.GRASS || tt === T.FAIRWAY || tt === T.GREEN
+            || tt === T.ROUGH || tt === T.PATH) {
             const gy = (hole.heights && hole.heights[r])
                 ? (hole.heights[r][c] || 0) : 0;
             return { x: (c + 0.5) * CELL, z: (r + 0.5) * CELL, y: gy };
@@ -3438,6 +3438,11 @@ function setupDrones3D(hole) {
             if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); }
             else if (o.isSprite) o.material.dispose();
         });
+        if (d.ring) {
+            scene3d.remove(d.ring);
+            d.ring.geometry.dispose();
+            d.ringMat.dispose();
+        }
     }
     droneUnits = [];
     droneCourse = hole;
@@ -3472,10 +3477,22 @@ function setupDrones3D(hole) {
         glow.scale.set(5, 5, 1);
         grp.add(glow);
         scene3d.add(grp);
+        // Turf-scan ring: pulses on the ground while the drone inspects
+        const ringGeo2 = new THREE.RingGeometry(2.2, 3.0, 20);
+        ringGeo2.rotateX(-Math.PI / 2);
+        const scanMat = new THREE.MeshBasicMaterial({
+            color: 0x53e0d2, transparent: true, opacity: 0.3,
+            depthWrite: false, side: THREE.DoubleSide
+        });
+        scanMat.toneMapped = false;
+        const scanRing = new THREE.Mesh(ringGeo2, scanMat);
+        scanRing.renderOrder = 3;
+        scene3d.add(scanRing);
         const spot = droneLandSpot(hole)
             || { x: hole.cols * CELL / 2, z: hole.rows * CELL / 2, y: 0 };
         grp.position.set(spot.x, spot.y + 26, spot.z);
-        droneUnits.push({ grp, gmat, x: spot.x, z: spot.z, y: spot.y,
+        droneUnits.push({ grp, gmat, ring: scanRing, ringMat: scanMat,
+            x: spot.x, z: spot.z, y: spot.y,
             tx: spot.x, tz: spot.z, ty: spot.y, k: 1, dur: 1,
             hoverT: 2 + Math.random() * 4, phase: Math.random() * 7 });
     }
@@ -3514,6 +3531,19 @@ function updateDrones3D(dt, hole) {
         } else {
             d.grp.rotation.x *= 0.95;
             d.grp.rotation.y += dt * 0.4; // idle slow spin while inspecting
+        }
+        // Scan ring breathes on the turf while hovering, hides in transit
+        if (d.ring) {
+            const hovering = d.k >= 1;
+            d.ring.visible = hovering;
+            if (hovering) {
+                const tt = now / 1000 * 2.5 + d.phase;
+                d.ring.position.set(d.tx, d.ty + 0.6, d.tz);
+                const rs = 1 + 0.25 * Math.sin(tt);
+                d.ring.scale.set(rs, 1, rs);
+                d.ringMat.opacity = (0.26 + 0.14 * Math.sin(tt * 1.4))
+                    * (0.7 + nightDarkK * 0.5);
+            }
         }
         d.gmat.opacity = 0.22 + nightDarkK * 0.55;
     }
