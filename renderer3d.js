@@ -3411,8 +3411,117 @@ function updateSplashes3D() {
     }
 }
 
+// ---- Maintenance drones: hovering groundskeeper bots. The resort
+// runs itself — little saucers cruise between fairways, pause to
+// inspect the turf, and switch on a teal underglow after dark.
+let droneUnits = [];
+let droneCourse = null;
+let nightDarkK = 0;
+function droneLandSpot(hole) {
+    for (let t = 0; t < 40; t++) {
+        const c = 2 + Math.floor(Math.random() * (hole.cols - 4));
+        const r = 2 + Math.floor(Math.random() * (hole.rows - 4));
+        const tt = hole.grid && hole.grid[r] && hole.grid[r][c];
+        if (tt === T.FAIRWAY || tt === T.GREEN || tt === T.ROUGH
+            || tt === T.PATH) {
+            const gy = (hole.heights && hole.heights[r])
+                ? (hole.heights[r][c] || 0) : 0;
+            return { x: (c + 0.5) * CELL, z: (r + 0.5) * CELL, y: gy };
+        }
+    }
+    return null;
+}
+function setupDrones3D(hole) {
+    for (const d of droneUnits) {
+        scene3d.remove(d.grp);
+        d.grp.traverse(o => {
+            if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); }
+            else if (o.isSprite) o.material.dispose();
+        });
+    }
+    droneUnits = [];
+    droneCourse = hole;
+    if (!hole.grid) return;
+    const n = Math.min(3,
+        1 + Math.floor((hole.holes ? hole.holes.length : 0) / 3));
+    ensureTrailPuffTex();
+    for (let i = 0; i < n; i++) {
+        const grp = new THREE.Group();
+        const body = new THREE.Mesh(
+            new THREE.SphereGeometry(2.1, 10, 8),
+            new THREE.MeshLambertMaterial({
+                color: new THREE.Color('#dce6ea').convertSRGBToLinear()
+            }));
+        body.scale.y = 0.62;
+        grp.add(body);
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(3.1, 0.45, 6, 18),
+            new THREE.MeshLambertMaterial({
+                color: new THREE.Color('#2b3a41').convertSRGBToLinear()
+            }));
+        ring.rotation.x = Math.PI / 2;
+        grp.add(ring);
+        const gmat = new THREE.SpriteMaterial({
+            map: trailPuffTex, color: 0x53e0d2, transparent: true,
+            opacity: 0.25, blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        gmat.toneMapped = false;
+        const glow = new THREE.Sprite(gmat);
+        glow.position.y = -2.2;
+        glow.scale.set(5, 5, 1);
+        grp.add(glow);
+        scene3d.add(grp);
+        const spot = droneLandSpot(hole)
+            || { x: hole.cols * CELL / 2, z: hole.rows * CELL / 2, y: 0 };
+        grp.position.set(spot.x, spot.y + 26, spot.z);
+        droneUnits.push({ grp, gmat, x: spot.x, z: spot.z, y: spot.y,
+            tx: spot.x, tz: spot.z, ty: spot.y, k: 1, dur: 1,
+            hoverT: 2 + Math.random() * 4, phase: Math.random() * 7 });
+    }
+}
+function updateDrones3D(dt, hole) {
+    if (typeof scene3d === 'undefined' || !scene3d || !hole) return;
+    if (droneCourse !== hole) setupDrones3D(hole);
+    const now = performance.now();
+    for (const d of droneUnits) {
+        if (d.k >= 1) {
+            d.hoverT -= dt;
+            if (d.hoverT <= 0) {
+                const spot = droneLandSpot(hole);
+                if (spot) {
+                    d.x = d.tx; d.z = d.tz; d.y = d.ty;
+                    d.tx = spot.x; d.tz = spot.z; d.ty = spot.y;
+                    const dist = Math.hypot(d.tx - d.x, d.tz - d.z);
+                    d.dur = Math.max(1.2, dist / 55);
+                    d.k = 0;
+                }
+                d.hoverT = 3 + Math.random() * 5;
+            }
+        } else {
+            d.k = Math.min(1, d.k + dt / d.dur);
+        }
+        const e = d.k < 1 ? (d.k * d.k * (3 - 2 * d.k)) : 1;
+        const px = d.x + (d.tx - d.x) * e;
+        const pz = d.z + (d.tz - d.z) * e;
+        const py = d.y + (d.ty - d.y) * e + 26
+            + Math.sin(now / 1000 * 2.2 + d.phase) * 1.6
+            + (d.k < 1 ? Math.sin(Math.PI * d.k) * 7 : 0);
+        d.grp.position.set(px, py, pz);
+        if (d.k < 1) {
+            d.grp.rotation.y = Math.atan2(d.tx - d.x, d.tz - d.z);
+            d.grp.rotation.x = 0.18 * Math.sin(Math.PI * Math.min(1, d.k * 1.4));
+        } else {
+            d.grp.rotation.x *= 0.95;
+            d.grp.rotation.y += dt * 0.4; // idle slow spin while inspecting
+        }
+        d.gmat.opacity = 0.22 + nightDarkK * 0.55;
+    }
+}
+
 // Called from the game loop each frame while the overworld is visible
 function updateAmbientNPCs3D(dt, hole) {
+    updateDrones3D(dt, hole);
     updateSplashes3D();
     updateTrailPuffs3D();
     updateSwingFlashes3D();
@@ -5065,6 +5174,7 @@ function updateDayNightTint(minutes) {
     function az2Moon() { return (h - 13) / 24 * Math.PI * 2; }
     // Night course dressing: tee signs brighten, greens glow after dark
     const darkK = Math.max(0, 1 - dayW * 1.6);
+    nightDarkK = darkK; // shared with the drone underglow
     for (const sm of teeSignMats) sm.opacity = 0.55 + 0.45 * darkK;
     for (const gm of greenGlowMats) gm.opacity = darkK * darkK * 0.5;
     if (lampPoolMatRef) lampPoolMatRef.opacity = darkK * darkK * 0.85;
