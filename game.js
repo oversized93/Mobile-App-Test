@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt400';
+const BUILD_TAG = 'gt401';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1891,7 +1891,34 @@ function generateHeights(hole) {
             h[r][c] = Math.max(2.2, stepBase + lip * lip * STEP_H);
         }
     }
+    // Player sculpting: persistent hand-shaped deltas layered over the
+    // derived terrain. Sparse map "r,c" -> dh, applied after terracing
+    // so raises/digs survive regeneration; water stays sealed at its
+    // generated level and land never dips below the 2.2 sea floor.
+    if (hole.sculpt) {
+        for (const k in hole.sculpt) {
+            const ci = k.indexOf(',');
+            const sr = +k.slice(0, ci), sc = +k.slice(ci + 1);
+            if (!(sr >= 0 && sr < hole.rows && sc >= 0 && sc < hole.cols)) continue;
+            if (hole.grid[sr] && hole.grid[sr][sc] === T.WATER) continue;
+            h[sr][sc] = Math.max(2.2, h[sr][sc] + hole.sculpt[k]);
+        }
+    }
     return h;
+}
+
+// Accumulate a sculpt delta on one cell (the brush calls this per dab).
+// Deltas clamp to about two terraces each way and zeroed cells are
+// pruned so saves stay sparse.
+function sculptCell(course, c, r, dh) {
+    if (!course || r < 0 || r >= course.rows || c < 0 || c >= course.cols) return false;
+    if (course.grid[r] && course.grid[r][c] === T.WATER) return false;
+    course.sculpt = course.sculpt || {};
+    const k = r + ',' + c;
+    const next = Math.max(-44, Math.min(44, (course.sculpt[k] || 0) + dh));
+    if (Math.abs(next) < 0.01) delete course.sculpt[k];
+    else course.sculpt[k] = next;
+    return true;
 }
 
 // ---- Ball physics update ----
