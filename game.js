@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt380';
+const BUILD_TAG = 'gt381';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -6166,6 +6166,48 @@ function drawHoleWizardOverlay() {
         ctx.fillText(info, W() / 2, infoY + 17);
     }
 
+    // Carve-footprint ghost (new holes only): a translucent ribbon
+    // showing exactly what confirming will paint — fairway corridor,
+    // tee pad, green disc
+    if (w.step === 'shape' && w.tee && w.pin && w.editing == null) {
+        const pts0 = [w.tee, ...(w.waypoints || []), w.pin];
+        const a0 = cellCenterScreen(w.tee.x, w.tee.y);
+        const a1 = cellCenterScreen(w.tee.x + 1, w.tee.y);
+        if (a0 && a1 && !a0.behind && !a1.behind) {
+            const cellPx = Math.max(1.5, Math.hypot(a1.x - a0.x, a1.y - a0.y));
+            ctx.save();
+            ctx.globalAlpha = 0.22;
+            ctx.strokeStyle = '#7ddc6a';
+            ctx.lineWidth = cellPx * 5.2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            let started = false;
+            for (const pt of pts0) {
+                const sp2 = cellCenterScreen(pt.x, pt.y);
+                if (!sp2 || sp2.behind) { started = false; continue; }
+                if (!started) { ctx.moveTo(sp2.x, sp2.y); started = true; }
+                else ctx.lineTo(sp2.x, sp2.y);
+            }
+            ctx.stroke();
+            // Tee pad + green disc ghosts
+            const gTee = cellCenterScreen(w.tee.x, w.tee.y);
+            const gPin = cellCenterScreen(w.pin.x, w.pin.y);
+            if (gTee && !gTee.behind) {
+                ctx.fillStyle = '#3fae58';
+                ctx.beginPath();
+                ctx.arc(gTee.x, gTee.y, cellPx * 2.4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            if (gPin && !gPin.behind) {
+                ctx.fillStyle = '#9fe870';
+                ctx.beginPath();
+                ctx.arc(gPin.x, gPin.y, cellPx * 3.0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
     // Live design readout while shaping: length, par, stars, fee
     if (w.step === 'shape' && w.tee && w.pin) {
         const yds = Math.round(polylineLengthYards(w));
