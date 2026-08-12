@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt373';
+const BUILD_TAG = 'gt374';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -571,6 +571,7 @@ let owRecordLineRect = null; // hole-card record line (tap -> holder)
 let owNameRect = null;     // resort name rect in the top bar (tap to rename)
 let owDecorDrag = null;    // { i, moved } while repositioning a decor item
 let owBuyRect = null;  // screen rect of the buy chip
+let owParcelTagRects = []; // tappable lock/price tags on locked parcels
 let owBuyOffer = null; // { parcel, t0 } — buy chip shown after a blocked tap
 function offerParcel(c, r) {
     owBuyOffer = { parcel: parcelIndexAt(c, r), t0: performance.now() };
@@ -4296,6 +4297,7 @@ function drawOverworld() {
     // ---- Property lines: dashed parcel grid while any build tool is
     // armed; unowned sections carry a lock and price at their center ----
     const buildingNow = (owTool && owTool !== 'hand') || holeWizard;
+    owParcelTagRects = [];
     // Property lines also surface when land is within reach or a buy
     // offer is live — the nudge points at them, so they must be visible
     // without arming a tool first
@@ -4340,6 +4342,8 @@ function drawOverworld() {
             ctx.fill();
             ctx.fillStyle = '#fff';
             ctx.fillText(txt, p.x, p.y + 4);
+            owParcelTagRects.push({ pi: pi, x: p.x - tw2 / 2, y: p.y - 12,
+                w: tw2, h: 24 });
         }
     }
     // Buy-property chip after a blocked tap (auto-hides)
@@ -6319,6 +6323,9 @@ function overworldHUDHit(sx, sy) {
     const L = overworldLayout();
     if (hitBtn(sx, sy, L.closeX, L.closeY, L.closeSize, L.closeSize)) return 'close';
     if (hitBtn(sx, sy, L.undoX, L.undoY, L.undoSize, L.undoSize)) return 'undo';
+    for (const tg of owParcelTagRects) {
+        if (hitBtn(sx, sy, tg.x, tg.y, tg.w, tg.h)) return 'parceltag:' + tg.pi;
+    }
     if (owBuyOffer && owBuyRect
         && hitBtn(sx, sy, owBuyRect.x, owBuyRect.y, owBuyRect.w, owBuyRect.h)) {
         return 'buyparcel';
@@ -6442,6 +6449,11 @@ function overworldTouchStart(sx, sy) {
     if (hit === 'close') { exitOverworld(); return; }
     if (hit === 'undo') { undoLastStroke(); return; }
     if (hit === 'buyparcel') { buyOfferedParcel(); return; }
+    if (hit && hit.indexOf('parceltag:') === 0) {
+        // Tapping a price tag opens the buy offer for that parcel
+        owBuyOffer = { parcel: +hit.slice(10), t0: performance.now() };
+        return;
+    }
     if (hit === 'rename') {
         const inp = prompt('Name your resort:', worldCourse.name);
         if (inp != null && inp.trim()) {
