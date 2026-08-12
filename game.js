@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt395';
+const BUILD_TAG = 'gt396';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -5013,6 +5013,51 @@ function drawOverworld() {
         ctx.fillStyle = '#fff';
         ctx.textAlign = 'center';
         ctx.fillText(tTxt, W() / 2, L.topBarH + 24);
+        window.__tourneyBannerRect = { x: (W() - tw) / 2, y: L.topBarH + 8,
+            w: tw, h: 24 };
+        // Full standings card — tap the banner to open, tap anywhere to close
+        if (window.__tourneyBoardOpen && entries.length) {
+            const rows = entries.slice(0, 8);
+            const cw2 = Math.min(W() - 40, 260);
+            const ch2 = 64 + rows.length * 22;
+            const cx2 = (W() - cw2) / 2, cy2 = L.topBarH + 40;
+            ctx.fillStyle = 'rgba(12,24,32,0.94)';
+            roundRect(cx2, cy2, cw2, ch2, 12); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,210,74,0.45)';
+            ctx.lineWidth = 1;
+            roundRect(cx2, cy2, cw2, ch2, 12); ctx.stroke();
+            ctx.fillStyle = '#ffd24a';
+            ctx.font = 'bold 12px -apple-system,sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('\u{1F3C6} ' + tourneyTitle().toUpperCase(),
+                cx2 + cw2 / 2, cy2 + 22);
+            ctx.font = '10px -apple-system,sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.fillText('score is average vs par • best round wins the purse',
+                cx2 + cw2 / 2, cy2 + 38);
+            rows.forEach(([nm, tb], i) => {
+                const yy = cy2 + 58 + i * 22;
+                const rel = tb.rel / tb.n;
+                const you = nm === 'You';
+                if (you) {
+                    ctx.fillStyle = 'rgba(255,210,74,0.16)';
+                    roundRect(cx2 + 8, yy - 14, cw2 - 16, 20, 6);
+                    ctx.fill();
+                }
+                ctx.textAlign = 'left';
+                ctx.font = (i === 0 || you ? 'bold ' : '')
+                    + '11px -apple-system,sans-serif';
+                ctx.fillStyle = you ? '#ffd24a' : '#eaf4ff';
+                const medal = i === 0 ? '\u{1F947} ' : i === 1 ? '\u{1F948} '
+                    : i === 2 ? '\u{1F949} ' : '     ';
+                ctx.fillText(medal + nm, cx2 + 14, yy);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = rel < 0 ? '#8be06a'
+                    : rel === 0 ? '#eaf4ff' : '#f0a860';
+                ctx.fillText((rel <= 0 ? '' : '+') + rel.toFixed(1)
+                    + ' (' + tb.n + ')', cx2 + cw2 - 14, yy);
+            });
+        }
     }
 
     // Game clock chip — Day N + time, driven by the persistent world clock
@@ -6759,6 +6804,18 @@ function overworldTouchStart(sx, sy) {
     if (window.__roundSummary) {
         window.__roundSummary = null;
         return;
+    }
+    // Tournament standings: banner tap opens, any tap closes
+    if (window.__tourneyBoardOpen) {
+        window.__tourneyBoardOpen = false;
+        return;
+    }
+    if (window.__tourney && window.__tourneyBannerRect) {
+        const tr = window.__tourneyBannerRect;
+        if (hitBtn(sx, sy, tr.x, tr.y, tr.w, tr.h)) {
+            window.__tourneyBoardOpen = true;
+            return;
+        }
     }
     const hit = overworldHUDHit(sx, sy);
     if (hit === 'close') { exitOverworld(); return; }
