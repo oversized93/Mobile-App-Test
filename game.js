@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt381';
+const BUILD_TAG = 'gt382';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -670,7 +670,19 @@ function holeBounds(rec) {
     return { minC: minC - pad, minR: minR - pad, maxC: maxC + pad, maxR: maxR + pad };
 }
 
+// The next open hole after the one being played (id order) — drives
+// the Next Hole chain so a course plays as a full round
+function nextWorldHole() {
+    if (!worldCourse || !currentHole || currentHole.worldHoleId == null) return null;
+    const open = worldCourse.holes.filter(h => h.open !== false);
+    const i = open.findIndex(h => h.id === currentHole.worldHoleId);
+    return (i >= 0 && i + 1 < open.length) ? open[i + 1] : null;
+}
+
 function startWorldHolePlaytest(holeRec) {
+    // A chain of playtests is a round: the tracker persists across
+    // holes and clears when the player returns to the resort
+    if (!window.__worldRound) window.__worldRound = { scores: [], pars: [] };
     worldPlaytest = true;
     customCoursePlay = false;
     owSelectedHole = null;
@@ -8518,10 +8530,18 @@ function drawHoleDone() {
     ctx.lineTo(cx + cardW - 30, cy + 135);
     ctx.stroke();
 
-    // Round total
-    let totalStrokes = holeStrokes.reduce((a, b) => a + b, 0);
-    let totalPar = 0;
-    for (let i = 0; i < holeStrokes.length; i++) totalPar += currentCourse.holes[i].par;
+    // Round total — world playtests read the chain tracker, legacy
+    // rounds keep their course arithmetic
+    let totalStrokes, totalPar;
+    if (worldPlaytest) {
+        const wr = window.__worldRound || { scores: [], pars: [] };
+        totalStrokes = wr.scores.reduce((a, b) => a + b, 0) + strokes;
+        totalPar = wr.pars.reduce((a, b) => a + b, 0) + (currentHole.par || 4);
+    } else {
+        totalStrokes = holeStrokes.reduce((a, b) => a + b, 0);
+        totalPar = 0;
+        for (let i = 0; i < holeStrokes.length; i++) totalPar += currentCourse.holes[i].par;
+    }
     const roundDiff = totalStrokes - totalPar;
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.font = '13px -apple-system,sans-serif';
@@ -8532,8 +8552,12 @@ function drawHoleDone() {
         : (roundDiff > 0 ? '+' : '') + roundDiff) + ')', W() / 2, cy + 185);
 
     // Next button — gradient
-    const isLast = currentHoleIdx >= currentCourse.holes.length - 1;
-    const btnLabel = worldPlaytest ? 'Back to Resort' : (isLast ? 'Finish Round' : 'Next Hole');
+    const isLast = !worldPlaytest
+        && currentHoleIdx >= currentCourse.holes.length - 1;
+    const wNext = worldPlaytest ? nextWorldHole() : null;
+    const btnLabel = worldPlaytest
+        ? (wNext ? 'Next Hole \u25B6' : 'Back to Resort')
+        : (isLast ? 'Finish Round' : 'Next Hole');
     const btnW = cardW - 48, btnH = 48;
     const btnX = cx + 24, btnY = cy + cardH - 65;
     const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX + btnW, btnY);
@@ -8545,6 +8569,12 @@ function drawHoleDone() {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 17px -apple-system,sans-serif';
     ctx.fillText(btnLabel, W() / 2, btnY + btnH / 2 + 6);
+    // End-round escape hatch below the card while chaining
+    if (worldPlaytest && wNext) {
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = '13px -apple-system,sans-serif';
+        ctx.fillText('End round \u2022 back to resort', W() / 2, cy + cardH + 22);
+    }
 }
 
 function holeDoneTouchStart(sx, sy) {
@@ -8553,22 +8583,55 @@ function holeDoneTouchStart(sx, sy) {
     const cx = (W() - cardW) / 2;
     const cy = (H() - cardH) / 2 - 20;
 
+    const recordWorldScore = () => {
+        if (currentHole.worldHoleId != null && strokes > 0) {
+            (window.__holeOuts = window.__holeOuts || []).push({
+                holeId: currentHole.worldHoleId, score: strokes,
+                par: currentHole.par || 4, name: 'You'
+            });
+            if (window.__worldRound) {
+                window.__worldRound.scores.push(strokes);
+                window.__worldRound.pars.push(currentHole.par || 4);
+            }
+            if (window.__tourney) {
+                notify('\u{1F3C6} Your ' + strokes
+                    + ' is on the tournament board!');
+            }
+        }
+    };
+    const finishWorldRound = () => {
+        const wr = window.__worldRound;
+        if (wr && wr.scores.length >= 2) {
+            const tot = wr.scores.reduce((a, b) => a + b, 0);
+            const tp = wr.pars.reduce((a, b) => a + b, 0);
+            const rd = tot - tp;
+            notify('\u{1F3CC}\uFE0F Round: ' + tot + ' over '
+                + wr.scores.length + ' holes ('
+                + (rd === 0 ? 'E' : (rd > 0 ? '+' : '') + rd) + ')');
+        }
+        window.__worldRound = null;
+        endWorldPlaytest();
+    };
+    // End-round link (world playtest only, sits under the card)
+    if (worldPlaytest && nextWorldHole()) {
+        const dW = Math.min(W() - 32, 300), dH = 260;
+        const dx = (W() - dW) / 2, dy = (H() - dH) / 2 - 10;
+        if (hitBtn(sx, sy, dx, dy + dH + 2, dW, 30)) {
+            recordWorldScore();
+            finishWorldRound();
+            return;
+        }
+    }
     // Next/Finish button
     if (hitBtn(sx, sy, cx + 20, cy + cardH - 60, cardW - 40, 44)) {
         if (worldPlaytest) {
-            // The owner's round counts: feed it to the same stats/records
-            // pipeline the ambient golfers use
-            if (currentHole.worldHoleId != null && strokes > 0) {
-                (window.__holeOuts = window.__holeOuts || []).push({
-                    holeId: currentHole.worldHoleId, score: strokes,
-                    par: currentHole.par || 4, name: 'You'
-                });
-                if (window.__tourney) {
-                    notify('\u{1F3C6} Your ' + strokes
-                        + ' is on the tournament board!');
-                }
+            recordWorldScore();
+            const nxt = nextWorldHole();
+            if (nxt) {
+                startWorldHolePlaytest(nxt);
+            } else {
+                finishWorldRound();
             }
-            endWorldPlaytest();
             return;
         }
         const isLast = currentHoleIdx >= currentCourse.holes.length - 1;
