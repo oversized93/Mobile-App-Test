@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt398';
+const BUILD_TAG = 'gt399';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -8469,6 +8469,51 @@ function drawPlaying() {
             ctx.fillRect(cx - 22, bs.y, 44, tY - bs.y);
             // Virtual ball at finger position
             drawBall(cx, tY, 12, player.ballColor);
+        }
+    }
+
+    // ---- Green reading: shimmering downhill arrows while the ball
+    // sits on the green, so breaks are readable before the putt ----
+    if (!ball.moving && !holeComplete && currentHole.hole
+        && terrainAt(ball.x, ball.y) === T.GREEN) {
+        const gpx = (currentHole.hole.x + 0.5) * CELL;
+        const gpy = (currentHole.hole.y + 0.5) * CELL;
+        const midX = (ball.x + gpx) / 2, midY = (ball.y + gpy) / 2;
+        const span = Math.hypot(gpx - ball.x, gpy - ball.y);
+        const reach = Math.min(span * 0.8 + CELL * 2, CELL * 7);
+        const step = CELL * 1.4;
+        const proj = (scene3dReady && typeof worldToScreen3D === 'function')
+            ? worldToScreen3D : worldToScreen;
+        const tSec = performance.now() / 1000;
+        ctx.lineWidth = 2;
+        for (let gy = -reach; gy <= reach; gy += step) {
+            for (let gx = -reach; gx <= reach; gx += step) {
+                const wx = midX + gx, wy = midY + gy;
+                if (terrainAt(wx, wy) !== T.GREEN) continue;
+                const sl = terrainSlopeAt(wx, wy);
+                const mag = Math.hypot(sl.sx, sl.sy);
+                if (mag < 0.004) continue; // dead flat: no arrow
+                const p0 = proj(wx, wy);
+                const p1 = proj(wx + (sl.sx / mag) * CELL * 0.9,
+                                wy + (sl.sy / mag) * CELL * 0.9);
+                const dxs = p1.x - p0.x, dys = p1.y - p0.y;
+                const dl = Math.hypot(dxs, dys) || 1;
+                const ux = dxs / dl, uy = dys / dl;
+                const len = Math.min(16, 7 + mag * 900);
+                const pulse = 0.45 + 0.3 * Math.sin(tSec * 2.2
+                    + (wx + wy) * 0.05);
+                const aA = Math.min(0.8, 0.25 + mag * 26) * pulse;
+                ctx.strokeStyle = 'rgba(210,245,255,' + aA.toFixed(3) + ')';
+                const tx2 = p0.x + ux * len, ty2 = p0.y + uy * len;
+                ctx.beginPath();
+                ctx.moveTo(p0.x, p0.y);
+                ctx.lineTo(tx2, ty2);
+                ctx.moveTo(tx2, ty2);
+                ctx.lineTo(tx2 - ux * 4 + uy * 3, ty2 - uy * 4 - ux * 3);
+                ctx.moveTo(tx2, ty2);
+                ctx.lineTo(tx2 - ux * 4 - uy * 3, ty2 - uy * 4 + ux * 3);
+                ctx.stroke();
+            }
         }
     }
 
