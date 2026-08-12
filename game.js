@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt397';
+const BUILD_TAG = 'gt398';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -9478,6 +9478,42 @@ function initAmbientAudio() {
         scheduleChirp();
         scheduleGullCry();
         scheduleFrogCroak();
+        // Drone hum: two detuned saws through a dark lowpass — a soft
+        // whir that swells as the nearest groundskeeper drone gets close
+        const humOsc = audioCtx.createOscillator();
+        humOsc.type = 'sawtooth';
+        humOsc.frequency.value = 82;
+        const humOsc2 = audioCtx.createOscillator();
+        humOsc2.type = 'sawtooth';
+        humOsc2.frequency.value = 82 * 1.007; // slow beat shimmer
+        const humLp = audioCtx.createBiquadFilter();
+        humLp.type = 'lowpass';
+        humLp.frequency.value = 240;
+        const humGain = audioCtx.createGain();
+        humGain.gain.value = 0;
+        humOsc.connect(humLp);
+        humOsc2.connect(humLp);
+        humLp.connect(humGain);
+        humGain.connect(audioMaster);
+        humOsc.start();
+        humOsc2.start();
+        setInterval(() => {
+            if (!audioCtx) return;
+            let g = 0;
+            if (state === 'overworld' && typeof droneUnits !== 'undefined'
+                && droneUnits.length && typeof cam3dPivotX !== 'undefined') {
+                let best = 1e9;
+                for (const d of droneUnits) {
+                    const dd = Math.hypot(d.grp.position.x - cam3dPivotX,
+                        d.grp.position.z - cam3dPivotZ);
+                    if (dd < best) best = dd;
+                }
+                if (best < 260) g = 0.16 * (1 - best / 260);
+            }
+            window.__droneHum = g;
+            humGain.gain.linearRampToValueAtTime(g,
+                audioCtx.currentTime + 0.3);
+        }, 300);
         // Thunder rolls once as each shower sets in
         let prevRainLevel = 0;
         setInterval(() => {
