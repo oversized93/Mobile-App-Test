@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt386';
+const BUILD_TAG = 'gt387';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -2275,6 +2275,27 @@ function onBallStopped() {
     const ter = terrainAt(ball.x, ball.y);
     if (ter !== T.WATER && ter !== T.OOB) {
         lastSafePos = { x: ball.x, y: ball.y };
+    }
+    // The course notices the owner playing: a ball landing near an
+    // ambient golfer earns a greet hop and a word — friendly at a
+    // respectful distance, startled when you nearly bean them
+    if (worldPlaytest && typeof npcStates !== 'undefined'
+        && typeof golferThink === 'function') {
+        let near = null, nd2 = 28 * 28;
+        for (const g of npcStates) {
+            if (g.gone || g.idle) continue;
+            const gdx = g.x - ball.x, gdz = g.z - ball.y;
+            const dd = gdx * gdx + gdz * gdz;
+            if (dd < nd2) { nd2 = dd; near = g; }
+        }
+        if (near && !(near.greet > 0)) {
+            near.greet = 2;
+            if (near.name) {
+                golferThink(near, nd2 < 10 * 10
+                    ? 'FORE!! That nearly hit me!'
+                    : 'Nice shot, boss!', nd2 < 10 * 10 ? -6 : 4);
+            }
+        }
     }
 
     // Announce shot distance traveled
