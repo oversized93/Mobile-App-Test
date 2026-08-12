@@ -3834,7 +3834,15 @@ function updateAmbientNPCs3D(dt, hole) {
                     s.strokes = 0;
                     const tierMult = s.tier === 'gold' ? 2
                         : s.tier === 'silver' ? 1.5 : 1;
-                    const paid = Math.round((s.fee || 5) * tierMult);
+                    const polMul = (typeof feePolicyMul === 'function')
+                        ? feePolicyMul() : 1;
+                    const paid = Math.round((s.fee || 5) * tierMult * polMul);
+                    // Pricing gets talked about at the cup
+                    if (polMul > 1 && Math.random() < 0.12) {
+                        golferThink(s, 'Steep green fees here…', -4);
+                    } else if (polMul < 1 && Math.random() < 0.12) {
+                        golferThink(s, 'Great value for a round!', 3);
+                    }
                     window.__golfFees = (window.__golfFees || 0) + paid;
                     const pinPt = s.route[s.route.length - 1];
                     // The drop itself: a wink over the cup, and a soft

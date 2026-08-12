@@ -4,7 +4,7 @@
 
 // Visible build stamp (menu + overworld top bar) so device caching issues
 // are diagnosable at a glance. Bump together with index.html ?v=.
-const BUILD_TAG = 'gt393';
+const BUILD_TAG = 'gt394';
 
 // Declared first on purpose: notify() can be reached from early boot code
 // and a TDZ here once blanked the whole game on devices with saves.
@@ -1015,9 +1015,20 @@ function finalizeHole() {
 function memberCapacity() {
     const amenityMembers = AMENITIES.reduce((sum, a) =>
         sum + (resort.amenities && resort.amenities[a.id] ? a.memberBoost : 0), 0);
-    return 5 + worldCourse.holes.length * 4 + amenityMembers
+    // Pricing pulls the crowd: budget rates draw extra members,
+    // premium rates thin the field in exchange for bigger fees
+    const polK = resort.feePolicy === 'premium' ? 0.8
+        : resort.feePolicy === 'budget' ? 1.15 : 1;
+    return Math.round(polK * (5 + worldCourse.holes.length * 4 + amenityMembers
         + Math.floor((worldCourse.decor || []).reduce(
-            (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) / 100);
+            (s, d) => s + (DECOR_COSTS[d.t] || 0), 0) / 100)));
+}
+
+// Green-fee policy multiplier — the owner's pricing lever. Applied to
+// every fee an ambient golfer pays at the cup.
+function feePolicyMul() {
+    return resort.feePolicy === 'premium' ? 1.4
+        : resort.feePolicy === 'budget' ? 0.7 : 1;
 }
 
 const AMENITIES = [
@@ -4751,7 +4762,9 @@ function drawOverworld() {
         const hasStreak = resort.tourneyStreak > 1;
         const hasClubMul = (typeof clubhouseFeeMul === 'function')
             && clubhouseFeeMul() > 1;
-        const fh = 146 + (hasStreak ? 18 : 0) + (hasClubMul ? 18 : 0);
+        const hasBest = !!resort.bestRound;
+        const fh = 146 + (hasStreak ? 18 : 0) + (hasClubMul ? 18 : 0)
+            + (hasBest ? 18 : 0) + 44;
         const fx = (W() - fw) / 2, fy = L.topBarH + 8;
         ctx.fillStyle = 'rgba(12,24,32,0.94)';
         roundRect(fx, fy, fw, fh, 12); ctx.fill();
@@ -4802,6 +4815,31 @@ function drawOverworld() {
             const pct = Math.min(10, resort.tourneyStreak - 1) * 8;
             line('\u{1F3C6} Tourney streak', resort.tourneyStreak
                 + ' days \u2022 +' + pct + '% purse', '#ffd24a', extraY);
+            extraY += 18;
+        }
+        // Green-fee policy pills \u2014 the pricing lever: budget fills the
+        // course, premium milks it
+        {
+            const pol = resort.feePolicy || 'standard';
+            line('Green fees', pol === 'budget'
+                ? '\u00d70.7 fees \u2022 +15% members'
+                : pol === 'premium' ? '\u00d71.4 fees \u2022 \u221220% members'
+                : 'standard rates', 'rgba(255,255,255,0.8)', extraY);
+            const pw2 = 68, ph2 = 20, gap2 = 8;
+            const py2 = extraY + 8;
+            window.__feePillRects = [];
+            ['budget', 'standard', 'premium'].forEach((key, i) => {
+                const px2 = fx + 14 + i * (pw2 + gap2);
+                const on = pol === key;
+                glossyRect(px2, py2, pw2, ph2, 10, on ? '#2e6b34' : '#2c3a42');
+                ctx.fillStyle = on ? '#fff' : 'rgba(255,255,255,0.75)';
+                ctx.font = 'bold 10px -apple-system,sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(key === 'budget' ? 'Budget'
+                    : key === 'standard' ? 'Standard' : 'Premium',
+                    px2 + pw2 / 2, py2 + 14);
+                window.__feePillRects.push({ x: px2, y: py2, w: pw2, h: ph2, key });
+            });
         }
         owFinancesRect = { x: fx, y: fy, w: fw, h: fh };
     }
@@ -6742,7 +6780,20 @@ function overworldTouchStart(sx, sy) {
     if (hit === 'weather:panel') return;
     if (owWeatherOpen) { owWeatherOpen = false; return; }
     if (hit === 'finances') { owFinancesOpen = !owFinancesOpen; return; }
-    if (hit === 'finances:panel') return;
+    if (hit === 'finances:panel') {
+        const pr = (window.__feePillRects || []).find(p =>
+            hitBtn(sx, sy, p.x, p.y, p.w, p.h));
+        if (pr && (resort.feePolicy || 'standard') !== pr.key) {
+            resort.feePolicy = pr.key;
+            saveResort();
+            notify(pr.key === 'budget'
+                ? '\u{1F49A} Budget fees — golfers flock in'
+                : pr.key === 'premium'
+                ? '\u{1F48E} Premium fees — exclusive rates'
+                : '⚖️ Standard green fees');
+        }
+        return;
+    }
     if (owFinancesOpen) { owFinancesOpen = false; return; }
     if (hit === 'follow') {
         owFollowGolfer = !owFollowGolfer;
